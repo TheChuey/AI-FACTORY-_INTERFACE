@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration - Terminator1</title>
+
+    <!-- Apply the stored theme before first paint (same fast-path cache as
+         the other pages; the real appearance is applied after /api/settings). -->
+    <script>
+        (function () {
+            var s = "system";
+            try { s = localStorage.getItem("appearance-theme") || "system"; } catch (e) {}
+            var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+            document.documentElement.dataset.theme =
+                s === "dark" || s === "light" ? s : (dark ? "dark" : "light");
+        })();
+    </script>
+
+    <link rel="stylesheet" href="/static/css/styles.css">
+
+    <style>
+        /* Local layout for the consolidated settings page. */
+        .cfg-shell {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 28px 20px 80px;
+        }
+        .cfg-nav {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin: 18px 0 4px;
+            flex-wrap: wrap;
+        }
+        .cfg-nav .spacer { flex: 1; }
+        .cfg-nav a .label { margin-left: 6px; }
+        .config-section-heading {
+            margin-top: 28px;
+            font-size: 17px;
+            letter-spacing: .3px;
+        }
+        .agent-editor-card { margin-bottom: 18px; }
+        .agent-editor-card .field textarea {
+            width: 100%;
+            min-height: 64px;
+        }
+        .agent-editor-markdown {
+            width: 100%;
+            min-height: 220px;
+            padding: 10px 12px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 8px;
+            font: 13px/1.5 ui-monospace, Consolas, monospace;
+            color: var(--color-text, #0f172a);
+            background: var(--color-surface, #fff);
+            resize: vertical;
+        }
+        [data-theme="dark"] .agent-editor-markdown {
+            color: var(--color-text, #e6edf3);
+            background: var(--color-surface-alt, #1a222d);
+            border-color: var(--color-border-strong, #33404f);
+        }
+        .agent-editor-tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--color-border, #e2e8f0);
+            margin-bottom: 14px;
+        }
+        .agent-editor-tab {
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--color-text-muted, #64748b);
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            user-select: none;
+        }
+        .agent-editor-tab.active {
+            color: var(--color-primary, #0b6bcb);
+            background: var(--color-surface-hover, #eef2f8);
+            border-color: var(--color-border, #e2e8f0);
+        }
+        .agent-editor-pane { display: none; }
+        .agent-editor-pane.active { display: block; }
+        .agent-editor-fields { display: grid; gap: 10px; }
+        .agent-editor-tools {
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 8px;
+            padding: 10px 14px 6px;
+            margin: 0;
+        }
+        .agent-editor-tools legend {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--color-text-muted, #64748b);
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            padding: 0 6px;
+        }
+        .agent-editor-tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 2px 14px;
+        }
+        .agent-editor-tools-grid .field { border-bottom: none; }
+        .text-input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 6px;
+            font: inherit;
+            font-size: 14px;
+            color: var(--color-text, #0f172a);
+            background: var(--color-surface, #fff);
+        }
+        .cfg-models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 10px;
+        }
+        .cfg-model-card {
+            padding: 10px 14px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 8px;
+        }
+        .cfg-model-card .name { font-weight: 600; font-size: 13px; }
+        .cfg-model-card .id { font-size: 11px; color: var(--color-text-faint, #94a3b8); }
+        .jump-link { font-size: 12px; margin-left: 8px; }
+        .save-response {
+            margin-top: 14px;
+            padding: 10px 14px;
+            border: 1px solid #34a853;
+            border-radius: 8px;
+            background: #f0fbf3;
+            color: #14532d;
+            font-size: 13px;
+        }
+        [data-theme="dark"] .save-response {
+            background: rgba(52, 168, 83, 0.12);
+            border-color: #2f9e44;
+            color: #b9f6c9;
+        }
+        .save-response-detail { margin: 6px 0 0 18px; padding: 0; }
+        .save-response-detail li { margin: 3px 0; }
+
+        /* "Updates / Interface" card (js/ui/interface-manager.js) */
+        .interface-status { margin-top: 12px; display: grid; gap: 14px; }
+        .iface-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+        .iface-grid-item {
+            padding: 10px 12px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 8px;
+            background: var(--color-surface, #fff);
+        }
+        .iface-item-label {
+            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .4px; color: var(--color-text-faint, #94a3b8);
+        }
+        .iface-item-body { font-size: 13px; margin-top: 4px; white-space: pre-wrap; }
+        .iface-item-sub { font-size: 12px; margin-top: 6px; }
+        .iface-item-sub.ok { color: #15803d; }
+        .iface-item-sub.warn { color: #b45309; }
+        .iface-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .iface-trace { border: 1px solid var(--color-border, #e2e8f0); border-radius: 8px; padding: 10px 12px; }
+        .iface-trace-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--color-text-faint, #94a3b8); }
+        .iface-trace-pre {
+            margin: 8px 0 0; padding: 8px 10px; max-height: 170px; overflow: auto;
+            background: var(--color-surface-alt, #f3f6fa); border-radius: 6px;
+            font: 11px/1.5 ui-monospace, Consolas, monospace;
+            color: var(--color-text-soft, #334155);
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .iface-run-panel { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--color-border, #e1e5e8); }
+        .iface-run-toggle { font-weight: 600; font-size: 13px; }
+        .iface-run-pane { margin-top: 12px; display: grid; gap: 10px; }
+        .iface-run-pane[hidden] { display: none; }
+        .iface-run-fields { display: grid; gap: 8px; }
+        .iface-run-field { display: grid; gap: 3px; font-size: 12px; }
+        .iface-run-field-label { font-size: 11px; font-weight: 600; color: var(--color-text-muted, #64748b); }
+        .iface-run-result { white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+    </style>
+</head>
+
+<body class="app-shell">
+
+    <div class="cfg-shell">
+
+        <!-- Static guard: config-page.js clears this when it boots. If the
+             module can't load (stale server / opened from disk / cached error),
+             this message shows instead of a silently blank page. -->
+        <div id="boot-failed" hidden>
+            <div class="status-message error" style="margin-top:20px">
+                <strong>Settings page could not load.</strong>
+                <p style="margin:6px 0 0">Open it through the running app at
+                <code>/static/config.html</code>; restart the server
+                (<code>python server.py</code>) if it was just updated, then
+                hard-refresh with <b>Ctrl+F5</b>.</p>
+            </div>
+        </div>
+
+        <header>
+            <h1 style="margin:0">Configuration</h1>
+            <nav class="cfg-nav">
+                <!-- Shared app nav, marked as the Settings page - filled by
+                     js/config-page.js via js/ui/header-nav.js -->
+                <nav class="app-header-nav" id="page-nav" aria-label="Primary"></nav>
+                <span class="spacer"></span>
+                <span class="config-note">One place for every setting - the app defaults, each agent
+                    (metadata + behavior + tests), and the shared test pool.</span>
+            </nav>
+        </header>
+
+        <!-- App-level settings: defaults, paths, RAG, versioning -->
+        <div id="config-section" style="margin-top:24px"></div>
+
+        <!-- Appearance -->
+        <div id="appearance-section"></div>
+
+        <!-- Per-agent settings (one consolidated card each) -->
+        <div id="agents-section"></div>
+
+        <!-- Shared tests that run for every agent -->
+        <div id="shared-tests-section"></div>
+
+        <!-- Models (read-only snapshot from Ollama) -->
+        <div id="models-section"></div>
+
+        <!-- Modular interface / update system card -->
+        <div id="interface-section"></div>
+
+    </div>
+
+    <script>
+        window.__cfgBoot = false;
+        setTimeout(function () {
+            if (!window.__cfgBoot) {
+                var el = document.getElementById("boot-failed");
+                if (el) el.hidden = false;
+            }
+        }, 3000);
+    </script>
+
+    <script type="module" src="/static/js/config-page.js"></script>
+
+</body>
+
+</html>

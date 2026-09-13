@@ -1,0 +1,26 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime data
+data/
+
+# Generated restore baseline (complete copy of the tracked source)
+current-known-good-copy/
+
+# Literal Windows drive-path folders (E:\data\...) created by mis-configured
+# absolute paths when the app runs on Linux - never track these.
+[A-Z]:*
+
+# Logs & temp
+*.log
+*.tmp
+*.bak
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

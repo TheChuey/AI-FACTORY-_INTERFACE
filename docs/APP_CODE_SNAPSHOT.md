@@ -1,0 +1,20206 @@
+# Terminator1 — App Code Snapshot
+
+_Auto-generated on 2026-09-13T12:57:57 by `scripts/update_docs.py`._
+
+
+## README.md
+
+```markdown
+﻿# Terminator1 (Genessis)
+
+A local lab for building and testing AI agents: **FastAPI** backend + vanilla JS
+frontend + **Ollama** local LLMs.
+
+The core idea:
+
+```
+Agent      = one reusable Python runtime (think / act / observe)
+Markdown   = behavior        (engine/agent_library/*/agent.md)
+JSON       = configuration   (engine/agent_library/*/agent.json)
+Tools      = capabilities    (tools/, wired by ID)
+Registry   = discovery       (engine/agent_library/ is scanned automatically)
+Factory    = construction    (agent_id -> ready Agent)
+Frontend   = selection       (GET /api/agents -> agent selector)
+```
+
+You can build 10, 20, or 100 agents without ever writing a new Python class:
+a new agent is just a folder with `agent.md` + `agent.json` (+ tool IDs).
+
+## One place for configuration
+
+Open **/static/config.html** (the "Settings" button on the dashboard and in the
+chat header) for EVERY configuration in one screen:
+
+- **App defaults** â€” default agent (with a jump-link to that agent's card),
+  default model, chat save path, data folder, RAG database path, chat
+  versioning, and the RAG memory defaults. Stored in
+  `dashboard/config/app_settings.json`.
+- **Appearance** â€” one theme + font set for all pages.
+- **Agents** â€” one card per agent, consolidating its whole config in one place:
+  metadata + model + tools (its `agent.json`), its behavior prose (editable
+  `agent.md`), and that agent's chat tests + an inline runner.
+- **Shared tests** â€” tests with no agent that run for every agent.
+- **Models** â€” read-only snapshot of the installed Ollama models.
+
+Per-agent data lives with the agent (`engine/agent_library/<id>/agent.json` now
+holds `tests`; `agent.md` is the behavior). The default agent for `/api/chat`
+is read from the same `defaultAgentId` the dashboard uses.
+
+## Quickstart (Windows PowerShell)
+
+```powershell
+py -3 -m venv venv
+venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python server.py
+```
+
+## Quickstart (Linux / Chromebook Linux)
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install -r requirements.txt
+python server.py
+```
+
+`python server.py` can be run from ANY directory â€” the project root or
+`server/` both work (the file bootstraps `sys.path` itself). Override the port
+with `$env:PORT=9000` (PowerShell) or `PORT=9000 python server.py` (Linux).
+The equivalent uvicorn launch (from the project root):
+
+```powershell
+venv\Scripts\python -m uvicorn server.server:app --host 127.0.0.1 --port 8000
+```
+
+Linux uses the same package layout in the venv, so the equivalent is:
+
+```bash
+venv/bin/python -m uvicorn server.server:app --host 127.0.0.1 --port 8000
+```
+
+Open **http://127.0.0.1:8000** (Chrome/Edge).
+
+## Running on Linux / macOS / ChromeOS (Chromebook)
+
+The app is cross-platform - the same folder runs on Windows, Linux and macOS.
+On a Chromebook, use the **Linux container** (`Settings -> Developers -> Linux
+development environment`), then install Python and the venv module once:
+
+```sh
+sudo apt update && sudo apt install -y python3 python3-venv python3-pip
+```
+
+Then, in the project folder:
+
+```sh
+python3 -m venv venv
+source venv/bin/activate          # Linux/macOS (Windows: venv\Scripts\Activate.ps1)
+python -m pip install -r requirements.txt
+python server.py
+```
+
+That is it - no path configuration is required. By default everything is saved
+under the project's own `data/` folder (chat transcripts, the chat log, the RAG
+store, exports, history). If you need Ollama too, follow its Linux install
+(`curl -fsSL https://ollama.com/install.sh | sh` on Linux/Chromebook).
+
+> Tip: `python server.py` can be started from ANY directory - it bootstraps
+> `sys.path` itself. Port override: `PORT=9000 python server.py` (Unix) or
+> `$env:PORT=9000; python server.py` (PowerShell).
+
+## Changing where data is saved
+
+All runtime storage (chat transcripts, the chat log, history, exports and the
+RAG store) is controlled by **three path settings** resolved by
+`server/paths.py`: `dataDir`, `chatSavePath`, `ragDbPath`. From highest to
+lowest precedence:
+
+1. **Environment variables** - the most portable option for a second machine /
+   Chromebook. Set them before launching (e.g. in `~/.bashrc` or a `run.sh`):
+
+   ```sh
+   export GENESSIS_DATA_DIR="$HOME/genessis-data"        # instead of /dataDir
+   export GENESSIS_CHAT_SAVE_PATH="$HOME/genessis-chats" # instead of /chatSavePath
+   export GENESSIS_RAG_DB_PATH="$HOME/genessis-rag"      # instead of /ragDbPath
+   ```
+
+   `~` and `$VAR` are expanded, so `~/genessis-data` works too. Blank env vars
+   are ignored.
+
+2. **The Settings page** (`Config -> App defaults -> Data folder / Chat save
+   path / RAG database path`), stored in `dashboard/config/app_settings.json`.
+   Path changes need a server restart (the page shows a banner until you do).
+   When you save, any path that is a **Windows absolute path** (`E:\...`,
+   `\\server\share`) is automatically cleared back to the default so the
+   settings file stays portable - a confirmation window lists what was reset.
+
+3. **Defaults** - project-relative `<project>/data` (empty settings).
+
+If you copy the app between machines, either leave the path fields empty (the
+default `data/` folder travels with the project) or pin them via the
+`GENESSIS_*` env vars. Saved files are never in the way: `data/` is gitignored.
+
+## Folder structure
+
+```
+terminator1/
+â”œâ”€â”€ server/                   # Thin glue: FastAPI app + chat log + path config
+â”‚   â”œâ”€â”€ server.py             # HTTP endpoints, static mount, lifespan. The ONLY
+â”‚   â”‚                         # thing the browser talks to. `python server.py`
+â”‚   â”‚                         # runs from any directory.
+â”‚   â”œâ”€â”€ paths.py              # Config-driven runtime path authority: dataDir /
+â”‚   â”‚                         # chatSavePath / ragDbPath (incl. per-OS
+â”‚   â”‚                         # *Linux overrides) / RAG switches.
+â”‚   â””â”€â”€ chat_store/           # Server-side chat session + chat log
+â”‚       â”œâ”€â”€ store.py          # ensure_session / append_turn / finalize_session,
+â”‚       â”‚                     # the one-active-chat state, .txt transcripts,
+â”‚       â”‚                     # chatRecord.jsonl (create/read/delete).
+â”‚       â””â”€â”€ logger.py         # Small helpers the store uses to log rows.
+â”‚
+â”œâ”€â”€ engine/                   # The agent engine
+â”‚   â”œâ”€â”€ core/
+â”‚   â”‚   â”œâ”€â”€ agent.py          # AgentProfile + the reusable Agent: think/act/observe
+â”‚   â”‚   â”œâ”€â”€ llm.py            # ask_llm(), model resolution (fallback to a
+â”‚   â”‚   â”‚                     # detected model), context window, Ollama scan
+â”‚   â”‚   â””â”€â”€ prompt.py         # PromptManager: agent.md sections + tools -> system prompt
+â”‚   â”œâ”€â”€ agents/
+â”‚   â”‚   â”œâ”€â”€ loader.py         # Read/parse engine/agent_library/{id}/agent.md + agent.json,
+â”‚   â”‚   â”‚                     # save_markdown / save_meta / save_tests (Settings page).
+â”‚   â”‚   â”œâ”€â”€ registry.py       # Scans engine/agent_library/ -> available agents.
+â”‚   â”‚   â””â”€â”€ factory.py        # build_agent(agent_id, model) -> ready-to-use Agent.
+â”‚   â””â”€â”€ agent_library/        # THE AGENTS - filesystem is the source of truth
+â”‚       â”œâ”€â”€ basic_chat/       # agent.md + agent.json  (mode: chat, no tools)
+â”‚       â”œâ”€â”€ dev_assistant/    # agent.md + agent.json  (mode: agent, tools)
+â”‚       â”œâ”€â”€ problem_discovery_agent/  # agent.md + agent.json (mode: agent)
+â”‚       â””â”€â”€ rag_assistant/    # agent.md + agent.json  (mode: agent, chat-memory search)
+â”‚
+â”œâ”€â”€ tools/                    # Capabilities available to agents (per-agent IDs)
+â”‚   â”œâ”€â”€ registry.py           # TOOL_REGISTRY: tool ID -> Python function; resolve_tools/get_session
+â”‚   â”œâ”€â”€ state.py              # FileSession: shared/persisted file-working state
+â”‚   â””â”€â”€ tools.py              # map_files, read_file, write_text_file, delete_files,
+â”‚                             # get_current_date, tell_me_the_date_and_time, search_chat_logs
+â”‚
+â”œâ”€â”€ memory/                   # RAG memory store
+â”‚   â”œâ”€â”€ ingest.py             # Transcript chunking (ingest_file / ingest_directory)
+â”‚   â”œâ”€â”€ search.py             # RAGStorage: Chroma store + fallback vector DB
+â”‚   â”œâ”€â”€ main.py               # Standalone RAG CLI / cognitive loop experiment
+â”‚   â””â”€â”€ rag_commit.py         # status / rebuild_store / purge_store for the store
+â”‚
+â”œâ”€â”€ dashboard/                # Frontend (was "static/")
+â”‚   â”œâ”€â”€ index.html            # UI shell: agent cards + floating chat widget
+â”‚   â”œâ”€â”€ chat.html             # Standalone self-contained chat page
+â”‚   â”œâ”€â”€ config.html           # THE consolidated settings page (see above)
+â”‚   â”œâ”€â”€ config/               # app_settings.json (frontend-owned settings storage)
+â”‚   â”œâ”€â”€ css/styles.css
+â”‚   â””â”€â”€ js/
+â”‚       â”œâ”€â”€ app.js            # index.html boot module (widget, sessions, agents)
+â”‚       â”œâ”€â”€ config-page.js    # config.html boot module (all settings sections)
+â”‚       â”œâ”€â”€ api/api.js        # All HTTP calls (chats, settings, agents, RAG, ...)
+â”‚       â”œâ”€â”€ classes/          # chat-window.js (widget UI), ChatSession.js (state)
+â”‚       â”œâ”€â”€ logic/            # models.js (model dropdown), chat-formatter.js
+â”‚       â””â”€â”€ ui/               # markdown.js, appearance.js, config-form.js,
+â”‚                             # agents.js, agent-editor.js, header-nav.js,
+â”‚                             # interface-indicator.js, interface-manager.js
+â”‚
+â”œâ”€â”€ scripts/                  # CLI utilities
+â”‚   â”œâ”€â”€ rebuild_rag.py        # python scripts/rebuild_rag.py [build|purge|status]
+â”‚   â”œâ”€â”€ version_chats.py      # list | import | bump | versioning on|off
+â”‚   â””â”€â”€ update_docs.py        # Regenerates APP_STRUCTURE.md + APP_CODE_SNAPSHOT.md
+â”‚
+â”œâ”€â”€ interface/                # Modular update & restore layer (no core edits needed)
+â”‚   â”œâ”€â”€ update_manager.py     # Discover/import interface/updates/<domain>/*.py
+â”‚   â”‚                         # get_active_module() + move_module_to_external_archive()
+â”‚   â”œâ”€â”€ interface_dispatcher.py  # trace_and_execute(): logs caller file+line
+â”‚   â”œâ”€â”€ restore_manager.py    # Baseline compare/restore + snapshot_baseline()
+â”‚   â””â”€â”€ updates/              # Active update modules, grouped by domain
+â”‚       â”œâ”€â”€ engine/           # e.g. hello_update.py, newfunction.py (examples)
+â”‚       â”œâ”€â”€ tools/
+â”‚       â””â”€â”€ server/
+â”‚
+â”œâ”€â”€ about/                    # Site identity
+â”‚   â”œâ”€â”€ about.json            # title + subtitle served by GET /api/about
+â”‚   â””â”€â”€ set_title.py          # Edits about.json + 'apply'/'snapshot'/'restore' triggers
+â”‚
+â”œâ”€â”€ config/
+â”‚   â””â”€â”€ models.json           # AUTO-GENERATED at startup from installed Ollama models
+â”œâ”€â”€ docs/
+â”‚   â”œâ”€â”€ CHANGELOG.md          # Every recent change
+â”‚   â”œâ”€â”€ RESTRUCTURE_README.md # History of the current package layout
+â”‚   â”œâ”€â”€ 01_IDEA_AND_ARCHITECTURE.md       # Modular Interface architecture design
+â”‚   â”œâ”€â”€ APP_STRUCTURE.md      # AUTO-GENERATED folder-tree snapshot
+â”‚   â””â”€â”€ APP_CODE_SNAPSHOT.md  # AUTO-GENERATED per-file source snapshot
+â”œâ”€â”€ current-known-good-copy/  # GENERATED restore baseline: complete copy of the
+â”‚                             # last good source (python about/set_title.py snapshot)
+â”œâ”€â”€ data/                     # RUNTIME data (gitignored): chatlog, RAG store,
+â”‚                             # interface_archive/, snapshots/pre_restore_backup/
+â”œâ”€â”€ requirements.txt
+â””â”€â”€ README.md
+```
+
+> **Keep the docs fresh:** `docs/APP_STRUCTURE.md` and `docs/APP_CODE_SNAPSHOT.md`
+> are generated, not hand-maintained. After code changes run
+> `venv/bin/python scripts/update_docs.py` and commit the regenerated files.
+
+## How an answer is produced
+
+```
+Browser
+  â†“ POST /api/chat {message, model, agent_id, history, session_id, title, new_chat, rag}
+server.py
+  â†“ chat_store.ensure_session()          server/chat_store/store.py (ONE active chat)
+  â†“ build_agent(agent_id)                engine/agents/factory.py
+loader: agent.md + agent.json            engine/agents/loader.py
+tools:  IDs -> functions                 tools/registry.py
+prompt: sections + tool docs -> system msg   engine/core/prompt.py
+  â†“
+Agent.think()                            engine/core/agent.py
+  â†“ ask_llm()                            engine/core/llm.py
+Ollama
+  â†“
+server.py appends the turn to the active chat and returns {reply, session_id, title}
+  â†“ (on "Save chat" / new chat)
+chat_store.finalize_session() writes data/chatlog/agent-text-records/<title>[-v].txt
++ logs it in data/chatlog/chatRecord.jsonl
+```
+
+### Model selection
+
+- `config/models.json` is **auto-scanned at startup** (`refresh_models()`) from
+  THIS machine's Ollama â€” it always mirrors what is installed, and the model
+  dropdown only lists detected models.
+- A requested model that is **not installed** (for example a per-agent pin or
+  default written on another OS) is never used blindly: the server logs an
+  `[ask_llm]` warning and falls back to a detected model instead of failing
+  with a 404. So Windows-authored settings keep working on Linux or any
+  machine, regardless of its Ollama install.
+- Agents that use tools get a model Ollama reports as **`tools`-capable** when
+  possible (confirmed no-tools models are skipped). Only if no tool-capable
+  model exists does the agent answer without tool use.
+- Empty `defaultModel` (`""`) means "resolve to the first detected model" â€”
+  changes to your defaults apply after a server restart.
+
+## Chats: one server-side session at a time
+
+The server tracks exactly ONE active chat session (it has its own start, middle
+and end):
+
+- First message of a chat (or `new_chat: true`) finalizes any previous chat and
+  starts a new one; the server owns the conversation, so a page refresh never
+  loses it.
+- `data/chatlog/.active-chat.json` holds the live session (updates after every
+  turn).
+- Ending a chat (`POST /api/chats/end`, the "Save chat" button, or starting a
+  new chat) writes ONE transcript per chat to
+  `data/chatlog/agent-text-records/<title>.txt` â€” and on a name collision the
+  NEXT version (`<title>-2.txt`, ...). Re-saving a chat you kept typing in
+  produces the next version; old versions stay on disk.
+- `data/chatlog/chatRecord.jsonl` is the LOG of those transcripts (title, agent,
+  model, version, message/interaction counts, timestamps) used by the frontend
+  drop-down â€” one line per chat VERSION; the drop-down shows the newest version
+  of each chat. Existing `.txt` files are imported into the log once at startup.
+
+Version helpers: `python scripts/version_chats.py list | import | bump
+<id-or-title> [version] | versioning on|off`.
+
+Agent modes:
+
+- `chat`  â€” User â†’ LLM â†’ Response. The factory attaches no tools, so no tool loop can happen.
+- `agent` â€” User â†’ Agent â†’ LLM â†’ Tool? â†’ Observation â†’ LLM â†’ Response. Same `Agent` class; only its configuration differs.
+
+## API
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/models` | Model dropdown options (scanned from Ollama at startup) |
+| `GET /api/agents` | All discovered agents: `{id, name, description, mode}` |
+| `GET /api/tools` | Every tool ID an agent can pick (feeds the Settings checkboxes) |
+| `GET /api/agents/{id}/config` | One agent's consolidated config (meta + `agent.md` + tests + shared tests) |
+| `PUT /api/agents/{id}/config` | Partial update of one agent's config (`meta` / `markdown` / `tests`) |
+| `GET /api/about` | Site identity (title + tagline from `about/about.json`) |
+| `GET /api/interface/status` | Interface status: module catalog, archive, trace-log tail, baseline + drift |
+| `POST /api/interface/apply` | Reload update modules from disk + regenerate the docs snapshots |
+| `POST /api/interface/snapshot` | Publish the current tree as the new known-good baseline |
+| `POST /api/interface/restore` | `{baseline?, apply?, dryRun?}` â€” roll back (dry-run by default) |
+| `POST /api/interface/run` | Execute an update-module function (`{domain, module, function, args?, kwargs?}`) |
+| `POST /api/interface/toggle-run` | `{enabled}` â€” arm/disarm module execution for the process |
+| `POST /api/chat` | `{message, model, agent_id, history, session_id?, title?, new_chat?, rag?}` â†’ `{reply, session_id, title}` |
+| `GET /api/chats` | Chat log + the active chat (feeds the chats drop-down) |
+| `GET /api/chats/{id}` | One chat: log row + `.txt` content + parsed messages |
+| `POST /api/chats/end` | Finalize the active chat into a versioned `.txt` + log it (`rag` bool overrides committing it to memory) |
+| `DELETE /api/chats/{id}` | Permanently erase a chat (transcripts + log records) |
+| `POST /api/chat-save` | Finalize the active chat (kept for legacy clients) |
+| `GET /api/rag/status` | RAG store location + indexed chunk count + resolved paths |
+| `POST /api/rag/rebuild` | Re-index every saved transcript into the RAG store |
+| `POST /api/rag/reset` | Delete the RAG store so it starts empty (transcripts kept) |
+| `GET/POST/DELETE /api/discussions` | CRUD over the same chat log (chatRecord.jsonl records) |
+| `GET/POST/DELETE /api/history` | Saved message snapshots (`data/history.json`) |
+| `GET/POST /api/settings` | The stored browser defaults (`dashboard/config/app_settings.json`) |
+| `POST /api/exports` | Save one wizard prompt as `{name}.md` + `{name}.json` (data/exports) |
+
+There is no `/api/activity` endpoint anymore â€” the Agent Monitor feature was
+removed (see `docs/CHANGELOG.md`). Anything polling it will get a 404.
+
+### RAG memory store
+
+Saved chats can be committed to a persistent RAG store so agents using the
+`search_chat_logs` tool can recall them. Controls:
+
+- **Per chat:** flip the "Save to memory" toggle in the chat header before
+  sending/saving (both the index.html flyout and the standalone `chat.html`
+  page have it).
+- **Default:** the "Commit saved chats to memory by default" toggle in
+  Configuration â†’ RAG memory (`rag.commitOnSave`).
+- **Auto-loading:** when the store is empty, the first search ingests every
+  transcript automatically unless "Auto-load transcripts..." is off
+  (`rag.autoIngest`).
+- **Paths:** Configuration â†’ Data folder / RAG database path / Chat save path,
+  stored in `dashboard/config/app_settings.json` and resolved by
+  `server/paths.py` (absolute paths are used verbatim; relative paths resolve
+  against the project root). Path changes apply after a server restart â€” the
+  configuration page shows a "restart the server" banner until you do.
+  Transcripts follow **Chat save path**, not the Data folder; blank means
+  `<dataDir>/chatlog/agent-text-records`.
+- **Cross-platform paths:** the same settings file works on Windows *and*
+  Linux. Add `dataDirLinux`, `chatSavePathLinux` and `ragDbPathLinux` (set
+  from Configuration â†’ "Linux paths" on a non-Windows machine) to point the
+  app at a second, Linux-specific layout; each override falls back to a
+  project default when blank. A Windows-only drive path (`E:\data\...`) left
+  without a Linux override is ignored on Linux rather than becoming a literal
+  `E:\data\...` folder. `GET /api/settings` and `GET /api/rag/status` both
+  report the detected `platform` (`"win"` / `"nix"`).
+- **Manual maintenance:** `python scripts/rebuild_rag.py [build|purge|status]`,
+  the "Rebuild memory"/"Forget everything" buttons in Configuration, or the
+  "Clear Memory" button in the chat header (`chat.html`) â€” clear resets the
+  store to zero entries.
+
+The store lives at `data/rag_db/chroma.sqlite3` by default. The store keeps
+embeddings even if the original transcripts are deleted, so recall keeps
+working until you wipe it.
+
+## Creating a new agent
+
+No Python required: create a folder under `engine/agent_library/` containing
+`agent.json` (configuration) + `agent.md` (behavior), pick tool IDs, and
+refresh â€” the agent appears automatically in `GET /api/agents` and the frontend
+selector.
+
+Full field reference, tool catalog, copy-paste example, and troubleshooting:
+see **`docs/CHANGELOG.md`** and `docs/01_IDEA_AND_ARCHITECTURE.md` for the
+project history and architecture (the older `docs/documentation_CREATING_AGENTS.md`
+guide was removed).
+
+## Adding a new tool
+
+1. Write the function in `tools/tools.py` with a clear docstring â€” Ollama turns
+   docstrings into the tool schema the LLM sees.
+2. Add one line to `TOOL_REGISTRY` in `tools/registry.py`.
+3. Reference the ID in any agent's `agent.json`.
+
+## Modular interface: add / apply / snapshot / restore
+
+New or experimental logic can live outside the core modules under
+`interface/updates/<domain>/` (domains: `engine`, `tools`, `server`). Nothing
+in the core app is edited.
+
+- **Add a feature**: drop a `.py` file in `interface/updates/<domain>/`, then
+  `python about/set_title.py apply` â€” it is discovered, imported, and the
+  docs snapshots are regenerated. `apply --snapshot` also refreshes the
+  baseline.
+- **Use it natively (Option B)**:
+  ```python
+  from interface.update_manager import UpdateManager
+  mod = UpdateManager().get_active_module("engine", "newfunction")
+  mod.execute_new_logic("Input Data")
+  ```
+  or wrapped with caller tracing (logs `file:line -> module.function` to
+  `data/interface_trace.log`):
+  ```python
+  from interface.interface_dispatcher import InterfaceDispatcher
+  InterfaceDispatcher().trace_and_execute(mod.run_example)
+  InterfaceDispatcher().execute_action("engine", "newfunction",
+                                       "secondary_engine_action", 5)
+  ```
+  The server discovers update modules and builds both managers at startup,
+  exposed on `app.state.update_manager` / `app.state.interface_dispatcher`.
+- **Retire a module**: `UpdateManager().move_module_to_external_archive("engine", "hello_update")`
+  moves the file out of the repo into `data/interface_archive/engine/`.
+- **Re-baseline**: `python about/set_title.py snapshot` publishes a complete
+  working copy of the current source into `current-known-good-copy/`.
+- **Roll back**: `python about/set_title.py restore --dry-run` previews, then
+  `python about/set_title.py restore` overwrites any file whose SHA-256
+  differs from the baseline (files only in the baseline or only in the live
+  tree are reported, never copied/deleted). Overwritten files are first
+  copied to `data/snapshots/pre_restore_backup/`. User data (`data/`,
+  `venv/`, `.git/`, `dashboard/config/app_settings.json`, `about/about.json`)
+  is never touched, and the docs snapshots are regenerated afterwards.
+
+Design reference: `docs/01_IDEA_AND_ARCHITECTURE.md`.
+
+### In the browser
+
+The Settings page (`Dashboard -> Settings`) has an **Updates / Interface**
+card below Models: live module catalog, archive, baseline freshness + drift,
+the trace-log tail, and Apply / Snapshot / Restore buttons (restore is dry-run
+first). A small **"N updates" pill** also sits in the page header (amber dot
+when the baseline has drifted) and links back to that card.
+
+Module execution from the UI is **disabled by default**: the card's
+"Enable module execution" toggle arms `/api/interface/run` (backed server-side
+by `INTERFACE_RUN_ENABLED`, flipped via `/api/interface/toggle-run`). On by
+your own risk â€” it runs arbitrary functions from `interface/updates/`.
+
+## Recent changes
+
+See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for the full history. The most
+recent entry covers the cross-platform path system â€” per-OS path keys for
+Windows/Linux/macOS plus `GENESSIS_*` environment overrides (each machine picks
+its own folder, so one settings file travels between OSes), the "Settings saved"
+response window, resilient model selection, and the Modular Interface wiring
+(`/api/interface/*` + the Settings card). Earlier entries cover the Agent Monitor
+removal, and the recovery of `engine/core/agent.py` + `server/server.py` to their
+working originals.
+
+Recovery artifacts to be aware of:
+
+- `current-known-good-copy/` â€” the generated restore baseline (see the Modular
+  Interface section above). Not part of the running app.
+- `server/server.py.infected.bak` and `engine/core/agent.py.infected.bak` â€”
+  copies of the pre-rollback monitor-era files, kept in case you need to
+  diff/inspect them.
+
+## Notes
+
+- The backend tracks one active chat session at a time (see "Chats" above);
+  `history` is still accepted for backwards compatibility.
+- `/api/chat` is intentionally a sync endpoint so blocking LLM calls run in
+  FastAPI's threadpool instead of stalling the event loop.
+- Chat transcripts live in `data/chatlog/agent-text-records/` as `.txt` files;
+  `data/chatlog/chatRecord.jsonl` is the header log that points at them.
+- **`ModuleNotFoundError: No module named 'fastapi'`** when starting the
+  server means the shell is not using the project venv. Linux has no bare
+  `python` â€” activate it (`source venv/bin/activate`) or launch directly
+  (`venv/bin/python server/server.py`).
+
+```
+
+## about/set_title.py
+
+```python
+"""Change the app title/subtitle shown as the H1 on index.html, and trigger
+the modular update/restore system.
+
+Usage:
+    python about/set_title.py                      edit about.json interactively
+    python about/set_title.py [title [subtitle]]   set title/subtitle positionally
+    python about/set_title.py apply [--snapshot]   reload update modules + regen docs
+    python about/set_title.py snapshot [folder]    publish current tree as baseline
+    python about/set_title.py restore [baseline] [--dry-run]   roll back modified files
+
+about.json is read by the server on every request, so a title change shows
+after a refresh.
+"""
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve()
+_PROJECT_ROOT = _SCRIPT_DIR.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+F = _SCRIPT_DIR.parent / "about.json"
+
+
+def _save_about(data: dict) -> None:
+    F.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _load_about() -> dict:
+    return json.loads(F.read_text(encoding="utf-8")) if F.exists() else {}
+
+
+def cmd_apply(argv):
+    """Reload all active update modules and regenerate the docs snapshots."""
+    from interface.update_manager import UpdateManager
+    from interface.restore_manager import RestoreManager
+
+    manager = UpdateManager()
+    manager.reload_all()
+    print(manager.summary())
+
+    script = _PROJECT_ROOT / "scripts" / "update_docs.py"
+    result = subprocess.run([sys.executable, str(script)], cwd=str(_PROJECT_ROOT))
+    if result.returncode != 0:
+        print(f"WARNING: docs regeneration exited with code {result.returncode}")
+        return 1
+    print("Docs snapshots regenerated (docs/APP_STRUCTURE.md, docs/APP_CODE_SNAPSHOT.md).")
+
+    if "--snapshot" in argv:
+        # Snapshot AFTER the docs regen so the baseline carries the fresh
+        # snapshots (documents the ordering bug fix - previously the baseline
+        # was published with pre-regen docs, making restore --dry-run report
+        # the two doc files as modified).
+        count = RestoreManager().snapshot_baseline()
+        print(f"Baseline refreshed: {count} file(s) -> current-known-good-copy/")
+
+    return 0
+
+
+def cmd_snapshot(argv):
+    """Publish a complete working copy of the current tree as the baseline."""
+    from interface.restore_manager import RestoreManager
+
+    dest = argv[0] if argv else None
+    count = RestoreManager().snapshot_baseline(dest)
+    label = dest or "current-known-good-copy/"
+    print(f"Baseline published: {count} file(s) -> {label}")
+    return 0
+
+
+def cmd_restore(argv):
+    """Compare against the baseline, back up and roll back modified files."""
+    from interface.restore_manager import RestoreManager
+
+    baseline = None
+    dry_run = False
+    for arg in argv:
+        if arg in ("-n", "--dry-run"):
+            dry_run = True
+        elif arg.startswith("--"):
+            print(f"unknown option: {arg}")
+            return 1
+        elif baseline is None:
+            baseline = arg
+        else:
+            print(f"unexpected argument: {arg}")
+            return 1
+
+    RestoreManager().restore(baseline, dry_run=dry_run)
+    return 0
+
+
+def cmd_title(argv) -> int:
+    """Original behavior: edit about.json interactively or positionally."""
+    data = _load_about()
+    data.setdefault("title", "Genessis")
+    data.setdefault("subtitle", "Home")
+
+    for i, key in enumerate(("title", "subtitle")):
+        value = argv[i] if i < len(argv) else None
+        if value is None:
+            try:
+                value = input(f"{key} [{data[key]}]: ").strip()
+            except EOFError:
+                break
+        if value:
+            data[key] = value
+
+    _save_about(data)
+    print("Saved ->", data["title"])
+    return 0
+
+
+COMMANDS = {
+    "apply": cmd_apply,
+    "snapshot": cmd_snapshot,
+    "restore": cmd_restore,
+}
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if args and args[0] in COMMANDS:
+        return COMMANDS[args[0]](args[1:])
+    return cmd_title(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+## config/models.json
+
+```json
+{
+  "models": [
+    {
+      "id": "llama3:latest",
+      "name": "llama3:latest",
+      "source": "ollama",
+      "size": 4661224676
+    },
+    {
+      "id": "nomic-embed-text:latest",
+      "name": "nomic-embed-text:latest",
+      "source": "ollama",
+      "size": 274302450
+    },
+    {
+      "id": "llama3.2:1b",
+      "name": "llama3.2:1b",
+      "source": "ollama",
+      "size": 1321098329
+    },
+    {
+      "id": "qwen2.5-coder:latest",
+      "name": "qwen2.5-coder:latest",
+      "source": "ollama",
+      "size": 4683087561
+    },
+    {
+      "id": "gemma4:e4b",
+      "name": "gemma4:e4b",
+      "source": "ollama",
+      "size": 9608350718
+    }
+  ]
+}
+
+```
+
+## dashboard/chat.html
+
+```html
+<!DOCTYPE html>
+<!-- ================================================================
+     chat.html - STANDALONE AI CHAT PAGE
+     ================================================================
+     A self-contained chat page that talks to the same FastAPI backend
+     (/api/agents, /api/chat, /api/settings, /api/chat-save) as the main
+     app. It reuses the app's visual language (tokens, buttons, bubbles,
+     spacing) but keeps ALL of its HTML, CSS and JS in this one file so
+     it can be moved or modified easily.
+
+     Open it with an agent id in the URL:
+         /static/chat.html?agent=<agent_id>
+
+     Collapsible side panel:
+       The right panel is driven entirely by the PANEL_SECTIONS config
+       array further down. Add a section object to add future uses.
+       Every DOM class here is prefixed `sc-` so nothing collides with
+       the main app's `cw-` / `.btn` styles if they ever share a page.
+
+     One active chat session per agent (per tab):
+       A single ChatSession is kept per agent id in this tab. Sending
+       is routed through the currently active session; starting a chat
+       for another agent swaps the active session. The backend /api/chat
+       is stateless, so all history lives here in the browser.
+============================================================ -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terminator1</title>
+
+<!-- Pre-paint theme so dark-mode users never see a light flash. The real
+     appearance settings are applied by applyAppearance() after the
+     /api/settings fetch; saved values update localStorage on every save. -->
+<script>
+    (function () {
+        var s = "system";
+        try { s = localStorage.getItem("appearance-theme") || "system"; } catch (e) {}
+        var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme =
+            s === "dark" || s === "light" ? s : (dark ? "dark" : "light");
+    })();
+</script>
+
+<style>
+/* Design tokens below mirror the main app's styles.css :root. */
+
+:root {
+    /* Colors */
+    --color-primary: #0b6bcb;
+    --color-primary-dark: #0a5cb3;
+    --color-primary-soft: #e7f1fb;
+    --color-sidebar: #064f86;
+
+    --color-background: #f5f7fb;
+    --color-surface: #ffffff;
+    --color-surface-alt: #f3f6fa;
+    --color-surface-hover: #eef2f8;
+
+    --color-text: #0f172a;
+    --color-text-soft: #334155;
+    --color-text-muted: #64748b;
+    --color-text-faint: #94a3b8;
+
+    --color-border: #e2e8f0;
+    --color-border-strong: #cbd5e1;
+
+    /* Branded green/teal accent (light values) */
+    --color-accent: #0d9488;
+    --color-accent-strong: #0f766e;
+    --color-accent-soft: #d9f2ef;
+    --color-danger: #b91c1c;
+    --color-danger-soft: #fdecec;
+    --color-success: #16803c;
+    --color-warning: #b45309;
+    --color-focus-ring: rgba(13, 148, 136, 0.18);
+    --color-online: #2dd4a7;
+
+    /* Component colors (theme-aware) */
+    --color-user-bubble-bg: #e7f6f3;
+    --color-user-bubble-border: #c9eae4;
+    --color-code-bg: #f1f5f9;
+    --color-pre-bg: #0f172a;
+    --color-pre-text: #e2e8f0;
+    --color-input-bg: #ffffff;
+    --color-avatar: #e5e7eb;
+    --color-avatar-text: #374151;
+    --color-header-grad-a: #0b6bcb;
+    --color-header-grad-b: #0d9488;
+
+    --radius-small: 6px;
+    --radius-medium: 10px;
+    --radius-large: 16px;
+    --radius-pill: 999px;
+
+    --shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+    --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 24px rgba(16, 24, 40, 0.07);
+    --shadow-pop: 0 12px 32px rgba(16, 24, 40, 0.12);
+
+    --header-height: 60px;
+    --panel-width: 310px;
+    --content-width: 1020px;
+
+    /* Appearance - overridable from the Configuration page (appearance
+       settings in app_settings.json) via applyAppearance(). */
+    --app-font-family: Arial, Helvetica, sans-serif;
+    --app-font-size: 16px;
+}
+
+/* DARK THEME - flipped by applyAppearance() (or the pre-paint head
+   script) setting data-theme="dark" on <html>; same token names as the
+   main app's styles.css so the whole component sheet re-skins. */
+[data-theme="dark"] {
+    --color-primary: #3b82f6;
+    --color-primary-dark: #2f6fe0;
+    --color-primary-soft: rgba(59, 130, 246, 0.14);
+    --color-sidebar: #0d1117;
+    --color-background: #0d1117;
+    --color-surface: #151c25;
+    --color-surface-alt: #1a222d;
+    --color-surface-hover: #202a37;
+    --color-text: #e6edf3;
+    --color-text-soft: #c3cdd8;
+    --color-text-muted: #8b98a9;
+    --color-text-faint: #5b6b7d;
+    --color-border: #242e3b;
+    --color-border-strong: #33404f;
+    --color-accent: #2dd4bf;
+    --color-accent-strong: #5eead4;
+    --color-accent-soft: rgba(45, 212, 191, 0.14);
+    --color-danger: #f87171;
+    --color-danger-soft: rgba(248, 113, 113, 0.12);
+    --color-success: #34d399;
+    --color-warning: #fbbf24;
+    --color-focus-ring: rgba(45, 212, 191, 0.25);
+    --color-user-bubble-bg: #0f2f2b;
+    --color-user-bubble-border: #1d4942;
+    --color-code-bg: #1e293b;
+    --color-pre-bg: #0b1220;
+    --color-input-bg: #0f151e;
+    --color-avatar: #27303c;
+    --color-avatar-text: #c3cdd8;
+    --color-header-grad-a: #1d4ed8;
+    --color-header-grad-b: #0f766e;
+}
+
+/* Themed scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-faint);
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+/* -------------------- RESET -------------------- */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+}
+
+html {
+    /* rem-based typography scales from here (= the stored Appearance size) */
+    font-size: var(--app-font-size, 16px);
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: var(--app-font-family, Arial, Helvetica, sans-serif);
+    font-size: 1rem;
+    color: var(--color-text);
+    background: var(--color-background);
+}
+
+/* -------------------- HEADER -------------------- */
+
+.sc-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 0 0 var(--header-height);
+    height: var(--header-height);
+    padding: 0 18px;
+    background: linear-gradient(135deg, var(--color-header-grad-a), var(--color-header-grad-b));
+    color: white;
+    box-shadow: 0 1px 4px rgba(0,0,0,.12);
+    z-index: 10;
+}
+
+.sc-agent-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.18);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.sc-site-title {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    max-width: 220px;
+    margin-right: 6px;
+    padding: 4px 10px;
+    border: 1px solid rgba(255,255,255,.25);
+    border-radius: 999px;
+    background: rgba(255,255,255,.10);
+    color: rgba(255,255,255,.92);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sc-site-title.show { display: inline-flex; }
+
+.sc-header-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.sc-agent-name {
+    overflow: hidden;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.sc-agent-sub {
+    overflow: hidden;
+    margin-top: 1px;
+    color: rgba(255,255,255,.72);
+    font-size: 12px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.sc-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.sc-rag-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 11px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: var(--radius-small);
+    background: rgba(255,255,255,.10);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.sc-rag-toggle:hover {
+    background: rgba(255,255,255,.20);
+}
+
+.sc-rag-toggle input {
+    accent-color: var(--color-accent, #6ea8ff);
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+}
+
+.sc-header-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 11px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: var(--radius-small);
+    background: rgba(255,255,255,.10);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: .15s ease;
+    text-decoration: none;
+}
+
+.sc-header-btn:hover {
+    background: rgba(255,255,255,.20);
+}
+
+.sc-header-btn.current,
+.sc-header-btn.current:hover {
+    background: #fff;
+    color: #1e293b;
+    border-color: transparent;
+}
+
+.sc-header-btn:focus-visible,
+.sc-btn:focus-visible,
+.sc-input:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+}
+
+.sc-header-select {
+    height: 34px;
+    padding: 0 8px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: var(--radius-small);
+    background: rgba(255,255,255,.10);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.sc-header-select option {
+    color: var(--color-text-soft);
+    background: var(--color-surface);
+}
+
+.sc-header-title {
+    width: 170px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: var(--radius-small);
+    background: rgba(255,255,255,.10);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.sc-header-title::placeholder {
+    color: rgba(255,255,255,.50);
+    font-weight: 500;
+}
+
+.sc-header-title:focus {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+    background: rgba(255,255,255,.18);
+}
+
+.sc-header-title:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+}
+
+.sc-header-btn.danger:hover {
+    background: #fee2e2;
+    color: var(--color-danger);
+}
+
+/* -------------------- MAIN LAYOUT -------------------- */
+
+.sc-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.sc-main {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+}
+
+/* -------------------- CHAT -------------------- */
+
+.sc-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    flex: 1;
+    min-height: 0;
+    padding: 28px 24px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+}
+
+.sc-message-container {
+    width: min(100%, var(--content-width));
+    margin: 0 auto;
+}
+
+.sc-welcome {
+    width: min(100%, 620px);
+    margin: auto;
+    padding: 34px;
+    text-align: center;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+    box-shadow: var(--shadow-card);
+}
+
+.sc-welcome-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 14px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--color-accent), var(--color-primary));
+    color: white;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.sc-welcome h2 {
+    margin: 0 0 8px;
+    font-size: 1.3125rem;
+    color: var(--color-text);
+}
+
+.sc-welcome-hints {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.sc-welcome-hint {
+    padding: 5px 11px;
+    border: 1px solid var(--color-user-bubble-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.sc-welcome p {
+    margin: 5px 0;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.sc-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    width: 100%;
+}
+
+.sc-message.user {
+    justify-content: flex-end;
+}
+
+.sc-message-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    margin-top: 23px;
+    border-radius: 9px;
+    background: var(--color-avatar);
+    color: var(--color-avatar-text);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.sc-message-avatar.agent {
+    background: linear-gradient(135deg, var(--color-accent), var(--color-primary));
+    color: white;
+}
+
+.sc-message-content {
+    min-width: 0;
+    max-width: min(78%, 760px);
+}
+
+.sc-message.user .sc-message-content {
+    max-width: min(78%, 700px);
+}
+
+.sc-message-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 18px;
+    margin: 0 4px 5px;
+}
+
+.sc-message-meta strong {
+    font-size: 0.75rem;
+}
+
+.sc-message-meta span {
+    color: var(--color-text-faint);
+    font-size: 0.6875rem;
+}
+
+.sc-message-body {
+    padding: 13px 15px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.sc-message.user .sc-message-body {
+    border: 1px solid var(--color-user-bubble-border);
+    background: var(--color-user-bubble-bg);
+}
+
+.sc-message.agent .sc-message-body {
+    border-left: 3px solid var(--color-accent);
+}
+
+.sc-message.system {
+    justify-content: center;
+}
+
+.sc-message.system .sc-message-body {
+    padding: 8px 14px;
+    border: 1px dashed var(--color-border-strong);
+    background: transparent;
+    box-shadow: none;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-style: italic;
+    text-align: center;
+}
+
+/* Markdown */
+
+.sc-message-body p {
+    margin: 0 0 10px;
+}
+
+.sc-message-body p:last-child {
+    margin-bottom: 0;
+}
+
+.sc-message-body ul,
+.sc-message-body ol {
+    margin: 8px 0;
+    padding-left: 22px;
+}
+
+.sc-message-body li {
+    margin: 4px 0;
+}
+
+.sc-message-body code {
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: var(--color-code-bg);
+    font-family: Consolas, monospace;
+    font-size: 12px;
+}
+
+.sc-message-body pre {
+    margin: 10px 0;
+    padding: 13px;
+    overflow-x: auto;
+    border-radius: 8px;
+    background: var(--color-pre-bg);
+    color: var(--color-pre-text);
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.sc-message-body pre code {
+    padding: 0;
+    background: transparent;
+    color: inherit;
+}
+
+.sc-message-body a {
+    color: var(--color-primary);
+}
+
+/* Typing */
+
+.sc-typing {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 18px;
+}
+
+.sc-typing span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    animation: typingPulse 1.2s infinite ease-in-out;
+}
+
+.sc-typing span:nth-child(2) {
+    animation-delay: .15s;
+}
+
+.sc-typing span:nth-child(3) {
+    animation-delay: .30s;
+}
+
+@keyframes typingPulse {
+    0%, 60%, 100% { opacity: .25; }
+    30% { opacity: 1; }
+}
+
+/* -------------------- COMPOSER -------------------- */
+
+.sc-composer {
+    flex: 0 0 auto;
+    padding: 13px 20px 16px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface-alt);
+    box-shadow: 0 -4px 16px rgba(16, 24, 40, 0.04);
+}
+
+.sc-composer-inner {
+    width: min(100%, var(--content-width));
+    margin: 0 auto;
+}
+
+.sc-save-status {
+    min-height: 18px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-alt);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.sc-save-status.ok {
+    color: var(--color-success);
+}
+
+.sc-save-status.error {
+    color: var(--color-danger);
+}
+
+/* Saved-test run banner (rendered inside the message thread, ?runTests=1). */
+.sc-test-run-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 4px 0 10px;
+    padding: 9px 14px;
+    border: 1px solid var(--color-user-bubble-border);
+    border-radius: var(--radius-medium);
+    background: var(--color-accent-soft);
+    color: var(--color-text-soft);
+    font-size: 13px;
+}
+
+.sc-test-run-banner strong {
+    color: var(--color-accent-strong);
+}
+
+.sc-test-run-banner span {
+    min-width: 40px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+}
+
+.sc-test-run-stop {
+    margin-left: auto;
+    padding: 4px 12px;
+    border: 1px solid var(--color-danger);
+    border-radius: 7px;
+    background: transparent;
+    color: var(--color-danger);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.sc-test-run-stop:disabled {
+    opacity: .55;
+    cursor: default;
+}
+
+.sc-test-run-stop:not(:disabled):hover {
+    background: var(--color-danger);
+    color: #fff;
+}
+
+.sc-input-wrap {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 7px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-medium);
+    background: var(--color-input-bg);
+    box-shadow: var(--shadow-soft);
+    transition: .15s ease;
+}
+
+.sc-input-wrap:focus-within {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.sc-input {
+    width: 100%;
+    min-height: 42px;
+    max-height: 170px;
+    padding: 10px 11px;
+    border: 0;
+    outline: 0;
+    resize: none;
+    overflow-y: auto;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.sc-input::placeholder {
+    color: var(--color-text-faint);
+}
+
+.sc-send {
+    min-width: 74px;
+    height: 40px;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(135deg, var(--color-header-grad-a), var(--color-header-grad-b));
+    box-shadow: 0 2px 8px rgba(11, 107, 203, 0.25);
+}
+
+.sc-send:hover:not(:disabled) {
+    filter: brightness(1.06);
+    box-shadow: 0 4px 14px rgba(11, 107, 203, 0.32);
+}
+
+.sc-composer-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 3px 0;
+}
+
+.sc-input-hint {
+    color: var(--color-text-faint);
+    font-size: 11px;
+}
+
+/* -------------------- BUTTONS -------------------- */
+
+.sc-btn {
+    border: 1px solid transparent;
+    border-radius: var(--radius-small);
+    padding: 8px 13px;
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: .15s ease;
+}
+
+.sc-btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+.sc-btn-primary {
+    background: linear-gradient(135deg, var(--color-header-grad-a), var(--color-header-grad-b));
+    color: white;
+    box-shadow: 0 2px 8px rgba(11, 107, 203, 0.25);
+}
+
+.sc-btn-primary:hover:not(:disabled) {
+    filter: brightness(1.06);
+}
+
+.sc-btn-secondary {
+    border-color: var(--color-border-strong);
+    background: var(--color-input-bg);
+    color: var(--color-text-soft);
+}
+
+.sc-btn-secondary:hover:not(:disabled) {
+    border-color: var(--color-accent);
+    color: var(--color-accent-strong);
+}
+
+/* -------------------- RIGHT PANEL -------------------- */
+
+.sc-panel {
+    display: flex;
+    flex-direction: column;
+    width: var(--panel-width);
+    flex: 0 0 var(--panel-width);
+    border-left: 1px solid var(--color-border);
+    background: var(--color-surface);
+    box-shadow: -2px 0 8px rgba(15,23,42,.03);
+    transition: width .2s ease;
+}
+
+.sc-panel.hidden {
+    display: none;
+}
+
+.sc-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 40px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.sc-panel-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+}
+
+.sc-panel-sections {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+}
+
+.sc-panel-section {
+    margin-bottom: 18px;
+}
+
+.sc-panel-section:last-child {
+    margin-bottom: 0;
+}
+
+.sc-panel-section-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 10px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
+
+.sc-panel-section-head::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: var(--color-accent);
+}
+
+.sc-field {
+    margin-bottom: 11px;
+}
+
+.sc-field-label {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--color-text-muted);
+    font-size: 11px;
+}
+
+.sc-field-value {
+    display: block;
+    padding: 9px 10px;
+    overflow-wrap: anywhere;
+    border: 1px solid var(--color-border);
+    border-radius: 7px;
+    background: var(--color-surface-alt);
+    color: var(--color-text-soft);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.sc-field-input {
+    width: 100%;
+    height: 34px;
+    padding: 0 9px;
+    border: 1px solid var(--color-border);
+    border-radius: 7px;
+    background: var(--color-surface-alt);
+    color: var(--color-text-soft);
+    font: inherit;
+    font-size: 12px;
+    outline: 0;
+}
+
+.sc-field-input:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.sc-empty-note {
+    margin: 0;
+    color: var(--color-text-faint);
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* Toggle switch (used by checkbox panel fields) - mirrors the main
+   app's cw-switch styling. */
+
+.sc-field-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.sc-switch {
+    position: relative;
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 38px;
+    height: 22px;
+}
+
+.sc-switch input {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.sc-switch-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: var(--color-border-strong);
+    transition: background .15s ease;
+    pointer-events: none;
+}
+
+.sc-switch-track::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    transition: transform .15s ease;
+}
+
+.sc-switch input:checked + .sc-switch-track {
+    background: var(--color-accent);
+}
+
+.sc-switch input:checked + .sc-switch-track::after {
+    transform: translateX(16px);
+}
+
+/* -------------------- SCROLLBARS -------------------- */
+
+.sc-messages::-webkit-scrollbar,
+.sc-panel-sections::-webkit-scrollbar,
+.sc-input::-webkit-scrollbar {
+    width: 7px;
+}
+
+.sc-messages::-webkit-scrollbar-thumb,
+.sc-panel-sections::-webkit-scrollbar-thumb,
+.sc-input::-webkit-scrollbar-thumb {
+    border-radius: 10px;
+    background: #cbd5e1;
+}
+
+.sc-messages::-webkit-scrollbar-track,
+.sc-panel-sections::-webkit-scrollbar-track,
+.sc-input::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* -------------------- BUBBLE ACTION BUTTONS -------------------- */
+
+/* Wrapper positioned at bottom-right corner of each message body. */
+.sc-bubble-actions {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    position: absolute;
+    bottom: 6px;
+    right: 8px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s ease;
+}
+
+/* Make the message-body position relative so the actions row anchors. */
+.sc-message-body {
+    position: relative;
+}
+
+/* Reveal on hover of the whole message or when a button inside is focused. */
+.sc-message:hover .sc-bubble-actions,
+.sc-message:focus-within .sc-bubble-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.sc-bubble-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 5px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    transition: .12s ease;
+    box-shadow: var(--shadow-soft);
+}
+
+.sc-bubble-btn:hover {
+    border-color: var(--color-accent);
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+}
+
+.sc-bubble-btn:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+}
+
+.sc-bubble-btn.active {
+    border-color: var(--color-accent);
+    background: var(--color-primary);
+    color: white;
+}
+
+/* Toast notification for "coming soon" bookmark etc. */
+.sc-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    padding: 9px 18px;
+    border-radius: 20px;
+    background: #1e293b;
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 999;
+    transition: opacity .2s ease, transform .2s ease;
+}
+
+.sc-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Forward-to-agent picker overlay */
+.sc-forward-picker {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    right: 0;
+    min-width: 180px;
+    padding: 7px 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface);
+    box-shadow: 0 6px 20px rgba(15,23,42,.14);
+    z-index: 50;
+}
+
+.sc-forward-picker-title {
+    padding: 4px 12px 6px;
+    color: var(--color-text-faint);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.sc-forward-picker-item {
+    display: block;
+    width: 100%;
+    max-width: 260px;
+    padding: 7px 12px;
+    overflow: hidden;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-soft);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.sc-forward-picker-item:hover {
+    background: var(--color-accent);
+    color: var(--color-primary);
+}
+
+/* -------------------- RESPONSIVE -------------------- */
+
+@media (max-width: 760px) {
+    :root {
+        --panel-width: 270px;
+    }
+
+    .sc-message-content,
+    .sc-message.user .sc-message-content {
+        max-width: 88%;
+    }
+
+    .sc-messages {
+        padding: 18px 14px;
+    }
+
+    .sc-composer {
+        padding: 10px 12px 13px;
+    }
+
+    .sc-header-btn {
+        padding: 0 9px;
+    }
+
+    .sc-header-btn .label {
+        display: none;
+    }
+}
+
+@media (max-width: 560px) {
+    .sc-panel {
+        position: absolute;
+        inset: var(--header-height) 0 0 auto;
+        width: 290px;
+        flex-basis: 290px;
+        z-index: 5;
+        box-shadow: -6px 0 20px rgba(15,23,42,.12);
+    }
+
+    .sc-message-content,
+    .sc-message.user .sc-message-content {
+        max-width: 92%;
+    }
+
+    .sc-input-hint {
+        display: none;
+    }
+
+    .sc-header {
+        padding: 0 11px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+
+<header class="sc-header">
+
+    <div class="sc-agent-avatar" id="sc-avatar">AI</div>
+
+    <div class="sc-header-info">
+        <div class="sc-agent-name" id="sc-agent-name">Assistant</div>
+        <div class="sc-agent-sub" id="sc-agent-sub">AI agent</div>
+    </div>
+
+    <span class="sc-site-title" id="sc-site-title" title=""></span>
+
+    <div class="sc-header-actions">
+
+        <select
+            class="sc-header-select"
+            id="sc-chats"
+            aria-label="Saved chats"
+            title="Open a previous chat">
+            <option value="">All chats...</option>
+        </select>
+
+        <input
+            type="text"
+            class="sc-header-title"
+            id="sc-chat-title"
+            placeholder="Name this chat..."
+            aria-label="Chat purpose or title"
+            autocomplete="off" />
+
+        <label
+            class="sc-rag-toggle"
+            title="Add this chat to the agent's RAG memory on save">
+            <input
+                type="checkbox"
+                id="sc-rag" />
+            Save to memory
+        </label>
+
+        <button
+            type="button"
+            class="sc-header-btn"
+            id="sc-save"
+            title="Save the chat as a transcript">
+            <span>＋</span>
+            <span class="label">Save</span>
+        </button>
+
+        <button
+            type="button"
+            class="sc-header-btn danger"
+            id="sc-delete"
+            title="Erase this chat (transcript text deleted)">
+            <span>✕</span>
+            <span class="label">Delete</span>
+        </button>
+
+        <button
+            type="button"
+            class="sc-header-btn danger"
+            id="sc-rag-clear"
+            title="Reset the RAG memory store (all RAG DB entries reset to zero)">
+            <span>∅</span>
+            <span class="label">Clear Memory</span>
+        </button>
+
+        <a
+            class="sc-header-btn"
+            href="/static/index.html"
+            title="Dashboard">
+            <span>⌂</span>
+            <span class="label">Dashboard</span>
+        </a>
+
+        <a
+            class="sc-header-btn current"
+            href="/static/chat.html"
+            aria-current="page"
+            title="Chat - the standalone chat page">
+            <span>◈</span>
+            <span class="label">Chat</span>
+        </a>
+
+        <a
+            class="sc-header-btn"
+            href="/static/config.html"
+            title="Settings - the consolidated configuration page">
+            <span>⚙</span>
+            <span class="label">Settings</span>
+        </a>
+
+        <button
+            type="button"
+            class="sc-header-btn"
+            id="sc-panel-toggle"
+            aria-pressed="true"
+            title="Toggle agent information panel">
+            <span id="sc-panel-toggle-icon">◧</span>
+            <span class="label" id="sc-panel-toggle-label">Panel</span>
+        </button>
+
+        <button
+            type="button"
+            class="sc-header-btn"
+            id="sc-clear"
+            title="Start a new chat">
+            <span>＋</span>
+            <span class="label">New Chat</span>
+        </button>
+
+        <button
+            type="button"
+            class="sc-header-btn danger"
+            id="sc-close"
+            title="Close chat">
+            <span>×</span>
+            <span class="label">Close</span>
+        </button>
+
+    </div>
+</header>
+
+
+<!-- ============================================================
+     APPLICATION BODY
+     ============================================================ -->
+
+<div class="sc-body">
+
+    <!-- ================= CHAT ================= -->
+
+    <main class="sc-main">
+
+        <div
+            class="sc-messages"
+            id="sc-messages"
+            aria-live="polite">
+        </div>
+
+
+        <!-- ================= COMPOSER ================= -->
+
+        <div class="sc-composer">
+
+            <div
+                class="sc-save-status"
+                id="sc-save-status"
+                role="status">
+            </div>
+
+            <div class="sc-composer-inner">
+
+                <div class="sc-input-wrap">
+
+                    <textarea
+                        class="sc-input"
+                        id="sc-input"
+                        rows="1"
+                        placeholder="Message the agent..."
+                        aria-label="Message">
+                    </textarea>
+
+                    <button
+                        type="button"
+                        class="sc-btn sc-btn-primary sc-send"
+                        id="sc-send">
+                        Send
+                    </button>
+
+                </div>
+
+                <div class="sc-composer-footer">
+                    <span class="sc-input-hint">
+                        Enter sends · Shift + Enter adds a new line
+                    </span>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+
+    <!-- ================= RIGHT PANEL ================= -->
+
+    <aside
+        class="sc-panel"
+        id="sc-panel">
+
+        <div class="sc-panel-header">
+            <span class="sc-panel-title">Agent Workspace</span>
+        </div>
+
+        <div
+            class="sc-panel-sections"
+            id="sc-panel-sections">
+        </div>
+
+    </aside>
+
+</div>
+
+
+<script>
+"use strict";
+
+/* ============================================================
+   1. CONFIGURATION
+   Add future panel sections here.
+   ============================================================ */
+
+/* Auto-hi text: experimental prefill (may be removed later). The toggle's
+   default now comes from settings.behavior.autoHi (app_settings.json), so it
+   can be changed without editing source. */
+const AUTO_HI_TEXT = "hi";
+
+const PANEL_SECTIONS = [
+    {
+        title: "Chat",
+        fields: [
+            {
+                type: "input",
+                name: "chatTitle",
+                label: "Chat title",
+                placeholder: "Name this chat...",
+            }
+        ]
+    },
+    {
+        title: "Agent Information",
+        fields: [
+            {
+                type: "text",
+                label: "Status",
+                value: "Ready"
+            },
+            {
+                type: "text",
+                label: "Agent ID",
+                valueFrom: "agentId"
+            },
+            {
+                type: "text",
+                label: "Description",
+                valueFrom: "description"
+            }
+        ]
+    },
+    {
+        title: "Actions",
+        fields: [
+            {
+                type: "button",
+                label: "Clear Chat",
+                action: "clearChat"
+            }
+        ]
+    },
+    {
+        title: "Behavior",
+        fields: [
+            {
+                type: "checkbox",
+                name: "autoHi",
+                label: '"hi" on a new chat',
+                settingPath: "behavior.autoHi",
+                defaultValue: true
+            }
+        ]
+    }
+];
+
+
+/* ============================================================
+   2. HELPERS
+   ============================================================ */
+
+function initials(name) {
+
+    if (!name) return "AI";
+
+    const words = String(name)
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+
+    if (words.length >= 2) {
+        return (
+            words[0][0] +
+            words[1][0]
+        ).toUpperCase();
+    }
+
+    return String(name)
+        .slice(0, 2)
+        .toUpperCase();
+}
+
+
+function formatTime(isoString) {
+
+    const date = isoString
+        ? new Date(isoString)
+        : new Date();
+
+    const time = date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+
+    if (
+        date.toDateString() ===
+        new Date().toDateString()
+    ) {
+        return time;
+    }
+
+    return `${date.toLocaleDateString([], {
+        month: "short",
+        day: "numeric"
+    })}, ${time}`;
+}
+
+
+function el(tag, className, text) {
+
+    const node = document.createElement(tag);
+
+    if (className) {
+        node.className = className;
+    }
+
+    if (
+        text !== undefined &&
+        text !== null
+    ) {
+        node.textContent = text;
+    }
+
+    return node;
+}
+
+
+/* ============================================================
+   3. SAFE MARKDOWN
+   ============================================================ */
+
+const INLINE_RULES = [
+    {
+        tag: "code",
+        re: /`([^`\n]+)`/
+    },
+    {
+        tag: "strong",
+        re: /\*\*([^*\n]+)\*\*/
+    },
+    {
+        tag: "em",
+        re: /\*([^*\n]+)\*/
+    },
+    {
+        tag: "a",
+        re: /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/
+    }
+];
+
+
+function renderMarkdown(text) {
+
+    const fragment =
+        document.createDocumentFragment();
+
+    String(text ?? "")
+        .split("```")
+        .forEach((chunk, index) => {
+
+            if (index % 2 === 1) {
+                fragment.appendChild(
+                    buildCodeBlock(chunk)
+                );
+            } else {
+                buildBlocks(chunk)
+                    .forEach(node =>
+                        fragment.appendChild(node)
+                    );
+            }
+        });
+
+    return fragment;
+}
+
+
+function buildCodeBlock(chunk) {
+
+    const codeText =
+        chunk.replace(
+            /^[a-zA-Z0-9_+-]*\n/,
+            ""
+        );
+
+    const pre = el("pre");
+    const code = el(
+        "code",
+        "",
+        codeText.trim()
+    );
+
+    pre.appendChild(code);
+
+    return pre;
+}
+
+
+function buildBlocks(text) {
+
+    const nodes = [];
+
+    String(text)
+        .split(/\n{2,}/)
+        .map(part => part.trim())
+        .filter(Boolean)
+        .forEach(block => {
+            nodes.push(buildBlock(block));
+        });
+
+    return nodes;
+}
+
+
+function buildBlock(block) {
+
+    const lines = block.split("\n");
+
+    if (
+        lines.length > 0 &&
+        lines.every(l =>
+            /^\s*[-*]\s+\S/.test(l)
+        )
+    ) {
+        return buildList(
+            lines,
+            "ul",
+            l => l.replace(
+                /^\s*[-*]\s+/,
+                ""
+            )
+        );
+    }
+
+    if (
+        lines.length > 0 &&
+        lines.every(l =>
+            /^\s*\d+[.)]\s+\S/.test(l)
+        )
+    ) {
+        return buildList(
+            lines,
+            "ol",
+            l => l.replace(
+                /^\s*\d+[.)]\s+/,
+                ""
+            )
+        );
+    }
+
+    return buildParagraph(lines);
+}
+
+
+function buildList(
+    lines,
+    tag,
+    stripMarker
+) {
+
+    const list = el(tag);
+
+    lines.forEach(line => {
+
+        const item = el("li");
+
+        renderInline(
+            stripMarker(line),
+            item
+        );
+
+        list.appendChild(item);
+    });
+
+    return list;
+}
+
+
+function buildParagraph(lines) {
+
+    const p = el("p");
+
+    lines.forEach((line, index) => {
+
+        if (index > 0) {
+            p.appendChild(
+                document.createTextNode("\n")
+            );
+        }
+
+        renderInline(line, p);
+    });
+
+    return p;
+}
+
+
+function renderInline(line, target) {
+
+    let best = null;
+
+    INLINE_RULES.forEach(rule => {
+
+        const match = rule.re.exec(line);
+
+        if (!match) return;
+
+        const better =
+            best === null ||
+            match.index < best.match.index ||
+            (
+                match.index === best.match.index &&
+                match[0].length > best.match[0].length
+            );
+
+        if (better) {
+            best = {
+                rule,
+                match
+            };
+        }
+    });
+
+    if (!best) {
+
+        target.appendChild(
+            document.createTextNode(line)
+        );
+
+        return;
+    }
+
+    const {
+        rule,
+        match
+    } = best;
+
+    const [
+        raw,
+        ...groups
+    ] = match;
+
+    if (match.index > 0) {
+
+        target.appendChild(
+            document.createTextNode(
+                line.slice(0, match.index)
+            )
+        );
+    }
+
+    target.appendChild(
+        buildInlineNode(
+            rule.tag,
+            groups
+        )
+    );
+
+    renderInline(
+        line.slice(
+            match.index + raw.length
+        ),
+        target
+    );
+}
+
+
+function buildInlineNode(tag, groups) {
+
+    if (tag === "a") {
+
+        const link = el(
+            "a",
+            "",
+            groups[0]
+        );
+
+        link.href = groups[1];
+        link.target = "_blank";
+        link.rel =
+            "noopener noreferrer";
+
+        return link;
+    }
+
+    return el(
+        tag,
+        "",
+        groups[0]
+    );
+}
+
+
+/* ============================================================
+   4. PANEL
+   ============================================================ */
+
+function buildPanel(agent) {
+
+    const sections =
+        document.getElementById(
+            "sc-panel-sections"
+        );
+
+    sections.replaceChildren();
+
+    const resolved =
+        PANEL_SECTIONS.map(section => ({
+
+            ...section,
+
+            fields:
+                section.fields.map(field => {
+
+                    if (
+                        field.valueFrom ===
+                        "agentId"
+                    ) {
+                        return {
+                            ...field,
+                            value: agent.id
+                        };
+                    }
+
+                    if (
+                        field.valueFrom ===
+                        "description"
+                    ) {
+                        return {
+                            ...field,
+                            value:
+                                agent.description
+                        };
+                    }
+
+                    if (field.settingPath) {
+
+                        const value =
+                            readSetting(
+                                field.settingPath
+                            );
+
+                        return {
+                            ...field,
+                            value:
+                                value === undefined
+                                    ? field.defaultValue
+                                    : value
+                        };
+                    }
+
+                    return field;
+                })
+        }));
+
+
+    resolved.forEach(section => {
+
+        const box = el(
+            "section",
+            "sc-panel-section"
+        );
+
+        const head = el(
+            "div",
+            "sc-panel-section-head",
+            section.title
+        );
+
+        box.appendChild(head);
+
+        const body = el(
+            "div"
+        );
+
+        if (
+            Array.isArray(section.fields) &&
+            section.fields.length
+        ) {
+
+            section.fields.forEach(field => {
+
+                body.appendChild(
+                    createField(field)
+                );
+            });
+
+        } else {
+
+            body.appendChild(
+                el(
+                    "p",
+                    "sc-empty-note",
+                    "No options yet."
+                )
+            );
+        }
+
+        box.appendChild(body);
+        sections.appendChild(box);
+    });
+}
+
+
+function createField(field) {
+
+    switch (field.type || "text") {
+
+        case "input": {
+
+            const row = el(
+                "div",
+                "sc-field"
+            );
+
+            if (field.label) {
+
+                row.appendChild(
+                    el(
+                        "span",
+                        "sc-field-label",
+                        field.label
+                    )
+                );
+            }
+
+            const input =
+                document.createElement(
+                    "input"
+                );
+
+            input.type = "text";
+            input.className = "sc-field-input";
+            input.dataset.name =
+                field.name || "";
+
+            if (field.placeholder) {
+                input.placeholder =
+                    field.placeholder;
+            }
+
+            row.appendChild(input);
+
+            return row;
+        }
+
+
+        case "text": {
+
+            const row = el(
+                "div",
+                "sc-field"
+            );
+
+            if (field.label) {
+
+                row.appendChild(
+                    el(
+                        "span",
+                        "sc-field-label",
+                        field.label
+                    )
+                );
+            }
+
+            row.appendChild(
+                el(
+                    "span",
+                    "sc-field-value",
+                    field.value !==
+                    undefined &&
+                    field.value !== null
+                        ? field.value
+                        : "—"
+                )
+            );
+
+            return row;
+        }
+
+
+        case "button": {
+
+            const button = el(
+                "button",
+                "sc-btn sc-btn-secondary",
+                field.label || "Action"
+            );
+
+            button.type = "button";
+            button.style.width = "100%";
+            button.style.marginBottom = "8px";
+
+            button.addEventListener(
+                "click",
+                () => {
+
+                    const action =
+                        window.__scActions?.[
+                            field.action
+                        ];
+
+                    if (
+                        typeof action ===
+                        "function"
+                    ) {
+                        action();
+                    }
+                }
+            );
+
+            return button;
+        }
+
+
+        case "checkbox": {
+
+            const row = el(
+                "div",
+                "sc-field sc-field-toggle"
+            );
+
+            if (field.label) {
+
+                row.appendChild(
+                    el(
+                        "span",
+                        "sc-field-label",
+                        field.label
+                    )
+                );
+            }
+
+            const label = el(
+                "label",
+                "sc-switch"
+            );
+
+            const checkbox =
+                document.createElement(
+                    "input"
+                );
+
+            checkbox.type = "checkbox";
+            checkbox.checked =
+                Boolean(field.value);
+
+            if (field.name) {
+                checkbox.dataset.name =
+                    field.name;
+            }
+
+            label.appendChild(checkbox);
+            label.appendChild(
+                el("span", "sc-switch-track")
+            );
+
+            row.appendChild(label);
+
+            return row;
+        }
+
+
+        default:
+
+            return createField({
+                ...field,
+                type: "text"
+            });
+    }
+}
+
+
+/* ============================================================
+   5. CHAT SESSION
+   ============================================================ */
+
+class ChatSession {
+
+    constructor({
+        agentId = "",
+        agentName = "",
+        model = ""
+    } = {}) {
+
+        this.agentId = agentId;
+        this.agentName = agentName;
+        this.model = model;
+
+        this.title = "New chat";
+        this.messages = [];
+
+        this.startedAt =
+            new Date().toISOString();
+
+        this.isWaiting = false;
+        this.sessionId = null;
+    }
+
+
+    setSessionId(sessionId, title) {
+
+        this.sessionId =
+            sessionId || null;
+
+        if (title) {
+            this.title = title;
+        }
+    }
+
+
+    get isEmpty() {
+        return this.messages.length === 0;
+    }
+
+
+    addUserMessage(text) {
+
+        const message = {
+            role: "user",
+            author: "You",
+            content: text,
+            timestamp:
+                new Date().toISOString()
+        };
+
+        this.messages.push(message);
+
+        if (
+            this.messages.filter(
+                m => m.role === "user"
+            ).length === 1
+        ) {
+
+            this.title =
+                text.length > 50
+                    ? text.slice(0, 50).trimEnd() + "..."
+                    : text;
+        }
+
+        return message;
+    }
+
+
+    addAssistantMessage(
+        text,
+        author = this.agentName || "AI"
+    ) {
+
+        const message = {
+            role: "assistant",
+            author,
+            content: text || "(no reply)",
+            timestamp:
+                new Date().toISOString()
+        };
+
+        this.messages.push(message);
+
+        return message;
+    }
+
+
+    getApiHistory() {
+
+        return this.messages
+            .filter(
+                m =>
+                    m.role === "user" ||
+                    m.role === "assistant"
+            )
+            .slice(-20)
+            .map(m => ({
+                role: m.role,
+                content: m.content
+            }));
+    }
+
+
+    get transcript() {
+
+        const lines = [];
+
+        lines.push(
+            `Agent: ${this.agentName}`
+        );
+
+        lines.push(
+            `Title: ${this.title}`
+        );
+
+        lines.push(
+            `Started: ${new Date(
+                this.startedAt
+            ).toLocaleString()}`
+        );
+
+        lines.push(
+            "".padEnd(40, "-")
+        );
+
+        this.messages.forEach(message => {
+
+            lines.push(
+                `${message.author} (${formatTime(
+                    message.timestamp
+                )}):`
+            );
+
+            lines.push(message.content);
+            lines.push("");
+        });
+
+        return lines.join("\n");
+    }
+
+
+    get transcriptFileName() {
+
+        const safe =
+            (this.title || "chat")
+                .replace(
+                    /[^a-z0-9-]+/gi,
+                    "-"
+                )
+                .slice(0, 60);
+
+        const timestamp =
+            new Date()
+                .toISOString()
+                .replace(/[-:]/g, "")
+                .slice(0, 12);
+
+        return `${safe}-${timestamp}`
+            .toLowerCase();
+    }
+
+
+    newChat() {
+
+        this.messages = [];
+        this.title = "New chat";
+
+        this.startedAt =
+            new Date().toISOString();
+
+        this.isWaiting = false;
+        this.sessionId = null;
+    }
+}
+
+
+/* ============================================================
+   6. APPLICATION STATE
+   ============================================================ */
+
+const agentsById = new Map();
+const sessions = new Map();
+
+let activeAgent = null;
+let activeSession = null;
+let settings = {};
+
+/* Id of the SAVED chat currently open in the composer (read-only view). When
+   the user is chatting live (activeSession.sessionId set), that session id
+   wins; openedChatId only matters after openChat() rendered an old chat. */
+let openedChatId = null;
+
+
+/* ============================================================
+   7. DOM REFERENCES
+   ============================================================ */
+
+const DOM = {
+
+    messages:
+        document.getElementById(
+            "sc-messages"
+        ),
+
+    input:
+        document.getElementById(
+            "sc-input"
+        ),
+
+    send:
+        document.getElementById(
+            "sc-send"
+        ),
+
+    saveStatus:
+        document.getElementById(
+            "sc-save-status"
+        ),
+
+    panelToggle:
+        document.getElementById(
+            "sc-panel-toggle"
+        ),
+
+    panelToggleLabel:
+        document.getElementById(
+            "sc-panel-toggle-label"
+        ),
+
+    panel:
+        document.getElementById(
+            "sc-panel"
+        ),
+
+    close:
+        document.getElementById(
+            "sc-close"
+        ),
+
+    clear:
+        document.getElementById(
+            "sc-clear"
+        ),
+
+    agentName:
+        document.getElementById(
+            "sc-agent-name"
+        ),
+
+    agentSub:
+        document.getElementById(
+            "sc-agent-sub"
+        ),
+
+    avatar:
+        document.getElementById(
+            "sc-avatar"
+        ),
+
+    chats:
+        document.getElementById(
+            "sc-chats"
+        ),
+
+    chatTitle:
+        document.getElementById(
+            "sc-chat-title"
+        ),
+
+    ragToggle:
+        document.getElementById(
+            "sc-rag"
+        ),
+
+    saveButton:
+        document.getElementById(
+            "sc-save"
+        ),
+
+    deleteButton:
+        document.getElementById(
+            "sc-delete"
+        ),
+
+    ragClearButton:
+        document.getElementById(
+            "sc-rag-clear"
+        )
+};
+
+
+/* ============================================================
+   8. UI STATE
+   ============================================================ */
+
+function setWaiting(waiting) {
+
+    if (!activeSession) return;
+
+    activeSession.isWaiting =
+        Boolean(waiting);
+
+    DOM.input.disabled = waiting;
+    DOM.send.disabled = waiting;
+
+    if (waiting) {
+        showTyping();
+    } else {
+        removeTyping();
+    }
+}
+
+
+function setSaveStatus(
+    text,
+    kind = ""
+) {
+
+    DOM.saveStatus.textContent =
+        text || "";
+
+    DOM.saveStatus.className =
+        "sc-save-status " + kind;
+}
+
+
+function scrollToBottom() {
+
+    DOM.messages.scrollTop =
+        DOM.messages.scrollHeight;
+}
+
+
+/* ============================================================
+   9. MESSAGE RENDERING
+   ============================================================ */
+
+function addBubble(
+    role,
+    content,
+    author,
+    timestamp = new Date()
+) {
+
+    const message =
+        el(
+            "div",
+            `sc-message ${role}`
+        );
+
+    if (role !== "system") {
+
+        const avatar =
+            el(
+                "div",
+                "sc-message-avatar"
+            );
+
+        if (role !== "user") {
+            avatar.classList.add("agent");
+        }
+
+        avatar.textContent =
+            role === "user"
+                ? "U"
+                : initials(
+                    author ||
+                    activeAgent?.name
+                );
+
+        message.appendChild(avatar);
+    }
+
+
+    const contentWrap =
+        el(
+            "div",
+            "sc-message-content"
+        );
+
+
+    if (role !== "system") {
+
+        const meta =
+            el(
+                "div",
+                "sc-message-meta"
+            );
+
+        meta.appendChild(
+            el(
+                "strong",
+                "",
+                author ||
+                (
+                    role === "user"
+                        ? "You"
+                        : activeAgent.name
+                )
+            )
+        );
+
+        meta.appendChild(
+            el(
+                "span",
+                "",
+                formatTime(timestamp)
+            )
+        );
+
+        contentWrap.appendChild(meta);
+    }
+
+
+    const body =
+        el(
+            "div",
+            "sc-message-body"
+        );
+
+    body.appendChild(
+        renderMarkdown(content)
+    );
+
+    /* Bubble action buttons — only on real user/agent messages, not system notes. */
+    if (role !== "system") {
+        body.appendChild(
+            buildBubbleActions(content, body)
+        );
+    }
+
+    contentWrap.appendChild(body);
+    message.appendChild(contentWrap);
+
+    DOM.messages.appendChild(message);
+
+    scrollToBottom();
+}
+
+
+/* ============================================================
+   9b. BUBBLE ACTION FUNCTIONS
+   ============================================================ */
+
+/* Singleton toast element — created once and reused. */
+function getToast() {
+    let toast = document.getElementById("sc-toast-singleton");
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "sc-toast-singleton";
+        toast.className = "sc-toast";
+        document.body.appendChild(toast);
+    }
+    return toast;
+}
+
+let _toastTimer = null;
+function showToast(message, duration = 2200) {
+    const toast = getToast();
+    toast.textContent = message;
+    toast.classList.add("show");
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => {
+        toast.classList.remove("show");
+    }, duration);
+}
+
+
+/* Build the four-button action row for a single bubble. */
+function buildBubbleActions(rawContent, bodyEl) {
+
+    const row = el("div", "sc-bubble-actions");
+
+    /* 1. Copy */
+    const copyBtn = el("button", "sc-bubble-btn", "📋");
+    copyBtn.type = "button";
+    copyBtn.title = "Copy message text";
+    copyBtn.setAttribute("aria-label", "Copy");
+    copyBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        copyBubble(rawContent, copyBtn);
+    });
+    row.appendChild(copyBtn);
+
+    /* 2. Code / raw view toggle */
+    const codeBtn = el("button", "sc-bubble-btn", "\u003c/\u003e");
+    codeBtn.type = "button";
+    codeBtn.title = "Toggle raw/code view";
+    codeBtn.setAttribute("aria-label", "Code view");
+    codeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleCodeView(rawContent, bodyEl, codeBtn);
+    });
+    row.appendChild(codeBtn);
+
+    /* 3. Forward to another agent */
+    const fwdBtn = el("button", "sc-bubble-btn", "↗");
+    fwdBtn.type = "button";
+    fwdBtn.title = "Forward to another agent";
+    fwdBtn.setAttribute("aria-label", "Forward to agent");
+    fwdBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleForwardPicker(rawContent, bodyEl, fwdBtn);
+    });
+    row.appendChild(fwdBtn);
+
+    /* 4. Bookmark (placeholder) */
+    const bookmarkBtn = el("button", "sc-bubble-btn", "★");
+    bookmarkBtn.type = "button";
+    bookmarkBtn.title = "Bookmark (coming soon)";
+    bookmarkBtn.setAttribute("aria-label", "Bookmark");
+    bookmarkBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        bookmarkBubble(bookmarkBtn);
+    });
+    row.appendChild(bookmarkBtn);
+
+    return row;
+}
+
+
+function copyBubble(rawContent, btn) {
+    navigator.clipboard
+        .writeText(rawContent || "")
+        .then(() => {
+            const orig = btn.textContent;
+            btn.textContent = "✓";
+            btn.classList.add("active");
+            setTimeout(() => {
+                btn.textContent = orig;
+                btn.classList.remove("active");
+            }, 1400);
+        })
+        .catch(() => showToast("Could not copy to clipboard."));
+}
+
+
+function toggleCodeView(rawContent, bodyEl, btn) {
+
+    const existing = bodyEl.querySelector("[data-raw-view]");
+
+    if (existing) {
+        /* Restore normal markdown view */
+        existing.remove();
+        bodyEl.querySelectorAll(":not(.sc-bubble-actions)").forEach(n => {
+            n.style.display = "";
+        });
+        btn.classList.remove("active");
+        btn.title = "Toggle raw/code view";
+        return;
+    }
+
+    /* Hide rendered content (keep action buttons) */
+    Array.from(bodyEl.childNodes).forEach(node => {
+        if (node.nodeType === 1 && !node.classList.contains("sc-bubble-actions")) {
+            node.style.display = "none";
+        }
+    });
+
+    const pre = document.createElement("pre");
+    pre.dataset.rawView = "1";
+    pre.style.cssText = "white-space:pre-wrap;word-break:break-word;margin:0;padding:0;background:transparent;color:inherit;font-size:12px;";
+    pre.textContent = rawContent || "";
+
+    /* Insert before the actions row */
+    bodyEl.insertBefore(pre, bodyEl.querySelector(".sc-bubble-actions"));
+
+    btn.classList.add("active");
+    btn.title = "Back to formatted view";
+}
+
+
+/* Open/close an inline agent-picker popover for forwarding the message. */
+function toggleForwardPicker(rawContent, bodyEl, fwdBtn) {
+
+    /* Close any existing picker on the page. */
+    const existing = document.querySelector(".sc-forward-picker");
+    if (existing) {
+        existing.remove();
+        if (existing._sourceBtn === fwdBtn) {
+            fwdBtn.classList.remove("active");
+            return;
+        }
+    }
+
+    fwdBtn.classList.add("active");
+
+    const picker = document.createElement("div");
+    picker.className = "sc-forward-picker";
+    picker._sourceBtn = fwdBtn;
+
+    const title = el("div", "sc-forward-picker-title", "Forward to agent");
+    picker.appendChild(title);
+
+    /* Every agent EXCEPT the one currently being chatted with, so you cannot
+       forward a message back to its own conversation. */
+    const agents = Array
+        .from(agentsById.values())
+        .filter(agent => agent.id !== activeAgent?.id)
+        .sort((a, b) =>
+            String(a.name || "").localeCompare(String(b.name || ""))
+        );
+
+    if (!agents.length) {
+        const none = el("div", "sc-forward-picker-item", "No other agents loaded.");
+        none.style.color = "var(--color-text-faint)";
+        none.style.pointerEvents = "none";
+        picker.appendChild(none);
+    } else {
+        agents.forEach(agent => {
+            const item = el(
+                "button",
+                "sc-forward-picker-item",
+                `${agent.name}${agent.description ? " - " + agent.description : ""}`
+            );
+            item.type = "button";
+            item.title = agent.description || agent.id;
+            item.addEventListener("click", () => {
+                picker.remove();
+                fwdBtn.classList.remove("active");
+                forwardToAgent(rawContent, agent);
+            });
+            picker.appendChild(item);
+        });
+    }
+
+    /* Position relative to bodyEl */
+    bodyEl.style.position = "relative";
+    bodyEl.appendChild(picker);
+
+    /* Close on outside click */
+    const onOutside = (e) => {
+        if (!picker.contains(e.target) && e.target !== fwdBtn) {
+            picker.remove();
+            fwdBtn.classList.remove("active");
+            document.removeEventListener("click", onOutside, { capture: true });
+        }
+    };
+    setTimeout(() => document.addEventListener("click", onOutside, { capture: true }), 0);
+}
+
+
+async function forwardToAgent(rawContent, targetAgent) {
+
+    if (!rawContent || !targetAgent) return;
+
+    /* Open the chat page for the target agent in a new tab with the message pre-filled. */
+    const url = `/static/chat.html?agent=${encodeURIComponent(targetAgent.id)}&prefill=${encodeURIComponent(rawContent)}`;
+    window.open(url, `ai-chat-${targetAgent.id}`, "width=900,height=680,resizable=yes,scrollbars=yes");
+
+    showToast(`Forwarding to ${targetAgent.name}…`);
+}
+
+
+function bookmarkBubble(btn) {
+    showToast("Bookmarks coming soon! 🔖");
+    btn.classList.add("active");
+    setTimeout(() => btn.classList.remove("active"), 1600);
+}
+
+
+
+function clearMessages() {
+
+    DOM.messages.replaceChildren();
+
+    renderWelcome();
+}
+
+
+function renderWelcome() {
+
+    if (!activeAgent) return;
+
+    const box =
+        el(
+            "div",
+            "sc-welcome"
+        );
+
+    box.appendChild(
+        el(
+            "div",
+            "sc-welcome-icon",
+            initials(activeAgent.name)
+        )
+    );
+
+    box.appendChild(
+        el(
+            "h2",
+            "",
+            `Chat with ${activeAgent.name}`
+        )
+    );
+
+    box.appendChild(
+        el(
+            "p",
+            "",
+            "Start a conversation with this AI agent."
+        )
+    );
+
+    if (activeAgent.description) {
+
+        box.appendChild(
+            el(
+                "p",
+                "",
+                activeAgent.description
+            )
+        );
+    }
+
+    const hints =
+        el(
+            "div",
+            "sc-welcome-hints"
+        );
+
+    hints.appendChild(
+        el(
+            "span",
+            "sc-welcome-hint",
+            "Markdown rendered"
+        )
+    );
+
+    hints.appendChild(
+        el(
+            "span",
+            "sc-welcome-hint",
+            "Per-agent sessions"
+        )
+    );
+
+    hints.appendChild(
+        el(
+            "span",
+            "sc-welcome-hint",
+            "Transcripts saved"
+        )
+    );
+
+    box.appendChild(hints);
+
+    DOM.messages.appendChild(box);
+}
+
+
+/* ============================================================
+   10. TYPING INDICATOR
+   ============================================================ */
+
+function showTyping() {
+
+    removeTyping();
+
+    const message =
+        el(
+            "div",
+            "sc-message agent"
+        );
+
+    message.dataset.typing = "1";
+
+    const avatar =
+        el(
+            "div",
+            "sc-message-avatar agent",
+            initials(
+                activeAgent.name
+            )
+        );
+
+    message.appendChild(avatar);
+
+    const content =
+        el(
+            "div",
+            "sc-message-content"
+        );
+
+    content.appendChild(
+        el(
+            "div",
+            "sc-message-meta"
+        )
+    );
+
+    const body =
+        el(
+            "div",
+            "sc-message-body"
+        );
+
+    const dots =
+        el(
+            "span",
+            "sc-typing"
+        );
+
+    dots.appendChild(
+        document.createElement("span")
+    );
+
+    dots.appendChild(
+        document.createElement("span")
+    );
+
+    dots.appendChild(
+        document.createElement("span")
+    );
+
+    body.appendChild(dots);
+    content.appendChild(body);
+    message.appendChild(content);
+
+    DOM.messages.appendChild(message);
+
+    scrollToBottom();
+}
+
+
+function removeTyping() {
+
+    const typing =
+        DOM.messages.querySelector(
+            '[data-typing="1"]'
+        );
+
+    if (typing) {
+        typing.remove();
+    }
+}
+
+
+/* ============================================================
+   11. CHAT API
+   ============================================================ */
+
+async function sendChat({
+    message,
+    agentId = "",
+    model = "",
+    history = [],
+    sessionId = "",
+    title = "",
+    newChat = false
+}) {
+
+    const response =
+        await fetch(
+            "/api/chat",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                body: JSON.stringify({
+                    message,
+                    model,
+                    agent_id: agentId,
+                    history,
+                    session_id: sessionId,
+                    title,
+                    new_chat: newChat,
+                    rag: DOM.ragToggle.checked
+                })
+            }
+        );
+
+    if (!response.ok) {
+
+        throw new Error(
+            `Server error ${response.status} for /api/chat`
+        );
+    }
+
+    const data =
+        await response.json();
+
+    return {
+        reply: data.reply,
+        session_id: data.session_id,
+        title: data.title
+    };
+}
+
+
+/* ============================================================
+   12. SAVED CHATS (log + drop-down)
+   ============================================================ */
+
+async function loadChatsDropdown() {
+
+    try {
+
+        const response =
+            await fetch("/api/chats");
+
+        if (!response.ok) {
+            return [];
+        }
+
+        return (await response.json()).chats || [];
+
+    } catch (_) {
+        return [];
+    }
+}
+
+
+async function openChat(id) {
+
+    if (!id) {
+        return;
+    }
+
+    try {
+
+        const response =
+            await fetch(
+                `/api/chats/${encodeURIComponent(id)}`
+            );
+
+        if (!response.ok) {
+            return;
+        }
+
+        const chat =
+            await response.json();
+
+        clearMessages();
+
+        openedChatId = id;
+
+        (chat.messages || []).forEach(message => {
+
+            addBubble(
+                message.role === "user"
+                    ? "user"
+                    : "agent",
+                message.text || message.content || "",
+                message.author || (
+                    message.role === "user"
+                        ? "You"
+                        : activeAgent?.name
+                )
+            );
+        });
+
+        if (activeSession) {
+            activeSession.messages = [];
+            activeSession.title =
+                chat.title || "New chat";
+            activeSession.startedAt =
+                chat.startedAt ||
+                new Date().toISOString();
+
+            // Viewing an old chat is read-only; the next message you send
+            // starts a brand-new server-side session (one at a time).
+            activeSession.sessionId = null;
+        }
+
+        setChatTitle(chat.title || "");
+
+        setSaveStatus(
+            `Opened: ${chat.title || chat.fileName} (read-only)`,
+            "ok"
+        );
+
+    } catch (_) {
+        setSaveStatus(
+            "Could not open that chat.",
+            "error"
+        );
+    }
+}
+
+
+/* ============================================================
+   13. SEND FLOW
+   ============================================================ */
+
+/* Core turn pipeline shared by the composer and the chat-test runner: adds
+   the user bubble, waits for the /api/chat reply, appends the assistant
+   bubble + session state, and returns the raw reply text. Throws on failure;
+   callers decide how to surface it (handleSend shows a system bubble, the
+   test runner marks the current test as Error). */
+async function sendTurn(text) {
+
+    activeSession.addUserMessage(text);
+
+    addBubble(
+        "user",
+        text,
+        "You"
+    );
+
+    setWaiting(true);
+    setSaveStatus("");
+
+    try {
+
+        const title = getChatTitle();
+
+        const result =
+            await sendChat({
+
+                message: text,
+
+                agentId:
+                    activeSession.agentId,
+
+                model:
+                    activeSession.model,
+
+                history:
+                    activeSession.getApiHistory(),
+
+                sessionId:
+                    activeSession.sessionId || "",
+
+                title,
+
+                newChat:
+                    !activeSession.sessionId
+            });
+
+        activeSession.setSessionId(
+            result.session_id,
+            result.title
+        );
+
+        /* Sending while an old chat is open (read-only view) starts a fresh
+           server session - from here on Delete targets the live chat. */
+        openedChatId = null;
+
+        activeSession.addAssistantMessage(
+            result.reply,
+            activeAgent.name
+        );
+
+        addBubble(
+            "agent",
+            result.reply,
+            activeAgent.name
+        );
+
+        setSaveStatus(
+            "Chat tracked on the server.",
+            "ok"
+        );
+
+        return result.reply;
+
+    } catch (error) {
+
+        setWaiting(false);
+        throw error;
+    }
+}
+
+
+async function handleSend() {
+
+    const text =
+        DOM.input.value.trim();
+
+    if (
+        testRunActive ||
+        !text ||
+        !activeSession ||
+        activeSession.isWaiting
+    ) {
+        return;
+    }
+
+    DOM.input.value = "";
+    autogrow();
+
+    try {
+
+        await sendTurn(text);
+
+    } catch (error) {
+
+        addBubble(
+            "system",
+            `Sorry - that failed. ${error.message}`
+        );
+
+        setSaveStatus(
+            `Send failed: ${error.message}`,
+            "error"
+        );
+
+    } finally {
+
+        setWaiting(false);
+        DOM.input.focus();
+    }
+}
+
+
+/* ============================================================
+   14. PANEL
+   ============================================================ */
+
+function syncPanelToggle() {
+
+    const hidden =
+        DOM.panel.classList.contains(
+            "hidden"
+        );
+
+    DOM.panelToggle.setAttribute(
+        "aria-pressed",
+        String(!hidden)
+    );
+
+    DOM.panelToggleLabel.textContent =
+        hidden
+            ? "Show panel"
+            : "Hide panel";
+}
+
+
+function togglePanel() {
+
+    DOM.panel.classList.toggle(
+        "hidden"
+    );
+
+    syncPanelToggle();
+}
+
+
+/* ============================================================
+   15. PANEL STATE + ACTIONS
+   ============================================================ */
+
+/* Read a dotted path (e.g. "behavior.autoHi") from the app settings that
+   boot() loaded via GET /api/settings. */
+function readSetting(path) {
+
+    return String(path)
+        .split(".")
+        .reduce(
+            (node, key) =>
+                node == null
+                    ? undefined
+                    : node[key],
+            settings
+        );
+}
+
+
+/* Collect the current value of every panel control that has a
+   data-name. Checkboxes return booleans; everything else returns
+   its value string. Kept separate from rendering so panel state
+   is easy to read (e.g. for the auto-hi feature). */
+function getPanelValues() {
+
+    const values = {};
+
+    document
+        .querySelectorAll(
+            ".sc-panel-sections [data-name]"
+        )
+        .forEach(node => {
+
+            if (node.type === "checkbox") {
+                values[node.dataset.name] =
+                    node.checked;
+            } else {
+                values[node.dataset.name] =
+                    node.value;
+            }
+        });
+
+    return values;
+}
+
+
+/* Read the current value of the panel's chatTitle field (may not exist yet
+   if the panel has not been built). */
+function chatTitlePanelValue() {
+
+    const node =
+        document.querySelector(
+            '.sc-panel-sections [data-name="chatTitle"]'
+        );
+
+    return node
+        ? String(node.value || "").trim()
+        : "";
+}
+
+
+/* The chat purpose/name: the header field wins, the panel field is the
+   fallback, so typing in either place works. */
+function getChatTitle() {
+
+    return (
+        String(DOM.chatTitle.value || "").trim() ||
+        chatTitlePanelValue()
+    );
+}
+
+
+/* Write the chat name to BOTH the header field and the panel field, keeping
+   the two in sync. */
+function setChatTitle(value) {
+
+    const text =
+        String(value || "").trim();
+
+    DOM.chatTitle.value = text;
+
+    const node =
+        document.querySelector(
+            '.sc-panel-sections [data-name="chatTitle"]'
+        );
+
+    if (node) {
+        node.value = text;
+    }
+}
+
+
+/* Start the current agent completely fresh: finalize the active chat on the
+   server, wipe the session data + rendered bubbles, and prepare the input for
+   the next message. This is the single source of truth used by the header
+   "New Chat" button and the side panel "Clear Chat" action. */
+async function startNewChat() {
+
+    await finalizeActiveChat({ quiet: true });
+
+    if (activeSession) {
+        activeSession.newChat();
+    }
+
+    openedChatId = null;
+
+    clearMessages();
+
+    await refreshChatsDropdown();
+
+    setSaveStatus(
+        "New chat. Name it in the panel, then send your message.",
+        "ok"
+    );
+
+    DOM.input.focus();
+}
+
+/* ============================================================
+   15. SAVED CHATS - DROP-DOWN
+   ============================================================ */
+
+async function refreshChatsDropdown() {
+
+    const chats =
+        await loadChatsDropdown();
+
+    DOM.chats.replaceChildren();
+
+    const all = document.createElement("option");
+    all.value = "";
+    all.textContent = "All chats...";
+    DOM.chats.appendChild(all);
+
+    chats.forEach(chat => {
+
+        const option =
+            document.createElement("option");
+
+        option.value = chat.id;
+
+        const tag =
+            chat.status === "active"
+                ? " (active)"
+                : chat.version
+                    ? ` (v${chat.version})`
+                    : "";
+
+        option.textContent =
+            `${chat.title || chat.fileName}${tag}`;
+
+        DOM.chats.appendChild(option);
+    });
+}
+
+
+function handleChatsSelect() {
+
+    const id = DOM.chats.value;
+    DOM.chats.value = "";
+
+    if (id) {
+        openChat(id);
+    }
+}
+
+
+/* Experimental auto-"hi" feature (may be removed later, kept isolated).
+   When the panel's autoHi checkbox is enabled and the current agent has
+   no messages yet (a fresh chat), type "hi" into the input so the chat
+   starts itself after you've named it - it does NOT auto-send, so you
+   get a chance to add a title first. */
+function maybeAutoHi() {
+
+    if (
+        !activeSession ||
+        !activeSession.isEmpty ||
+        !DOM.input
+    ) {
+        return;
+    }
+
+    const values = getPanelValues();
+
+    if (values.autoHi !== true) {
+        return;
+    }
+
+    DOM.input.value = AUTO_HI_TEXT;
+    autogrow();
+}
+
+
+/* Finalize the active chat on the server (writes the versioned .txt + log).
+   If no subject was set in the panel, prompt for one so the chat gets a
+   meaningful name (works for every agent; prompts on Save, Clear AND any
+   new-chat). */
+async function finalizeActiveChat({ quiet = false } = {}) {
+
+    if (
+        !activeSession ||
+        !activeSession.sessionId
+    ) {
+
+        if (!quiet) {
+            setSaveStatus(
+                "No active chat to save yet.",
+                "error"
+            );
+        }
+
+        return null;
+    }
+
+    let title = getChatTitle();
+
+    if (!title) {
+
+        const subject = window.prompt(
+            "Name this chat:",
+            activeSession.title !== "New chat"
+                ? activeSession.title
+                : ""
+        );
+
+        if (subject !== null && subject.trim()) {
+            title = subject.trim();
+        }
+    }
+
+    if (title) {
+        activeSession.title = title;
+        setChatTitle(title);
+    }
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/chats/end",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        title,
+                        rag: DOM.ragToggle.checked
+                    })
+                }
+            );
+
+        const result =
+            await response.json();
+
+        if (
+            !response.ok ||
+            !result.saved
+        ) {
+
+            throw new Error(
+                result.error ||
+                "Save failed."
+            );
+        }
+
+        if (!quiet) {
+            setSaveStatus(
+                `Saved: ${result.file} (v${result.version})`,
+                "ok"
+            );
+        }
+
+        return result;
+
+    } catch (error) {
+
+        if (!quiet) {
+            setSaveStatus(
+                `Save failed: ${error.message}`,
+                "error"
+            );
+        }
+
+        return null;
+    }
+}
+
+
+/* Header "Save" button: finalize the active chat with the purpose/title from
+   the header field (or a prompt), then refresh the saved-chats drop-down.
+   The transcript write + log happen server-side in /api/chats/end. */
+async function handleSaveChat() {
+
+    if (
+        !activeSession ||
+        !activeSession.sessionId
+    ) {
+
+        setSaveStatus(
+            "No active chat to save yet.",
+            "error"
+        );
+
+        return;
+    }
+
+    const result =
+        await finalizeActiveChat();
+
+    if (result) {
+        await refreshChatsDropdown();
+    }
+}
+
+
+/* Header "Delete" button: erase the CURRENT chat - the live in-progress
+   session, or the saved chat currently open (read-only) in the composer.
+   Deletes on BOTH ends: server side removes the .txt transcript(s) + log
+   records (+ the active session file), the frontend wipes the composer. */
+async function handleDeleteChat() {
+
+    if (!activeSession) {
+        return;
+    }
+
+    const id =
+        activeSession.sessionId ||
+        openedChatId;
+
+    if (!id) {
+
+        setSaveStatus(
+            "No chat to delete.",
+            "error"
+        );
+
+        return;
+    }
+
+    const confirmed =
+        window.confirm(
+            "Erase this chat permanently? Its transcript text will be deleted."
+        );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+
+        const response =
+            await fetch(
+                `/api/chats/${encodeURIComponent(id)}`,
+                {
+                    method: "DELETE"
+                }
+            );
+
+        if (!response.ok) {
+
+            const body =
+                await response.json().catch(() => ({}));
+
+            throw new Error(
+                String(body.detail || "") ||
+                `Server error ${response.status}`
+            );
+        }
+
+        activeSession.newChat();
+
+        openedChatId = null;
+
+        clearMessages();
+
+        setChatTitle("");
+
+        await refreshChatsDropdown();
+
+        setSaveStatus(
+            "Chat deleted - transcript text erased.",
+            "ok"
+        );
+
+        DOM.input.focus();
+
+    } catch (error) {
+
+        setSaveStatus(
+            `Delete failed: ${error.message}`,
+            "error"
+        );
+    }
+}
+
+
+/* Header "Clear Memory" button: reset the RAG memory store so the agent
+   starts with zero indexed segments. Only the store is wiped - saved chat
+   transcripts and chat records are untouched. */
+async function handleClearRagMemory() {
+
+    const confirmed =
+        window.confirm(
+            "Are you sure you want to clear the RAG memory?\nAll RAG DB entries will be reset to zero."
+        );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/rag/reset",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+
+        if (!response.ok) {
+
+            const body =
+                await response.json().catch(() => ({}));
+
+            throw new Error(
+                String(body.detail || "") ||
+                `Server error ${response.status}`
+            );
+        }
+
+        const result =
+            await response.json();
+
+        setSaveStatus(
+            result.message ||
+                "RAG memory cleared - all RAG DB entries reset to zero.",
+            "ok"
+        );
+
+    } catch (error) {
+
+        setSaveStatus(
+            `Clear RAG memory failed: ${error.message}`,
+            "error"
+        );
+    }
+}
+
+
+window.__scActions = {
+
+    save() {
+        return finalizeActiveChat();
+    },
+
+    clearChat() {
+        return startNewChat();
+    }
+};
+
+
+
+/* ============================================================
+   16. AGENT SWITCHING
+   ============================================================ */
+
+function switchToAgent(agent) {
+
+    activeAgent = agent;
+
+    if (!sessions.has(agent.id)) {
+
+        sessions.set(
+            agent.id,
+
+            new ChatSession({
+                agentId: agent.id,
+                agentName: agent.name,
+                model:
+                    settings.defaultModel ||
+                    ""
+            })
+        );
+    }
+
+    activeSession =
+        sessions.get(agent.id);
+
+    DOM.agentName.textContent =
+        agent.name;
+
+    DOM.agentSub.textContent =
+        agent.description ||
+        "AI agent";
+
+    DOM.avatar.textContent =
+        initials(agent.name);
+
+    DOM.input.placeholder =
+        `Message ${agent.name}...`;
+
+    setSaveStatus("");
+
+    clearMessages();
+
+    setChatTitle("");
+
+    openedChatId = null;
+
+    buildPanel(agent);
+}
+
+
+/* ============================================================
+   17. INPUT AUTO GROW
+   ============================================================ */
+
+function autogrow() {
+
+    DOM.input.style.height =
+        "auto";
+
+    DOM.input.style.height =
+        `${Math.min(
+            DOM.input.scrollHeight,
+            170
+        )}px`;
+}
+
+
+/* ============================================================
+   17b. APPEARANCE (theme + font family + base font size from app settings)
+   ============================================================ */
+
+/* Theme currently in effect (used by the system-mode listener so it
+   keeps following OS changes for as long as the stored theme is
+   "system"). */
+let scCurrentTheme = "system";
+
+let scSystemListenerAttached = false;
+
+function applyThemeToPage(theme) {
+    scCurrentTheme = (theme === "dark" || theme === "light") ? theme : "system";
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const mode = scCurrentTheme === "system"
+        ? (mq.matches ? "dark" : "light")
+        : scCurrentTheme;
+    document.documentElement.dataset.theme = mode;
+    if (!scSystemListenerAttached) {
+        scSystemListenerAttached = true;
+        mq.addEventListener("change", () => {
+            if (scCurrentTheme === "system") applyThemeToPage("system");
+        });
+    }
+}
+
+/* Applies the stored Appearance settings to this page's CSS variables.
+   Missing/empty values fall back to the :root defaults, so calling it
+   with no settings is always safe. */
+function applyAppearance(appearance) {
+
+    const font =
+        (appearance && appearance.fontFamily) || "";
+
+    const size =
+        Number(
+            (appearance && appearance.fontSize) || 0
+        );
+
+    const theme =
+        (appearance && appearance.theme) || "system";
+
+    const root =
+        document.documentElement;
+
+    applyThemeToPage(theme);
+
+    if (font) {
+        root.style.setProperty(
+            "--app-font-family",
+            font
+        );
+    } else {
+        root.style.removeProperty(
+            "--app-font-family"
+        );
+    }
+
+    if (size > 0) {
+        root.style.setProperty(
+            "--app-font-size",
+            `${size}px`
+        );
+    } else {
+        root.style.removeProperty(
+            "--app-font-size"
+        );
+    }
+}
+
+
+/* ============================================================
+   18. APPLICATION BOOT
+   ============================================================ */
+
+async function boot() {
+
+    const params =
+        new URLSearchParams(
+            window.location.search
+        );
+
+    const agentId =
+        params.get("agent") || "";
+
+    /* Load settings */
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/settings"
+            );
+
+        if (response.ok) {
+
+            settings =
+                (
+                    await response.json()
+                ).settings || {};
+        }
+
+    } catch (_) {
+        /* Defaults remain active. */
+    }
+
+    /* Site identity from about/about.json: browser-tab title + the small
+       site chip in the header. Fail-soft; the static <title> stays put. */
+    try {
+
+        const aboutResponse =
+            await fetch(
+                "/api/about"
+            );
+
+        if (aboutResponse.ok) {
+
+            const about =
+                await aboutResponse.json();
+
+            const title =
+                String(about.title || "Terminator1").trim();
+            const subtitle =
+                String(about.subtitle || "").trim();
+
+            document.title =
+                title + (subtitle ? " \u2014 " + subtitle : "");
+
+            const chip = document.getElementById("sc-site-title");
+            if (chip) {
+                chip.textContent = title + (subtitle ? " \u00b7 " + subtitle : "");
+                chip.title = title;
+                chip.classList.add("show");
+            }
+        }
+
+    } catch (_) {
+        /* Static <title> remains active. */
+    }
+
+    if (
+        DOM.ragToggle &&
+        settings.rag
+    ) {
+        DOM.ragToggle.checked =
+            Boolean(
+                settings.rag.commitOnSave
+            );
+    }
+
+    /* Apply the stored Appearance settings (theme + font family + base font
+       size) so chat.html matches the index page. */
+    applyAppearance(settings);
+
+
+    /* Load agents */
+
+    let agents = [];
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/agents"
+            );
+
+        if (response.ok) {
+
+            agents =
+                (
+                    await response.json()
+                ).agents || [];
+        }
+
+    } catch (_) {
+        /* Error handled below. */
+    }
+
+
+    const target =
+        agents.find(
+            agent =>
+                String(agent.id) ===
+                String(agentId)
+        ) ||
+        agents[0] ||
+        null;
+
+
+    if (!target) {
+
+        DOM.agentName.textContent =
+            "No agents found";
+
+        DOM.agentSub.textContent =
+            "Start the app server and refresh.";
+
+        addBubble(
+            "system",
+            "No agents were found. Start the server (python server.py) and reload this page."
+        );
+
+        return;
+    }
+
+
+    agents.forEach(agent => {
+
+        agentsById.set(
+            agent.id,
+            agent
+        );
+    });
+
+
+    switchToAgent(target);
+
+    /* Smaller screens default to the side panel collapsed so the chat gets the
+       full column width; the header toggle still opens it. Large screens open
+       the panel by default. */
+    if (
+        window.matchMedia("(max-width: 900px)").matches &&
+        !DOM.panel.classList.contains("hidden")
+    ) {
+        DOM.panel.classList.add("hidden");
+    }
+    syncPanelToggle();
+
+    /* Auto-"hi" on a fresh chat (if the Behavior checkbox is enabled).
+       Now it only pre-fills "hi" - it waits for you to title + send.
+
+       Saved-test run mode (?) skips the auto-hi prefill so the run
+       starts clean. */
+    if (params.get("runTests") === "1") {
+        startTestRunInChat();
+    } else {
+        maybeAutoHi();
+    }
+
+    /* ?prefill=<text> — set by the "Forward to agent" button in another chat tab.
+       Overrides the auto-hi prefill so the forwarded message is ready to send.
+       Not used in test-run mode. */
+    const prefillText = params.get("prefill");
+    if (params.get("runTests") !== "1" && prefillText && prefillText.trim()) {
+        DOM.input.value = prefillText.trim();
+        autogrow();
+    }
+
+    await refreshChatsDropdown();
+
+    DOM.input.focus();
+}
+
+
+/* ============================================================
+   18b. SAVED-TEST RUN MODE (?runTests=1)
+   ============================================================ */
+/* Plays the tests saved in app_settings.json (settings.chatTests.tests)
+   as REAL chat messages, driven through the same sendTurn() pipeline as
+   the composer, so you see - and can save - the actual output. One server
+   session per run (first turn creates it, later turns reuse it). */
+
+let testRunActive = false;
+let testRunCancelled = false;
+
+function stopTestRun() {
+    testRunCancelled = true;
+    const btn = DOM.messages.querySelector(".sc-test-run-stop");
+    if (btn) btn.disabled = true;
+    setSaveStatus("Stopping after the current step...", "");
+}
+
+
+function testScript(test) {
+    if (Array.isArray(test.steps) && test.steps.length) {
+        return test.steps.map(step => String(step).trim()).filter(Boolean);
+    }
+    return String(test.input || "")
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean);
+}
+
+
+function checkExpectation(reply, expectation) {
+    const mode = expectation.mode ||
+        (typeof expectation === "string" ? "string" : "regex");
+    const value = typeof expectation === "string"
+        ? expectation
+        : expectation.value;
+    const text = String(reply || "");
+
+    switch (mode) {
+        case "string": {
+            if (text.toLowerCase().includes(String(value).toLowerCase())) {
+                return { ok: true };
+            }
+            return { ok: false, message: `Expected "${value}" in reply.` };
+        }
+        case "regex": {
+            try {
+                if (new RegExp(value, "i").test(text)) {
+                    return { ok: true };
+                }
+                return { ok: false, message: `Reply did not match "${value}".` };
+            } catch (_) {
+                return { ok: false, message: `Bad regex "${value}".` };
+            }
+        }
+        case "type": {
+            if (value === "nonEmpty") {
+                if (text.trim()) return { ok: true };
+                return { ok: false, message: "Reply was empty." };
+            }
+            if (value === "number") {
+                const digits = text.replace(/[^\d.-]/g, "");
+                if (digits && !Number.isNaN(Number(digits))) {
+                    return { ok: true };
+                }
+                return { ok: false, message: "Reply was not a number." };
+            }
+            return { ok: false, message: `Unknown type check "${value}".` };
+        }
+        default:
+            return { ok: false, message: `Unknown mode "${mode}".` };
+    }
+}
+
+
+async function startTestRunInChat() {
+
+    if (testRunActive) return;
+
+    if (!activeAgent) return;
+
+    /* Each agent's own tests now live in its agent.json; the shared pool
+       (tests without an agentId) still comes from the app settings. */
+    let mine = [];
+    let allTests = [];
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/agents/" +
+                encodeURIComponent(activeAgent.id) +
+                "/config"
+            );
+
+        if (response.ok) {
+
+            const config =
+                await response.json();
+
+            allTests =
+                (config.tests || []).concat(
+                    Array.isArray(config.sharedTests)
+                        ? config.sharedTests
+                        : []
+                );
+        }
+
+    } catch (_) {
+        /* Fall back to the legacy global list below. */
+    }
+
+    if (!allTests.length) {
+
+        allTests =
+            (
+                settings.chatTests &&
+                Array.isArray(settings.chatTests.tests)
+            )
+                ? settings.chatTests.tests
+                : [];
+    }
+
+    mine = allTests.filter(test =>
+        (test.enabled !== false) &&
+        (!test.agentId || test.agentId === activeAgent.id)
+    );
+
+    if (!mine.length) {
+        addBubble(
+            "system",
+            `No enabled saved tests for "${activeAgent.name}". Add some on the Configuration page (Settings button).`
+        );
+        setSaveStatus("No enabled tests for this agent.", "error");
+        return;
+    }
+
+    testRunActive = true;
+    testRunCancelled = false;
+
+    /* Pinned status banner with a Stop button, live inside the thread. */
+    const banner = el("div", "sc-test-run-banner");
+    const bannerLabel = el("strong", "", "");
+    const bannerProg = el("span", "", "");
+    const stopBtn = el("button", "sc-test-run-stop", "Stop");
+    stopBtn.type = "button";
+    stopBtn.addEventListener("click", stopTestRun);
+
+    const setBanner = (status, done = null) => {
+        bannerLabel.textContent =
+            status ||
+            `Running tests for ${activeAgent.name}...`;
+        if (done !== null) {
+            bannerProg.textContent =
+                `${done}/${mine.length}`;
+        }
+    };
+
+    banner.appendChild(bannerLabel);
+    banner.appendChild(bannerProg);
+    banner.appendChild(stopBtn);
+    DOM.messages.appendChild(banner);
+    setBanner("Running tests for " + activeAgent.name + "...", 0);
+    scrollToBottom();
+
+    const verdicts = [];
+    let step = 0;
+
+    for (const test of mine) {
+
+        if (testRunCancelled) break;
+        step += 1;
+
+        const script = testScript(test);
+        const expectations =
+            Array.isArray(test.expectations)
+                ? test.expectations
+                : [];
+
+        let finalReply = null;
+        let failedStep = null;
+        let errorMsg = "";
+
+        for (let index = 0; index < script.length; index++) {
+
+            if (testRunCancelled) break;
+
+            try {
+
+                finalReply =
+                    await sendTurn(script[index]);
+
+                setWaiting(false);
+
+            } catch (error) {
+
+                errorMsg = error.message;
+                finalReply = null;
+                break;
+            }
+
+            const expected = expectations[index];
+
+            if (expected) {
+
+                const check =
+                    checkExpectation(
+                        finalReply,
+                        expected
+                    );
+
+                if (!check.ok) {
+
+                    failedStep =
+                        `${check.message} (step ${index + 1})`;
+
+                    break;
+                }
+            }
+        }
+
+        if (errorMsg) {
+
+            setSaveStatus(
+                `Test step failed: ${errorMsg}`,
+                "error"
+            );
+
+            verdicts.push({
+                name: test.name,
+                ok: false,
+                status: "Error",
+                detail: errorMsg
+            });
+
+        } else if (failedStep) {
+
+            verdicts.push({
+                name: test.name,
+                ok: false,
+                status: "Failed",
+                detail: failedStep
+            });
+
+        } else if (testRunCancelled) {
+
+            verdicts.push({
+                name: test.name,
+                ok: false,
+                status: "Stopped",
+                detail: "Run stopped."
+            });
+
+        } else {
+
+            if (test.expectedResult) {
+
+                const check =
+                    checkExpectation(
+                        finalReply,
+                        test.expectedResult
+                    );
+
+                if (!check.ok) {
+
+                    verdicts.push({
+                        name: test.name,
+                        ok: false,
+                        status: "Failed",
+                        detail: check.message
+                    });
+
+                    setBanner("Running tests for " + activeAgent.name + "...", step);
+                    scrollToBottom();
+                    continue;
+                }
+            }
+
+            verdicts.push({
+                name: test.name,
+                ok: true,
+                status: "Passed",
+                detail: ""
+            });
+        }
+
+        setBanner("Running tests for " + activeAgent.name + "...", step);
+        scrollToBottom();
+    }
+
+    banner.remove();
+    testRunActive = false;
+    testRunCancelled = false;
+
+    setWaiting(false);
+    DOM.input.focus();
+
+    const passed =
+        verdicts.filter(v => v.ok).length;
+
+    const summary =
+        `Saved-test run for ${activeAgent.name}: ${passed}/${verdicts.length} passed.`;
+
+    const lines =
+        [summary];
+
+    for (const v of verdicts) {
+
+        const mark = v.ok
+            ? "[PASS]"
+            : "[" + v.status.toUpperCase() + "]";
+
+        lines.push(
+            `${mark}  ${v.name}${(!v.ok && v.detail) ? " - " + v.detail : ""}`
+        );
+    }
+
+    addBubble("system", lines.join("\n"));
+
+    if (verdicts.every(v => v.ok)) {
+        setSaveStatus(summary, "ok");
+    } else {
+        setSaveStatus(summary, "error");
+    }
+}
+
+
+/* ============================================================
+   19. EVENT WIRING
+   ============================================================ */
+
+DOM.send.addEventListener(
+    "click",
+    handleSend
+);
+
+
+DOM.input.addEventListener(
+    "keydown",
+    event => {
+
+        if (
+            event.key === "Enter" &&
+            !event.shiftKey
+        ) {
+
+            event.preventDefault();
+
+            handleSend();
+        }
+    }
+);
+
+
+DOM.input.addEventListener(
+    "input",
+    autogrow
+);
+
+
+DOM.panelToggle.addEventListener(
+    "click",
+    togglePanel
+);
+
+
+DOM.close.addEventListener(
+    "click",
+    () => window.close()
+);
+
+
+DOM.clear.addEventListener(
+    "click",
+    startNewChat
+);
+
+
+DOM.saveButton.addEventListener(
+    "click",
+    handleSaveChat
+);
+
+
+DOM.deleteButton.addEventListener(
+    "click",
+    handleDeleteChat
+);
+
+
+DOM.ragClearButton.addEventListener(
+    "click",
+    handleClearRagMemory
+);
+
+
+/* Keep the header title field and the panel "Chat title" field in sync
+   live as the user types in either one. node.value writes are non-triggering,
+   so the two listeners cannot loop. */
+DOM.chatTitle.addEventListener(
+    "input",
+    event => {
+
+        const panelNode =
+            document.querySelector(
+                '.sc-panel-sections [data-name="chatTitle"]'
+            );
+
+        if (panelNode) {
+            panelNode.value =
+                event.target.value;
+        }
+    }
+);
+
+
+DOM.panel.addEventListener(
+    "input",
+    event => {
+
+        const target = event.target;
+
+        if (
+            target &&
+            target.dataset &&
+            target.dataset.name === "chatTitle"
+        ) {
+
+            DOM.chatTitle.value =
+                target.value;
+        }
+    }
+);
+
+
+DOM.chats.addEventListener(
+    "change",
+    handleChatsSelect
+);
+
+
+/* refresh the saved-chats drop-down as the active chat grows */
+const _origSetWaiting =
+    setWaiting;
+
+setWaiting = function (waiting) {
+
+    _origSetWaiting(waiting);
+
+    if (!waiting) {
+        refreshChatsDropdown();
+    }
+};
+
+
+/* ============================================================
+   20. START
+   ============================================================ */
+
+boot();
+
+</script>
+
+</body>
+</html>
+
+```
+
+## dashboard/config.html
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration - Terminator1</title>
+
+    <!-- Apply the stored theme before first paint (same fast-path cache as
+         the other pages; the real appearance is applied after /api/settings). -->
+    <script>
+        (function () {
+            var s = "system";
+            try { s = localStorage.getItem("appearance-theme") || "system"; } catch (e) {}
+            var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+            document.documentElement.dataset.theme =
+                s === "dark" || s === "light" ? s : (dark ? "dark" : "light");
+        })();
+    </script>
+
+    <link rel="stylesheet" href="/static/css/styles.css">
+
+    <style>
+        /* Local layout for the consolidated settings page. */
+        .cfg-shell {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 28px 20px 80px;
+        }
+        .cfg-nav {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin: 18px 0 4px;
+            flex-wrap: wrap;
+        }
+        .cfg-nav .spacer { flex: 1; }
+        .cfg-nav a .label { margin-left: 6px; }
+        .config-section-heading {
+            margin-top: 28px;
+            font-size: 17px;
+            letter-spacing: .3px;
+        }
+        .agent-editor-card { margin-bottom: 18px; }
+        .agent-editor-card .field textarea {
+            width: 100%;
+            min-height: 64px;
+        }
+        .agent-editor-markdown {
+            width: 100%;
+            min-height: 220px;
+            padding: 10px 12px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 8px;
+            font: 13px/1.5 ui-monospace, Consolas, monospace;
+            color: var(--color-text, #0f172a);
+            background: var(--color-surface, #fff);
+            resize: vertical;
+        }
+        [data-theme="dark"] .agent-editor-markdown {
+            color: var(--color-text, #e6edf3);
+            background: var(--color-surface-alt, #1a222d);
+            border-color: var(--color-border-strong, #33404f);
+        }
+        .agent-editor-tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--color-border, #e2e8f0);
+            margin-bottom: 14px;
+        }
+        .agent-editor-tab {
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--color-text-muted, #64748b);
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            user-select: none;
+        }
+        .agent-editor-tab.active {
+            color: var(--color-primary, #0b6bcb);
+            background: var(--color-surface-hover, #eef2f8);
+            border-color: var(--color-border, #e2e8f0);
+        }
+        .agent-editor-pane { display: none; }
+        .agent-editor-pane.active { display: block; }
+        .agent-editor-fields { display: grid; gap: 10px; }
+        .agent-editor-tools {
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 8px;
+            padding: 10px 14px 6px;
+            margin: 0;
+        }
+        .agent-editor-tools legend {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--color-text-muted, #64748b);
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            padding: 0 6px;
+        }
+        .agent-editor-tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 2px 14px;
+        }
+        .agent-editor-tools-grid .field { border-bottom: none; }
+        .text-input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 6px;
+            font: inherit;
+            font-size: 14px;
+            color: var(--color-text, #0f172a);
+            background: var(--color-surface, #fff);
+        }
+        .cfg-models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 10px;
+        }
+        .cfg-model-card {
+            padding: 10px 14px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 8px;
+        }
+        .cfg-model-card .name { font-weight: 600; font-size: 13px; }
+        .cfg-model-card .id { font-size: 11px; color: var(--color-text-faint, #94a3b8); }
+        .jump-link { font-size: 12px; margin-left: 8px; }
+        .save-response {
+            margin-top: 14px;
+            padding: 10px 14px;
+            border: 1px solid #34a853;
+            border-radius: 8px;
+            background: #f0fbf3;
+            color: #14532d;
+            font-size: 13px;
+        }
+        [data-theme="dark"] .save-response {
+            background: rgba(52, 168, 83, 0.12);
+            border-color: #2f9e44;
+            color: #b9f6c9;
+        }
+        .save-response-detail { margin: 6px 0 0 18px; padding: 0; }
+        .save-response-detail li { margin: 3px 0; }
+
+        /* "Updates / Interface" card (js/ui/interface-manager.js) */
+        .interface-status { margin-top: 12px; display: grid; gap: 14px; }
+        .iface-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+        .iface-grid-item {
+            padding: 10px 12px;
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: 8px;
+            background: var(--color-surface, #fff);
+        }
+        .iface-item-label {
+            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .4px; color: var(--color-text-faint, #94a3b8);
+        }
+        .iface-item-body { font-size: 13px; margin-top: 4px; white-space: pre-wrap; }
+        .iface-item-sub { font-size: 12px; margin-top: 6px; }
+        .iface-item-sub.ok { color: #15803d; }
+        .iface-item-sub.warn { color: #b45309; }
+        .iface-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .iface-trace { border: 1px solid var(--color-border, #e2e8f0); border-radius: 8px; padding: 10px 12px; }
+        .iface-trace-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--color-text-faint, #94a3b8); }
+        .iface-trace-pre {
+            margin: 8px 0 0; padding: 8px 10px; max-height: 170px; overflow: auto;
+            background: var(--color-surface-alt, #f3f6fa); border-radius: 6px;
+            font: 11px/1.5 ui-monospace, Consolas, monospace;
+            color: var(--color-text-soft, #334155);
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .iface-run-panel { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--color-border, #e1e5e8); }
+        .iface-run-toggle { font-weight: 600; font-size: 13px; }
+        .iface-run-pane { margin-top: 12px; display: grid; gap: 10px; }
+        .iface-run-pane[hidden] { display: none; }
+        .iface-run-fields { display: grid; gap: 8px; }
+        .iface-run-field { display: grid; gap: 3px; font-size: 12px; }
+        .iface-run-field-label { font-size: 11px; font-weight: 600; color: var(--color-text-muted, #64748b); }
+        .iface-run-result { white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+    </style>
+</head>
+
+<body class="app-shell">
+
+    <div class="cfg-shell">
+
+        <!-- Static guard: config-page.js clears this when it boots. If the
+             module can't load (stale server / opened from disk / cached error),
+             this message shows instead of a silently blank page. -->
+        <div id="boot-failed" hidden>
+            <div class="status-message error" style="margin-top:20px">
+                <strong>Settings page could not load.</strong>
+                <p style="margin:6px 0 0">Open it through the running app at
+                <code>/static/config.html</code>; restart the server
+                (<code>python server.py</code>) if it was just updated, then
+                hard-refresh with <b>Ctrl+F5</b>.</p>
+            </div>
+        </div>
+
+        <header>
+            <h1 style="margin:0">Configuration</h1>
+            <nav class="cfg-nav">
+                <!-- Shared app nav, marked as the Settings page - filled by
+                     js/config-page.js via js/ui/header-nav.js -->
+                <nav class="app-header-nav" id="page-nav" aria-label="Primary"></nav>
+                <span class="spacer"></span>
+                <span class="config-note">One place for every setting - the app defaults, each agent
+                    (metadata + behavior + tests), and the shared test pool.</span>
+            </nav>
+        </header>
+
+        <!-- App-level settings: defaults, paths, RAG, versioning -->
+        <div id="config-section" style="margin-top:24px"></div>
+
+        <!-- Appearance -->
+        <div id="appearance-section"></div>
+
+        <!-- Per-agent settings (one consolidated card each) -->
+        <div id="agents-section"></div>
+
+        <!-- Shared tests that run for every agent -->
+        <div id="shared-tests-section"></div>
+
+        <!-- Models (read-only snapshot from Ollama) -->
+        <div id="models-section"></div>
+
+        <!-- Modular interface / update system card -->
+        <div id="interface-section"></div>
+
+    </div>
+
+    <script>
+        window.__cfgBoot = false;
+        setTimeout(function () {
+            if (!window.__cfgBoot) {
+                var el = document.getElementById("boot-failed");
+                if (el) el.hidden = false;
+            }
+        }, 3000);
+    </script>
+
+    <script type="module" src="/static/js/config-page.js"></script>
+
+</body>
+
+</html>
+```
+
+## dashboard/css/styles.css
+
+```css
+
+/* ================================================================
+   STYLES.CSS  -  THE ONE STYLESHEET FOR THE WHOLE APP
+   ================================================================
+   All previous styles (base.css + layout.css + components.css +
+   thread.css + board.css) are merged HERE, sectioned with comment
+   banners. Additions for the pop-up chat interface live in
+   SECTION 6 (CHAT POPUP).
+
+   CONTENTS:
+     SECTION 1  BASE         - design tokens, reset, typography
+     SECTION 2  LAYOUT       - app shell, page, agent cards, header
+     SECTION 3  COMPONENTS   - buttons, cards, fields, badges, modal
+     SECTION 4  READOUT      - markdown bubbles, code, lists (shared)
+     SECTION 5  AGENT CARDS  - the AI agent card grid
+     SECTION 6  [legacy chat popup - markup removed, kept as reference]
+     SECTION 7  CONFIG       - config panel styling
+     SECTION 8  CHAT WINDOW  - reusable pop-out chat engine (NEW)
+   ================================================================ */
+
+
+/* ==========================================
+   ===  SECTION 1: BASE (tokens, reset, typography)
+   ========================================== */
+
+:root {
+    /* Colors */
+    --color-primary: #0b6bcb;        /* main blue (buttons, links) */
+    --color-primary-dark: #0a5cb3;   /* hover state for primary */
+    --color-primary-soft: #e7f1fb;   /* soft blue chip background */
+    --color-sidebar: #064f86;        /* sidebar/legacy header background */
+    --color-background: #f5f7fb;     /* page background */
+    --color-surface: #ffffff;        /* cards / panels */
+    --color-surface-alt: #f3f6fa;    /* composer strip / subtle fills */
+    --color-surface-hover: #eef2f8;  /* hover fills */
+    --color-text: #0f172a;           /* headings */
+    --color-text-soft: #334155;      /* body text */
+    --color-text-muted: #64748b;     /* secondary text */
+    --color-text-faint: #94a3b8;     /* timestamps */
+    --color-border: #e2e8f0;
+    --color-border-strong: #cbd5e1;
+    --color-accent: #0d9488;         /* branded green/teal accent */
+    --color-accent-strong: #0f766e;  /* accent on soft fills / text */
+    --color-accent-soft: #d9f2ef;    /* teal-tinted fill / chips */
+    --color-danger: #b91c1c;         /* delete actions */
+    --color-danger-soft: #fdecec;    /* danger button fill */
+    --color-success: #16803c;        /* online dot / saved */
+    --color-warning: #b45309;
+    --color-focus-ring: rgba(13, 148, 136, 0.18);   /* teal glow on focus */
+
+    /* Component colors (theme-aware, used to replace hardcoded hex) */
+    --color-user-bubble-bg: #e7f6f3;
+    --color-user-bubble-border: #c9eae4;
+    --color-code-bg: #f1f5f9;
+    --color-pre-bg: #0f172a;
+    --color-pre-text: #e2e8f0;
+    --color-input-bg: #ffffff;
+    --color-avatar: #e5e7eb;
+    --color-avatar-text: #374151;
+    --color-online: #2dd4a7;
+    --color-header-grad-a: #0b6bcb;  /* blue end of the header/brand gradient */
+    --color-header-grad-b: #0d9488;  /* teal end of the header/brand gradient */
+
+    /* Layout sizes */
+    --content-max-width: 850px;
+
+    /* Appearance - overridable from the Configuration > Appearance section */
+    --app-font-family: Arial, Helvetica, sans-serif;
+    --app-font-size: 16px;
+
+    /* Corner rounding */
+    --radius-small: 6px;
+    --radius-medium: 10px;
+    --radius-large: 16px;
+    --radius-pill: 999px;
+
+    /* Shadows (soft layered) */
+    --shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+    --shadow-panel: 0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 12px rgba(16, 24, 40, 0.05);
+    --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 24px rgba(16, 24, 40, 0.07);
+    --shadow-pop: 0 12px 32px rgba(16, 24, 40, 0.12);
+    --shadow-modal: 0 24px 60px rgba(16, 24, 40, 0.18);
+}
+
+/* DARK THEME - applied when <html data-theme="dark"> (Appearance settings
+   or system preference). Every component above reads these tokens. */
+[data-theme="dark"] {
+    --color-primary: #3b82f6;
+    --color-primary-dark: #2f6fe0;
+    --color-primary-soft: rgba(59, 130, 246, 0.14);
+    --color-sidebar: #0d1117;
+    --color-background: #0d1117;
+    --color-surface: #151c25;
+    --color-surface-alt: #1a222d;
+    --color-surface-hover: #202a37;
+    --color-text: #e6edf3;
+    --color-text-soft: #c3cdd8;
+    --color-text-muted: #8b98a9;
+    --color-text-faint: #5b6b7d;
+    --color-border: #242e3b;
+    --color-border-strong: #33404f;
+    --color-accent: #2dd4bf;
+    --color-accent-strong: #5eead4;
+    --color-accent-soft: rgba(45, 212, 191, 0.14);
+    --color-danger: #f87171;
+    --color-danger-soft: rgba(248, 113, 113, 0.12);
+    --color-success: #34d399;
+    --color-warning: #fbbf24;
+    --color-focus-ring: rgba(45, 212, 191, 0.25);
+    --color-user-bubble-bg: #0f2f2b;
+    --color-user-bubble-border: #1d4942;
+    --color-code-bg: #1e293b;
+    --color-pre-bg: #0b1220;
+    --color-input-bg: #0f151e;
+    --color-avatar: #27303c;
+    --color-avatar-text: #c3cdd8;
+    --color-header-grad-a: #1d4ed8;  /* brighter blue on dark */
+    --color-header-grad-b: #0f766e;  /* deeper teal on dark */
+}
+
+/* Themed scrollbars (both themes) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-faint);
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+/* RESET */
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    /* rem-based typography scales from here (-0 = stored Appearance size) */
+    font-size: var(--app-font-size, 16px);
+}
+
+/* TYPOGRAPHY */
+body {
+    font: inherit;
+    font-family: var(--app-font-family, Arial, Helvetica, sans-serif);
+    background: var(--color-background);
+    color: var(--color-text);
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+    line-height: 1.25;
+}
+
+a {
+    color: var(--color-primary);
+}
+
+code {
+    padding: 2px 5px;
+    border-radius: var(--radius-small);
+    background: var(--color-code-bg);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.9em;
+}
+
+
+/* ==========================================
+   ===  SECTION 2: LAYOUT (app shell, page)
+   ========================================== */
+
+.app-shell {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 100vh;
+}
+
+.main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    min-height: 100vh;
+    background:
+        radial-gradient(1200px 600px at 85% -10%, rgba(13, 148, 136, 0.07), transparent 60%),
+        radial-gradient(900px 500px at -10% 105%, rgba(11, 107, 203, 0.06), transparent 55%),
+        var(--color-background);
+}
+
+.page {
+    flex: 1 1 auto;
+    padding: clamp(20px, 4vw, 40px);
+}
+
+.page-header {
+    position: relative;
+    overflow: hidden;
+    max-width: none;
+    margin: 0 0 28px;
+    padding: clamp(26px, 4vw, 40px);
+    border-radius: var(--radius-large);
+    background: linear-gradient(120deg, var(--color-header-grad-a), var(--color-header-grad-b));
+    color: #fff;
+    box-shadow: var(--shadow-card);
+}
+
+.page-header::before {
+    content: "";
+    position: absolute;
+    top: -120px;
+    right: -60px;
+    width: 380px;
+    height: 380px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.22), transparent 65%);
+    pointer-events: none;
+}
+
+/* Brand block + nav row inside the gradient page header. */
+.app-header-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.app-header-brand {
+    min-width: 0;
+}
+
+.page-header h1 {
+    margin: 0 0 8px;
+    font-size: clamp(21px, 2.4vw, 27px);
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.page-header p,
+.app-header-tagline {
+    position: relative;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 0.9375rem;
+}
+
+/* App nav (shared across index / chat / config / future pages). */
+.app-header-nav {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.header-nav-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-small);
+    background: var(--color-surface);
+    color: var(--color-text-soft);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.header-nav-link:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent-strong);
+}
+
+.header-nav-link.current {
+    background: linear-gradient(135deg, var(--color-header-grad-a), var(--color-header-grad-b));
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(11, 107, 203, 0.25);
+}
+
+/* Inside the gradient header the pills go translucent-white so they sit on
+   the colored backdrop instead of floating as flat surface chips. */
+.app-header-nav.on-mesh .header-nav-link {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.app-header-nav.on-mesh .header-nav-link:hover {
+    background: rgba(255, 255, 255, 0.24);
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+.app-header-nav.on-mesh .header-nav-link.current {
+    background: #fff;
+    border-color: transparent;
+    color: #1e293b;
+}
+
+/* Interface pill - the small "N update modules" chip in the page header.
+   Links to the Updates / Interface card on the Settings page. */
+.interface-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-text-soft);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: border-color .15s ease, color .15s ease;
+}
+.interface-indicator:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent-strong);
+    text-decoration: none;
+}
+.interface-indicator .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-accent, #0b6bcb);
+    box-shadow: 0 0 0 3px rgba(11, 107, 203, 0.15);
+}
+.interface-indicator .dot.drift {
+    background: #d97706;
+    box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.18);
+}
+.mesh .interface-indicator,
+.app-header-nav.on-mesh + .interface-indicator,
+.interface-indicator.on-mesh {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+.interface-indicator .run-state {
+    font-weight: 400;
+    opacity: .75;
+}
+
+@media (max-width: 640px) {
+    .app-header-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* Utility */
+.hidden {
+    display: none !important;
+}
+
+
+/* ==========================================
+   ===  SECTION 3: COMPONENTS (buttons, forms, cards, badges)
+   ========================================== */
+
+/* BUTTONS */
+.btn {
+    border: 1px solid transparent;
+    border-radius: var(--radius-small);
+    padding: 9px 16px;
+    font: inherit;
+    cursor: pointer;
+    transition: .15s ease;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--color-header-grad-a), var(--color-header-grad-b));
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(11, 107, 203, 0.25);
+}
+
+.btn-primary:hover:not(:disabled) {
+    filter: brightness(1.06);
+    box-shadow: 0 4px 14px rgba(11, 107, 203, 0.32);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    border-color: var(--color-border-strong);
+    background: var(--color-surface);
+    color: var(--color-text-soft);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    border-color: var(--color-accent);
+    color: var(--color-accent-strong);
+}
+
+.btn-danger {
+    border-color: transparent;
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: var(--color-danger-soft);
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+    filter: brightness(0.98);
+}
+
+.btn-small {
+    padding: 6px 12px;
+    font-size: 0.8125rem;
+}
+
+/* FORM FIELDS */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+    font-size: 0.875rem;
+    color: var(--color-text-soft);
+}
+
+.field select,
+.field input,
+.field textarea {
+    width: 100%;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-small);
+    padding: 9px 12px;
+    font: inherit;
+    outline: none;
+    background: var(--color-input-bg);
+    color: var(--color-text-soft);
+}
+
+.field select option {
+    color: var(--color-text-soft);
+    background: var(--color-surface);
+}
+
+.field select:focus,
+.field input:focus,
+.field textarea:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+/* Toggle switch row (used by the "Disable chat versioning" setting). */
+.field-toggle {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.field-toggle input {
+    position: absolute;
+    width: 38px;
+    height: 22px;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.field-toggle .field-switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 38px;
+    height: 22px;
+}
+
+.field-toggle .field-switch::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: #cbd5e1;
+    transition: background .15s ease;
+}
+
+.field-toggle .field-switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+    transition: transform .15s ease;
+}
+
+.field-toggle input:checked + .field-switch::before {
+    background: var(--color-accent);
+}
+
+.field-toggle input:checked + .field-switch::after {
+    transform: translateX(16px);
+}
+
+/* CARDS AND PANELS */
+.panel {
+    max-width: 900px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+    padding: 20px;
+    margin-bottom: 18px;
+}
+
+.card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+    padding: 18px;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+/* Monogram avatar chip dropped in at the top of each agent card. */
+.card-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--color-accent), var(--color-primary));
+    color: #fff;
+    font-weight: 700;
+    font-size: 1rem;
+    box-shadow: var(--shadow-soft);
+}
+
+.card::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 12%;
+    right: 12%;
+    height: 3px;
+    border-radius: 0 0 6px 6px;
+    background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+    opacity: 0;
+    transition: opacity .18s ease;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-pop);
+    border-color: var(--color-border-strong);
+}
+
+.card:hover::after {
+    opacity: 1;
+}
+
+.card h3 {
+    margin: 0;
+    font-size: 1.0625rem;
+}
+
+.card p {
+    margin: 0;
+    flex: 1 1 auto;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* BADGES */
+.badge {
+    align-self: flex-start;
+    border-radius: var(--radius-pill);
+    padding: 3px 10px;
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* EMPTY STATES & STATUS MESSAGES */
+.empty-state {
+    max-width: 900px;
+    border: 1px dashed var(--color-border-strong);
+    border-radius: var(--radius-medium);
+    padding: 40px 25px;
+    text-align: center;
+    color: var(--color-text-muted);
+}
+
+.status-message {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 12px;
+    font-size: 0.875rem;
+    min-height: 20px;
+}
+
+.status-message::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.status-message.ok     { color: var(--color-success); }
+.status-message.error  { color: var(--color-danger); }
+.status-message.warn   { color: var(--color-warning); }
+
+.section-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.section-note {
+    margin-left: auto;
+    font-size: 0.8125rem;
+}
+
+
+/* ==========================================
+   ===  SECTION 4: READOUT (markdown bubbles / code / lists)
+   ========================================== */
+/* Shared rendering classes used inside chat bubbles and anywhere
+   message text is displayed. Safe DOM built by ui/markdown.js. */
+
+.readout {
+    color: var(--color-text-soft);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.readout p {
+    margin: 0 0 10px;
+}
+
+.readout p:last-child {
+    margin-bottom: 0;
+}
+
+.readout pre {
+    margin: 0 0 10px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    background: var(--color-pre-bg);
+    color: var(--color-pre-text);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    overflow-x: auto;
+}
+
+.readout pre code {
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font-size: inherit;
+}
+
+.readout code {
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: var(--color-code-bg);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.9em;
+}
+
+.readout ul,
+.readout ol {
+    margin: 0 0 10px;
+    padding-left: 22px;
+}
+
+
+/* ==========================================
+   ===  SECTION 5: AGENT CARDS
+   ========================================== */
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    max-width: 1000px;
+}
+
+.agent-card-action {
+    margin-top: auto;
+}
+
+
+/* ==========================================
+   ===  SECTION 6: CHAT POPUP (floating chat window)
+   ========================================== */
+
+.chat-popup {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    width: min(420px, calc(100vw - 24px));
+    height: min(560px, calc(100vh - 48px));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-pop);
+    overflow: hidden;
+}
+
+/* A launching button shown when the popup is closed (bottom-right). */
+.chat-launcher {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 60;
+}
+
+/* Header */
+.chat-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: linear-gradient(135deg, var(--color-header-grad-a), var(--color-header-grad-b));
+    color: #fff;
+}
+
+.chat-header .avatar {
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    font-size: 14px;
+}
+
+.chat-header-info {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.chat-header-info strong {
+    overflow: hidden;
+    font-size: 0.9375rem;
+    color: #fff;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.chat-header-info small {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.75rem;
+}
+
+.chat-header-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+}
+
+.chat-header-actions button {
+    border: 0;
+    border-radius: var(--radius-small);
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.10);
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.chat-header-actions button:hover {
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+}
+
+.chat-header-actions button.danger:hover {
+    background: #fee2e2;
+    color: var(--color-danger);
+}
+
+/* Scrolling bubbles */
+.chat-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+    padding: 16px;
+    overflow-y: auto;
+    background: var(--color-background);
+}
+
+.chat-welcome {
+    margin: auto;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+}
+
+/* One bubble: a row [avatar | content] mirroring the old message layout */
+.bubble {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    max-width: 100%;
+}
+
+.bubble.user {
+    align-self: flex-end;
+    padding-left: clamp(0px, 6vw, 40px);
+}
+
+.bubble.agent {
+    align-self: flex-start;
+    padding-left: 4px;
+}
+
+.bubble-content {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.bubble-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.bubble-header strong {
+    font-size: 0.8125rem;
+}
+
+.bubble-header span {
+    color: var(--color-text-faint);
+    font-size: 0.6875rem;
+}
+
+.bubble-body {
+    border-radius: var(--radius-medium);
+    padding: 10px 12px;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+    font-size: 0.875rem;
+}
+
+.bubble.agent .bubble-body {
+    border-left: 3px solid var(--color-accent);
+    background: var(--color-surface);
+}
+
+.bubble.user .bubble-body {
+    border: 1px solid var(--color-user-bubble-border);
+    background: var(--color-user-bubble-bg);
+}
+
+/* Avatar */
+.avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--color-avatar);
+    color: var(--color-avatar-text);
+    font-weight: 700;
+}
+
+.avatar.agent-avatar {
+    background: linear-gradient(135deg, var(--color-accent), var(--color-primary));
+    color: #fff;
+}
+
+/* Typing indicator (pulsing dots) */
+.typing {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.typing span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    animation: typing-pulse 1.2s infinite ease-in-out;
+}
+
+.typing span:nth-child(2) { animation-delay: 0.15s; }
+.typing span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes typing-pulse {
+    0%, 60%, 100% { opacity: 0.25; }
+    30%           { opacity: 1; }
+}
+
+/* Input area */
+.chat-input-area {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface-alt);
+}
+
+#chat-message-input {
+    display: block;
+    width: 100%;
+    min-height: 60px;
+    max-height: 160px;
+    resize: vertical;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-small);
+    padding: 10px 12px;
+    outline: none;
+    background: var(--color-input-bg);
+    font: inherit;
+    line-height: 1.5;
+}
+
+#chat-message-input:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.chat-input-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.chat-input-hint {
+    color: var(--color-text-faint);
+    font-size: 12px;
+}
+
+.chat-save-status {
+    font-size: 12px;
+    min-height: 16px;
+}
+
+#chat-send-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+
+/* ==========================================
+   ===  SECTION 7: CONFIG panel
+   ========================================== */
+
+.config-note {
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+    margin-top: 4px;
+}
+
+/* Live Appearance preview (font + size sample shown before saving). */
+.appearance-preview {
+    margin: 4px 0 16px;
+    padding: 12px 14px;
+    border: 1px dashed var(--color-border-strong);
+    border-radius: var(--radius-small);
+    background: var(--color-surface-alt);
+    color: var(--color-text-soft);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+#config-section .config-section-heading {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 1.0625rem;
+    letter-spacing: 0.2px;
+    margin: 26px 0 2px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--color-border, #e1e5e8);
+}
+
+#config-section .config-section-heading::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--color-accent), var(--color-primary));
+}
+
+#config-section .os-path-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin: 8px 0 18px;
+}
+
+#config-section .os-path-group-title {
+    flex: 0 0 100%;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-text, #1c2024);
+}
+
+#config-section .os-path-group .field {
+    flex: 1 1 220px;
+}
+
+#config-section .os-path-group .os-path-current span {
+    color: var(--color-primary, #2b6fdb);
+    font-weight: 600;
+}
+
+.chat-tests-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 10px 0 14px;
+}
+
+.chat-tests-cards .agent-test-card-header:hover {
+    background: var(--color-surface-hover, #f4f6f8);
+}
+
+.agent-test-card .test-row:hover {
+    background: var(--color-surface-hover, #f4f6f8);
+}
+
+@media (max-width: 880px) {
+    .chat-tests-toolbar {
+        margin: 8px 0 10px;
+    }
+}
+
+
+/* ==========================================
+   ===  RESPONSIVE (mobile)
+   ========================================== */
+
+@media (max-width: 600px) {
+    .page {
+        padding: 18px 14px;
+    }
+
+    .chat-window-launcher {
+        right: 12px;
+        bottom: 12px;
+    }
+}
+
+
+/* ==========================================
+   ===  SECTION 8: CHAT WINDOW ENGINE (reusable pop-out chat)
+   ========================================== */
+/* Styles for js/classes/chat-window.js - the configuration-driven,
+   pop-out chat window. Class names are prefixed `cw-` (plus the root
+   `.chat-window`) so this component never collides with app styles.
+   This replaces the older static chat-popup markup that lived in
+   SECTION 6. A launcher button is created by the component, so no
+   chat markup is required in the page HTML. */
+
+:root {
+    /* CHAT WINDOW ENGINE tokens (map onto the app palette by default) */
+    --cw-bg: var(--color-surface);
+    --cw-header-bg: var(--color-surface-alt);
+    --cw-border: var(--color-border);
+    --cw-border-strong: var(--color-border-strong);
+    --cw-chat-bg: var(--color-background);
+    --cw-panel-bg: var(--color-surface);
+    --cw-text-muted: var(--color-text-muted);
+    --cw-user-bg: var(--color-user-bubble-bg);
+    --cw-accent: var(--color-accent);
+    --cw-header-height: 50px;
+    --cw-z-index: 9000;
+}
+
+.cw-hidden {
+    display: none !important;
+}
+
+/* ---------- the floating window ---------- */
+
+.chat-window {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: var(--cw-z-index);
+    display: flex;
+    flex-direction: column;
+    width: 780px;
+    max-width: calc(100vw - 16px);
+    height: 560px;
+    max-height: calc(100vh - 16px);
+    min-width: 360px;
+    min-height: 460px;
+    border: 1px solid var(--cw-border);
+    border-radius: var(--radius-large);
+    background: var(--cw-bg);
+    box-shadow: var(--shadow-pop);
+    overflow: hidden;
+    font: inherit;
+}
+
+.chat-window.cw-dragging {
+    cursor: grabbing;
+    user-select: none;
+}
+
+/* ---------- header (also the drag handle) ---------- */
+
+.cw-window-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 12px;
+    height: var(--cw-header-height);
+    padding: 8px 10px;
+    border-bottom: 1px solid transparent;
+    background: linear-gradient(135deg, var(--color-header-grad-a), var(--color-header-grad-b));
+    color: #fff;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+}
+
+.chat-window.cw-dragging .cw-window-header {
+    cursor: grabbing;
+}
+
+.cw-window-avatar {
+    display: flex;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    overflow: hidden;
+}
+
+.cw-window-info {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.cw-window-info strong {
+    overflow: hidden;
+    font-size: 0.9375rem;
+    color: #fff;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.cw-window-info small {
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.cw-window-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+}
+
+.cw-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-small);
+    background: transparent;
+    color: rgba(255, 255, 255, 0.85);
+    cursor: pointer;
+}
+
+.cw-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.20);
+    color: #fff;
+}
+
+.cw-icon-btn.cw-close:hover {
+    background: #fee2e2;
+    color: var(--color-danger);
+}
+
+/* ---------- body: chat area + right panel ---------- */
+
+.cw-window-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.cw-chat-area {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.cw-message-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+    padding: 16px;
+    overflow-y: auto;
+    background: var(--cw-chat-bg);
+}
+
+/* ---------- bubbles ---------- */
+
+.cw-bubble {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    max-width: 100%;
+}
+
+.cw-bubble.cw-user {
+    align-self: flex-end;
+    padding-left: clamp(0px, 6vw, 40px);
+}
+
+.cw-bubble.cw-assistant,
+.cw-bubble.cw-agent {
+    align-self: flex-start;
+    padding-left: 4px;
+}
+
+.cw-bubble-content {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.cw-bubble-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.cw-bubble-header strong {
+    font-size: 0.8125rem;
+}
+
+.cw-bubble-header span {
+    color: var(--color-text-faint);
+    font-size: 0.6875rem;
+}
+
+.cw-bubble-body {
+    border-radius: var(--radius-medium);
+    padding: 10px 12px;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+    font-size: 0.875rem;
+}
+
+.cw-bubble.cw-user .cw-bubble-body {
+    border: 1px solid var(--color-user-bubble-border);
+    background: var(--cw-user-bg);
+}
+
+.cw-bubble.cw-agent .cw-bubble-body {
+    border-left: 3px solid var(--cw-accent);
+}
+
+.cw-bubble.cw-system {
+    align-self: center;
+    max-width: 80%;
+}
+
+.cw-bubble.cw-system .cw-bubble-header {
+    display: none;
+}
+
+.cw-bubble.cw-system .cw-bubble-body {
+    padding: 6px 12px;
+    border: 1px dashed var(--cw-border-strong);
+    background: transparent;
+    box-shadow: none;
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+    font-style: italic;
+    text-align: center;
+}
+
+.cw-bubble-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--color-avatar);
+    color: var(--color-avatar-text);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.cw-bubble-avatar.cw-agent-avatar {
+    background: linear-gradient(135deg, var(--color-accent), var(--color-primary));
+    color: #fff;
+}
+
+/* ---------- welcome / typing ---------- */
+
+.cw-welcome {
+    margin: auto;
+    max-width: 340px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 14px;
+}
+
+.cw-welcome h3 {
+    margin: 0 0 6px;
+    color: var(--color-text);
+    font-size: 17px;
+}
+
+.cw-welcome p {
+    margin: 0;
+}
+
+.cw-typing {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.cw-typing span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    animation: cw-typing-pulse 1.2s infinite ease-in-out;
+}
+
+.cw-typing span:nth-child(2) { animation-delay: 0.15s; }
+.cw-typing span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes cw-typing-pulse {
+    0%, 60%, 100% { opacity: 0.25; }
+    30%           { opacity: 1; }
+}
+
+/* ---------- right panel ---------- */
+
+.cw-panel {
+    position: relative;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    width: 300px;
+    border-left: 1px solid var(--cw-border);
+    background: var(--cw-panel-bg);
+}
+
+.cw-panel.cw-panel-hidden {
+    display: none;
+}
+
+.cw-panel-sections {
+    flex: 1 1 auto;
+    padding: 14px 16px 20px;
+    overflow-y: auto;
+}
+
+.cw-panel-drag {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -4px;
+    width: 8px;
+    z-index: 2;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.cw-panel-drag:hover {
+    background: var(--color-focus-ring);
+}
+
+.cw-panel-section {
+    margin-bottom: 14px;
+}
+
+.cw-panel-section-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--cw-border);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+}
+
+.cw-panel-section-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+}
+
+.cw-panel-section-toggle svg {
+    flex: 0 0 auto;
+    margin-left: auto;
+    color: var(--color-text-faint);
+    transition: transform 0.15s ease;
+}
+
+.cw-panel-section.cw-collapsed .cw-panel-section-toggle svg {
+    transform: rotate(-90deg);
+}
+
+.cw-panel-section-body {
+    padding-top: 8px;
+}
+
+.cw-panel-section.cw-collapsed .cw-panel-section-body {
+    display: none;
+}
+
+/* panel fields */
+
+.cw-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+    font-size: 0.8125rem;
+    color: var(--color-text-soft);
+}
+
+.cw-field-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+
+.cw-field-value {
+    padding: 6px 8px;
+    border: 1px solid var(--cw-border);
+    border-radius: var(--radius-small);
+    background: var(--color-surface-alt);
+    font-size: 0.8125rem;
+    color: var(--color-text-soft);
+}
+
+.cw-field input[type="text"],
+.cw-field select {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--cw-border-strong);
+    border-radius: var(--radius-small);
+    background: var(--color-input-bg);
+    color: var(--color-text-soft);
+    font: inherit;
+    font-size: 13px;
+    outline: none;
+}
+
+.cw-field select option {
+    color: var(--color-text-soft);
+    background: var(--color-surface);
+}
+
+.cw-field input:focus,
+.cw-field select:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.cw-field.cw-field-toggle {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.cw-switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 38px;
+    height: 22px;
+}
+
+.cw-switch input {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.cw-switch-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: #cbd5e1;
+    transition: background 0.15s ease;
+    pointer-events: none;
+}
+
+.cw-switch-track::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform 0.15s ease;
+}
+
+.cw-switch input:checked + .cw-switch-track {
+    background: var(--color-accent);
+}
+
+.cw-switch input:checked + .cw-switch-track::after {
+    transform: translateX(16px);
+}
+
+.cw-divider {
+    margin: 12px 0;
+    border: 0;
+    border-top: 1px solid var(--cw-border);
+}
+
+.cw-panel-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--cw-border-strong);
+    border-radius: var(--radius-small);
+    background: var(--color-surface);
+    color: var(--color-text-soft);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.cw-panel-button:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.cw-panel-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ---------- composer ---------- */
+
+.cw-composer {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--cw-border);
+    background: var(--color-surface-alt);
+}
+
+.cw-save-status {
+    min-height: 16px;
+    font-size: 0.75rem;
+}
+
+.cw-save-status.ok { color: var(--color-success); }
+.cw-save-status.error { color: var(--color-danger); }
+
+.cw-input {
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    max-height: 160px;
+    padding: 9px 12px;
+    border: 1px solid var(--cw-border-strong);
+    border-radius: var(--radius-small);
+    background: var(--color-input-bg);
+    resize: none;
+    overflow-y: auto;
+    outline: none;
+    font: inherit;
+    line-height: 1.5;
+}
+
+.cw-input:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.cw-input:disabled {
+    opacity: 0.6;
+}
+
+.cw-composer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.cw-input-hint {
+    color: var(--color-text-faint);
+    font-size: 0.75rem;
+}
+
+/* ---------- launcher + resize handles ---------- */
+
+.chat-window-launcher {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: var(--cw-z-index);
+    box-shadow: var(--shadow-pop);
+}
+
+.cw-resize {
+    position: absolute;
+    z-index: 3;
+}
+
+.cw-resize-n { top: -3px; left: 8px; right: 8px; height: 8px; cursor: n-resize; }
+.cw-resize-s { bottom: -3px; left: 8px; right: 8px; height: 8px; cursor: s-resize; }
+.cw-resize-e { top: 8px; right: -3px; bottom: 8px; width: 8px; cursor: e-resize; }
+.cw-resize-w { top: 8px; left: -3px; bottom: 8px; width: 8px; cursor: w-resize; }
+.cw-resize-ne { top: -3px; right: -3px; width: 12px; height: 12px; cursor: ne-resize; }
+.cw-resize-nw { top: -3px; left: -3px; width: 12px; height: 12px; cursor: nw-resize; }
+.cw-resize-se { right: -3px; bottom: -3px; width: 12px; height: 12px; cursor: se-resize; }
+.cw-resize-sw { left: -3px; bottom: -3px; width: 12px; height: 12px; cursor: sw-resize; }
+
+/* ---------- flyout widget (persistent corner chat) ---------- */
+
+/* The widget root is always anchored bottom-right. In its collapsed
+   (resting) state it only shows the corner launcher button; in the
+   expanded state the full chat panel "flies out" upward from it. */
+.chat-window.cw-widget {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    left: auto;
+    top: auto;
+    z-index: var(--cw-z-index);
+    display: flex;
+    flex-direction: column;
+    width: 380px;
+    height: 560px;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    min-width: 300px;
+    min-height: 380px;
+    border: 1px solid var(--cw-border);
+    border-radius: var(--radius-large);
+    background: var(--cw-bg);
+    box-shadow: var(--shadow-pop);
+    overflow: hidden;
+    transform-origin: bottom right;
+    transition: transform 0.25s ease, opacity 0.22s ease;
+}
+
+/* Collapsed = just the round launcher bubble. Hide the inner panel. */
+.chat-window.cw-widget.cw-collapsed {
+    width: 60px;
+    height: 60px;
+    min-width: 0;
+    min-height: 0;
+    border-radius: 50%;
+    transform: translateY(12px);
+    opacity: 0.94;
+    cursor: pointer;
+}
+
+.chat-window.cw-widget.cw-collapsed .cw-window-header,
+.chat-window.cw-widget.cw-collapsed .cw-window-body,
+.chat-window.cw-widget.cw-collapsed .cw-composer {
+    display: none;
+}
+
+.chat-window.cw-widget.cw-collapsed:hover {
+    transform: translateY(8px);
+    opacity: 1;
+}
+
+/* Expanded = full chat panel flies out. */
+.chat-window.cw-widget.cw-expanded {
+    transform: translateY(0);
+    opacity: 1;
+    cursor: default;
+}
+
+/* The persistent corner button (shown only while collapsed). */
+.cw-widget-launcher {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--color-header-grad-a), var(--color-header-grad-b));
+    color: #fff;
+    cursor: pointer;
+    box-shadow: var(--shadow-pop);
+}
+
+.cw-widget-launcher:hover {
+    filter: brightness(1.08);
+}
+
+/* When expanded, hide the header-drag cursor (widget is not draggable)
+   and hide the collapsed launcher. */
+.chat-window.cw-widget.cw-expanded .cw-widget-launcher {
+    display: none;
+}
+
+.chat-window.cw-widget .cw-window-header {
+    cursor: default;
+}
+
+/* Agent switcher dropdown in the flyout header. */
+.cw-agent-select {
+    flex: 0 1 auto;
+    max-width: 140px;
+    padding: 5px 8px;
+    border: 1px solid var(--cw-border-strong);
+    border-radius: var(--radius-small);
+    background: var(--color-input-bg);
+    color: var(--color-text-soft);
+    font: inherit;
+    font-size: 12px;
+    outline: none;
+}
+
+.cw-agent-select option {
+    color: var(--color-text-soft);
+    background: var(--color-surface);
+}
+
+.cw-agent-select:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+/* Header toggle (config-driven, e.g. "Save to memory" in the flyout widget
+   where the side panel is hidden). */
+.cw-header-toggle {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: var(--radius-small);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.2;
+    cursor: pointer;
+    user-select: none;
+}
+
+.cw-header-toggle input {
+    margin: 0;
+    accent-color: var(--color-accent, #6ea8fe);
+    cursor: pointer;
+}
+
+.cw-header-toggle-label {
+    white-space: nowrap;
+}
+
+/* ---------- minimized state ---------- */
+
+.chat-window.cw-minimized .cw-window-body,
+.chat-window.cw-minimized .cw-composer {
+    display: none;
+}
+
+/* ---------- small screens ---------- */
+
+@media (max-width: 600px) {
+    .chat-window {
+        right: 8px !important;
+        bottom: 8px !important;
+        left: 8px !important;
+        top: 8px !important;
+        width: auto !important;
+        height: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        max-width: none !important;
+        max-height: none !important;
+    }
+
+    .chat-window.cw-widget.cw-collapsed {
+        left: auto !important;
+        top: auto !important;
+        right: 14px !important;
+        bottom: 14px !important;
+        width: 60px !important;
+        height: 60px !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        max-width: none !important;
+        max-height: none !important;
+    }
+
+    .chat-window.cw-widget.cw-expanded {
+        left: 8px !important;
+        top: 8px !important;
+        right: 8px !important;
+        bottom: 8px !important;
+        width: auto !important;
+        height: auto !important;
+    }
+}
+
+
+---------------------------------------------------------------------------
+
+```
+
+## dashboard/index.html
+
+```html
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminator1</title>
+
+    <!-- Apply the stored theme (dark/light) before first paint so dark-mode
+         users never see a light flash. This is a fast-path cache only - the
+         real appearance settings are applied by app.js after /api/settings
+         round-trips, and saved values update this cache on every save. -->
+    <script>
+        (function () {
+            var s = "system";
+            try { s = localStorage.getItem("appearance-theme") || "system"; } catch (e) {}
+            var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+            document.documentElement.dataset.theme =
+                s === "dark" || s === "light" ? s : (dark ? "dark" : "light");
+        })();
+    </script>
+
+    <!-- ONE stylesheet - every style (base/layout/components/readout/
+         agent cards + the pop-out chat engine) lives in styles.css.
+         The chat window itself is created at runtime by
+         js/classes/chat-window.js (SECTION 8 of the stylesheet), so no
+         chat markup is needed here. -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <!-- The whole app is one scrolling column. JS fills these areas:
+           #agent-cards  -> AI agent cards
+           (all settings moved to /static/config.html - the "Settings" link
+            in the header points there) -->
+    <main class="main">
+
+        <section class="page">
+
+            <header class="page-header" id="page-header">
+                <div class="app-header-row">
+                    <div class="app-header-brand">
+                        <h1 id="app-title">Terminator 2</h1>
+                        <p class="app-header-tagline" id="app-tagline">Pick an agent below to chat with it in the floating chat, or use the chat button in the corner.</p>
+                    </div>
+                    <!-- App nav (Dashboard / Chat / Settings): filled by
+                         js/app.js via js/ui/header-nav.js -->
+                    <nav class="app-header-nav on-mesh" id="app-nav" aria-label="Primary"></nav>
+                </div>
+            </header>
+
+            <!-- AI Agent cards: filled by js/ui/agents.js -->
+            <div class="card-grid" id="agent-cards"></div>
+            <div id="agent-status-area"></div>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<!-- Entry point. app.js boots: loads agents + settings, renders the
+     agent cards, and opens a reusable ChatWindow (classes/chat-window.js)
+     when an agent is selected. All settings live on /static/config.html. -->
+<script type="module" src="/static/js/app.js"></script>
+
+</body>
+
+</html>
+
+
+
+```
+
+## dashboard/js/api/api.js
+
+```javascript
+// ==========================================
+// api/api.js - THE ONLY FILE THAT TALKS TO THE SERVER
+// ==========================================
+// Every HTTP request in the app goes through this module. No other
+// file is allowed to call fetch() directly.
+//
+// ENDPOINTS USED:
+//   getModels()            -> GET  /api/models
+//   getAgents()            -> GET  /api/agents
+//   sendChat(...)          -> POST /api/chat
+//   loadAppSettings()      -> GET  /api/settings
+//   saveAppSettings(...)   -> POST /api/settings   (merges)
+//   saveChatSession(...)   -> POST /api/chat-save  (writes .txt file)
+
+// "" (default) -> requests go to the SAME origin serving this page.
+const API_BASE_URL = "";
+
+/**
+ * Low-level fetch helper: JSON in/out, readable error messages.
+ */
+async function request(path, options = {}) {
+    let response;
+
+    try {
+        response = await fetch(API_BASE_URL + path, {
+            headers: { "Content-Type": "application/json" },
+            ...options,
+        });
+    } catch (networkError) {
+        throw new Error(
+            `Cannot reach the server at "${API_BASE_URL || window.location.origin}". Is it running? (python server.py)`
+        );
+    }
+
+    if (!response.ok) {
+        throw new Error(`Server error ${response.status} for ${path}`);
+    }
+
+    return response.json();
+}
+
+/** Model list for dropdowns. Returns [] when no Ollama models. */
+export async function getModels() {
+    const data = await request("/api/models");
+    return data.models || [];
+}
+
+/** All discovered agents. Returns [] when agent_library/ is empty. */
+export async function getAgents() {
+    const data = await request("/api/agents");
+    return data.agents || [];
+}
+
+/** Every tool id an agent can pick in its config. */
+export async function getTools() {
+    const data = await request("/api/tools");
+    return data.tools || [];
+}
+
+/** Site identity for the H1 header: {title, subtitle} from about/about.json. */
+export async function getAbout() {
+    return request("/api/about");
+}
+
+// ---------------------------------------------------------------- interface
+
+/** Full status blob for the Settings "Updates / Interface" card:
+ * { catalog, archived, trace_tail, baseline, run_enabled, updates_dir, ... }. */
+export async function getInterfaceStatus() {
+    return request("/api/interface/status");
+}
+
+/** Reload update modules from disk + regenerate the docs snapshots. */
+export async function applyInterface() {
+    return request("/api/interface/apply", { method: "POST" });
+}
+
+/** Publish the current live tree as the new baseline (rebaseline). */
+export async function snapshotInterface() {
+    return request("/api/interface/snapshot", { method: "POST" });
+}
+
+/** Compare live vs baseline and report (or apply) the rollback.
+ * DRY-RUN by default; send apply:true to actually restore. */
+export async function restoreInterface({ baseline = "", apply = false, dryRun = true } = {}) {
+    return request("/api/interface/restore", {
+        method: "POST",
+        body: JSON.stringify({ baseline, apply, dryRun }),
+    });
+}
+
+/** Execute one update-module function by string names. May return 403 when
+ * module execution is disabled (see setRunEnabled). */
+export async function runInterface({ domain, module, function: fn, args = [], kwargs = {} }) {
+    return request("/api/interface/run", {
+        method: "POST",
+        body: JSON.stringify({ domain, module, function: fn, args, kwargs }),
+    });
+}
+
+/** Arm/disarm /api/interface/run for the current server process. */
+export async function setRunEnabled(enabled) {
+    return request("/api/interface/toggle-run", {
+        method: "POST",
+        body: JSON.stringify({ enabled }),
+    });
+}
+
+/**
+ * One agent's consolidated config for the settings page:
+ * { agent, meta, markdown, tests, sharedTests }.
+ */
+export async function getAgentConfig(agentId) {
+    return request(`/api/agents/${encodeURIComponent(agentId)}/config`);
+}
+
+/**
+ * Partial update of one agent's config: {meta?, markdown?, tests?}.
+ * Returns the fresh consolidated config object.
+ */
+export async function saveAgentConfig(agentId, partialConfig) {
+    return request(`/api/agents/${encodeURIComponent(agentId)}/config`, {
+        method: "PUT",
+        body: JSON.stringify(partialConfig),
+    });
+}
+
+/**
+ * Send one chat message and return the server's reply + the tracked session.
+ *
+ * The server now owns the conversation: it returns a session_id you must send
+ * back on every later message so the same chat keeps its own start/middle/end.
+ * Pass newChat=true (or leave session_id empty) to start a fresh chat, which
+ * finalizes whatever chat was active before.
+ */
+export async function sendChat({ message, agentId = "", model = "", history = [], sessionId = "", title = "", newChat = false, rag = false }) {
+    const data = await request("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+            message,
+            model,
+            agent_id: agentId,
+            history,
+            session_id: sessionId,
+            title,
+            new_chat: newChat,
+            rag,
+        }),
+    });
+    return { reply: data.reply, session_id: data.session_id, title: data.title, events: data.events || [] };
+}
+
+/** Header rows for every saved chat + the active one, newest first. */
+export async function listChats() {
+    const data = await request("/api/chats");
+    return data.chats || [];
+}
+
+/** One chat: its log row + the .txt content + parsed messages. */
+export async function getChat(chatId) {
+    return request(`/api/chats/${encodeURIComponent(chatId)}`);
+}
+
+/**
+ * Finalize the active chat: writes its .txt (next version on a name collision)
+ * and logs it. Safe to call even when nothing is active.
+ * rag: optional bool override - commit this chat to the RAG memory store.
+ */
+export async function endChat({ title = "", rag = undefined } = {}) {
+    const body = { title };
+    if (typeof rag === "boolean") {
+        body.rag = rag;
+    }
+    return request("/api/chats/end", {
+        method: "POST",
+        body: JSON.stringify(body),
+    });
+}
+
+/** RAG store info: location + indexed chunk count. */
+export async function ragStatus() {
+    return request("/api/rag/status");
+}
+
+/** Re-index every saved transcript into the RAG store. */
+export async function rebuildRag() {
+    return request("/api/rag/rebuild", { method: "POST" });
+}
+
+/** Delete the RAG store (transcripts + chat records are untouched). */
+export async function resetRag() {
+    return request("/api/rag/reset", { method: "POST" });
+}
+
+/** Load the stored browser settings; {} when nothing saved yet. */
+export async function loadAppSettings() {
+    const data = await request("/api/settings");
+    return data.settings || {};
+}
+
+/**
+ * Load settings plus the meta flags from /api/settings.
+ * Returns { settings, restartNeeded, platform } where restartNeeded is true
+ * when the stored path settings changed since the server started (restart
+ * required) and platform is "win", "linux" or "mac" (which path fields to
+ * highlight).
+ */
+export async function loadAppSettingsWithMeta() {
+    const data = await request("/api/settings");
+    return {
+        settings: data.settings || {},
+        restartNeeded: Boolean(data.restartNeeded),
+        platform: data.platform || "nix",
+    };
+}
+
+/** Merge partial settings into what's stored (the rest survives). */
+export async function saveAppSettings(partialSettings) {
+    const data = await request("/api/settings", {
+        method: "POST",
+        body: JSON.stringify(partialSettings),
+    });
+    return data;
+}
+
+/**
+ * Save a chat session as a nicely-formatted .txt file on the server.
+ *
+ * The transcript + a suggested file name + the configured output path
+ * are all sent here and written by /api/chat-save.
+ */
+export async function saveChatSession({
+    path = "",
+    fileName = "",
+    title = "",
+    agentName = "",
+    model = "",
+    content = "",
+}) {
+    const result = await request("/api/chat-save", {
+        method: "POST",
+        body: JSON.stringify({ path, fileName, title, agentName, model, content }),
+    });
+
+    if (!result.saved) {
+        throw new Error(result.error || "The server refused to save the chat.");
+    }
+
+    return result; // { saved, file }
+}
+
+```
+
+## dashboard/js/app.js
+
+```javascript
+// ==========================================
+// js/app.js - ENTRY POINT (the only script index.html loads)
+// ==========================================
+// BOOT:
+//   1. Render the AI agent card grid (ui/agents.js)
+//   2. Build ONE persistent floating chat widget (classes/chat-window.js
+//      in flyout mode) that sits in the corner of the screen. It targets
+//      the first agent by default and can switch agents via the dropdown
+//      in its header. Clicking an agent card also switches + expands it.
+//      The ChatWindow ONLY renders; all AI/session/persist logic lives here.
+//   (All configuration/settings now live on /static/config.html.)
+//
+// FOLDER MAP:
+//   js/app.js                        -> boot + wiring (this file)
+//   js/logic/                        -> pure logic (models, chat-formatter)
+//   js/classes/ChatSession.js        -> chat data model (no DOM)
+//   js/classes/chat-window.js        -> reusable flyout chat engine
+//   js/api/                          -> every server call (api.js)
+//   js/ui/                           -> agents, markdown, appearance (+ config-page)
+
+import { renderAgents } from "./ui/agents.js";
+import { applyAppearance } from "./ui/appearance.js";
+import { renderHeaderNav } from "./ui/header-nav.js";
+import { ChatSession } from "./classes/ChatSession.js";
+import { ChatFactory } from "./classes/chat-window.js";
+import { renderMarkdown } from "./ui/markdown.js";
+import { renderInterfaceIndicator } from "./ui/interface-indicator.js";
+import * as api from "./api/api.js";
+
+// ---- app-level state ----
+let settings = {};            // cached app settings (chatSavePath, defaults)
+let agents = [];              // the list of discovered agents
+let widget = null;            // the single persistent ChatWindow (flyout)
+let activeAgentId = null;     // which agent the widget is currently talking to
+
+// One ChatSession per agent so history survives switching agents in the
+// single widget. Sending routes through the currently active session.
+const agentSessions = new Map(); // agentId -> ChatSession
+
+// Auto-"say hi" feature (experimental, may be removed).
+const AUTO_HI_TEXT = "hi";     // message injected into a brand-new chat
+const AUTO_HI_DEFAULT = true;  // default state of the auto-hi toggle
+
+// ---- boot ----
+async function boot() {
+    // 0. Cache server settings and apply the stored appearance (font + size)
+    //    to THIS page right away - chat.html applies its own copy on load.
+    try {
+        settings = await api.loadAppSettings();
+    } catch (_) {
+        settings = {};
+    }
+    applyAppearance(settings);
+
+    // 0b. Header: shared nav + the editable H1/tagline from about/about.json.
+    //     Fail-soft - a stale server or missing /api/about keeps the defaults
+    //     already written into the HTML.
+    const navSlot = document.getElementById("app-nav");
+    if (navSlot) {
+        navSlot.replaceChildren(renderHeaderNav("dashboard"));
+    }
+    try {
+        const about = await api.getAbout();
+        setPageTitle(about.title, about.subtitle);
+    } catch (_) {
+        /* keep the hardcoded defaults */
+    }
+
+    // 0c. Interface pill: "N update modules" in the header (hidden on servers
+    //     without /api/interface/* or when nothing is loaded).
+    renderInterfaceIndicator({
+        container: document.querySelector(".app-header-row"),
+        onMesh: true,
+    });
+
+    // 1. Render agent cards (returns the full agent list).
+    agents = await renderAgents({
+        containerId: "agent-cards",
+        statusId: "agent-status-area",
+        onSelect: onAgentSelected,
+    });
+
+    // 2. Create the persistent corner widget for the first agent (if any).
+    //    (The old inline config panel moved to /static/config.html - see the
+    //    "Settings" link in the header.)
+
+    // 3. Create the persistent corner widget for the first agent (if any).
+    if (agents.length > 0) {
+        buildWidget();
+    }
+}
+
+/** Update the header H1 + tagline (fall back to the current text when a
+ *  value is empty). Directly driven by about/about.json on the server. */
+function setPageTitle(title, subtitle) {
+    const titleEl = document.getElementById("app-title");
+    const taglineEl = document.getElementById("app-tagline");
+    if (titleEl && title && title.trim()) {
+        titleEl.textContent = title.trim();
+    }
+    if (taglineEl && subtitle && subtitle.trim()) {
+        taglineEl.textContent = subtitle.trim();
+    }
+    // Browser-tab title: "Genessis - <subtitle>" (falls back to the raw title).
+    const cleanSub = (subtitle && subtitle.trim()) ? " \u2014 " + subtitle.trim() : "";
+    document.title = ((title && title.trim()) ? title.trim() : "") + cleanSub;
+}
+
+/** Create the single persistent flyout widget + wire its agent switcher. */
+function buildWidget() {
+    const defaultAgent = agents[0];
+    const config = buildAgentConfig(defaultAgent);
+    config.layout.flyout = true;
+
+    widget = ChatFactory.create(config);
+
+    // Feed the switcher with all selectable agents.
+    widget.setAgents(agents);
+
+    // Present the default agent (fresh session, no auto-hi on startup).
+    selectSession(defaultAgent, false);
+
+    // Route sends to the active session.
+    widget.onSend((text) => {
+        const session = activeSession();
+        if (session) {
+            handleSend(session, widget, text);
+        }
+    });
+
+    widget.onAction("saveChat", () => {
+        const session = activeSession();
+        if (session) {
+            handleSaveAction(session, widget);
+        }
+    });
+    widget.onAction("clearChat", () => {
+        const session = activeSession();
+        if (session) {
+            handleClearAction(session, widget);
+        }
+    });
+
+    // Switcher in the widget header changes the active agent.
+    widget.onSwitchAgent((agentId) => {
+        const agent = agents.find((a) => String(a.id) === String(agentId));
+        if (agent) {
+            switchToAgent(agent, false);
+        }
+    });
+}
+
+/** The ChatSession for the agent currently shown in the widget. */
+function activeSession() {
+    return activeAgentId ? agentSessions.get(activeAgentId) : null;
+}
+
+// ---- agent card click -> switch + expand the widget ----
+function onAgentSelected(agent) {
+    if (!widget) {
+        return;
+    }
+    switchToAgent(agent);
+    if (!widget.isOpen) {
+        widget.open();
+    }
+}
+
+/** (Re)point the widget at an agent, keeping its per-agent session. */
+function switchToAgent(agent, autoHi = true) {
+    if (!widget) {
+        return;
+    }
+    widget.setActiveAgent(agent.id);
+    selectSession(agent, autoHi);
+}
+
+/**
+ * Ensure a ChatSession exists for the agent and load it into the widget.
+ * The auto-"say hi" fires only the first time we meet this agent, and only
+ * once the widget is expanded so the injected message can be sent.
+ */
+function selectSession(agent, autoHi = false) {
+    let session = agentSessions.get(agent.id);
+    const created = !session;
+    if (!session) {
+        session = new ChatSession({
+            agentId: agent.id,
+            agentName: agent.name,
+            model: settings.defaultModel || "",
+        });
+        agentSessions.set(agent.id, session);
+    }
+    activeAgentId = agent.id;
+
+    if (created && autoHi && widget && widget.isOpen && widget.getPanelValues().autoHi === true) {
+        // Prefill "hi" so the chat starts itself after you've named it (the
+        // "Chat title" field in the panel). No auto-send: you get a chance
+        // to title the chat first.
+        widget.setInputValue(AUTO_HI_TEXT);
+        widget._input?.focus();
+    }
+    return created;
+}
+
+/**
+ * The entity config that drives the chat window for one AI agent.
+ * The right panel is generated fully from `sections` - no HTML edits
+ * needed to change an agent's controls/branding.
+ */
+function buildAgentConfig(agent) {
+    const commitOnSave =
+        settings.rag && typeof settings.rag.commitOnSave === "boolean"
+            ? settings.rag.commitOnSave
+            : false;
+    return {
+        id: agent.id,
+        type: "agent",
+        name: agent.name,
+        title: agent.name,
+        description: agent.description || "AI agent",
+        layout: { rightPanel: true, resizable: true, collapsible: true, panelWidth: 300 },
+        renderMarkdown,
+        headerToggle: {
+            name: "ragCommit",
+            label: "Save to memory",
+            value: commitOnSave,
+        },
+        sections: [
+            {
+                title: "Agent Information",
+                fields: [
+                    { type: "text", label: "Status", value: "Ready" },
+                    { type: "text", label: "Category", value: agent.mode || "General" },
+                ],
+            },
+            {
+                title: "Chat",
+                fields: [
+                    {
+                        type: "input",
+                        name: "chatTitle",
+                        label: "Chat title",
+                        placeholder: "Name this chat...",
+                        value: "",
+                    },
+                ],
+            },
+            {
+                title: "Actions",
+                fields: [
+                    { type: "button", label: "Save chat", action: "saveChat" },
+                    { type: "button", label: "Clear chat", action: "clearChat" },
+                ],
+            },
+            {
+                title: "Behavior",
+                fields: [
+                    {
+                        type: "toggle",
+                        name: "autoHi",
+                        label: '"Say hi" on a new chat',
+                        value: AUTO_HI_DEFAULT,
+                    },
+                ],
+            },
+        ],
+    };
+}
+
+// ---- send flow (the ChatWindow already showed the user bubble) ----
+async function handleSend(session, chat, text) {
+    session.addUserMessage(text);
+    chat.setWaiting(true);
+
+    try {
+        const panelValues = widget.getPanelValues();
+        const userTitle = String(panelValues.chatTitle || "").trim();
+
+        const result = await api.sendChat({
+            message: text,
+            agentId: session.agentId,
+            model: session.model,
+            history: session.getApiHistory(),
+            sessionId: session.sessionId || "",
+            title: userTitle,
+            newChat: !session.sessionId,
+            rag: Boolean(panelValues.ragCommit),
+        });
+
+        session.addAssistantMessage(result.reply);
+        chat.addAssistantMessage(result.reply, session.agentName);
+        session.setSessionId(result.session_id, result.title);
+        chat.setSaveStatus(
+            session.sessionId ? "Chat tracked on the server." : "Chat saved.",
+            "ok"
+        );
+    } catch (error) {
+        chat.addSystemMessage(`Sorry - that failed. ${error.message}`);
+        chat.setSaveStatus(`Send failed: ${error.message}`, "error");
+    } finally {
+        chat.setWaiting(false);
+    }
+}
+
+// ---- save handlers ----
+/**
+ * "Save chat" action: finalize the active chat on the server. The server
+ * writes the transcript to data/chatlog/agent-text-records/<title>[-v].txt and
+ * logs it. If you keep chatting after saving, the next save writes the next
+ * version.
+ *
+ * If no subject was set in the panel, prompt for one so every chat ends up
+ * meaningfully named (works the same for every agent).
+ */
+async function handleSaveAction(session, chat) {
+    if (!session || !session.sessionId) {
+        chat.setSaveStatus("No active chat to save yet.", "error");
+        return;
+    }
+
+    try {
+        const panelValues = widget.getPanelValues();
+        let title = String(panelValues.chatTitle || "").trim();
+
+        if (!title) {
+            const subject = window.prompt(
+                "Name this chat:",
+                session.title !== "New chat" ? session.title : ""
+            );
+            if (subject !== null && subject.trim()) {
+                title = subject.trim();
+            }
+        }
+
+        const result = await api.endChat({
+            title,
+            rag: Boolean(widget.getPanelValues().ragCommit),
+        });
+        chat.setSaveStatus(
+            result.saved
+                ? `Saved: ${result.file} (v${result.version})`
+                : `Save failed: ${result.error || "no active chat"}`,
+            result.saved ? "ok" : "error"
+        );
+    } catch (error) {
+        chat.setSaveStatus(`Save failed: ${error.message}`, "error");
+    }
+}
+
+/** "Clear chat" action: wipe the session data and the rendered bubbles. */
+function handleClearAction(session, chat) {
+    session.newChat();
+    chat.clearMessages();
+    chat.setSaveStatus("Chat cleared.", "ok");
+}
+
+// ---- go ----
+boot();
+
+```
+
+## dashboard/js/classes/ChatSession.js
+
+```javascript
+// ==========================================
+// classes/ChatSession.js - ONE CHAT SESSION (single source of truth)
+// ==========================================
+// There is only ONE ChatSession at a time in the whole app. It talks
+// to a single agent and owns:
+//   - the chosen agent + model
+//   - the full ordered list of messages
+//   - the session title (from the first user message)
+//   - helpers to send, receive, count and export the conversation
+//
+// It NEVER touches the DOM. Rendering/sending live in the reusable
+// chat-window.js engine (classes/chat-window.js).
+
+import {
+    createMessage,
+    buildApiHistory,
+} from "../logic/models.js";
+import {
+    buildTranscript,
+    buildTranscriptFileName,
+    countInteractions,
+} from "../logic/chat-formatter.js";
+
+export class ChatSession {
+    /**
+     * @param {object} opts
+     * @param {string} opts.agentId      - agent_library folder id
+     * @param {string} opts.agentName    - display name
+     * @param {string} opts.model        - ollama model id ("" = server default)
+     */
+    constructor({ agentId = "", agentName = "", model = "" } = {}) {
+        this.agentId = agentId;
+        this.agentName = agentName;
+        this.model = model;
+        this.title = "New chat";
+        this.messages = [];           // ordered list of message objects
+        this.startedAt = new Date().toISOString();
+        this.isWaiting = false;       // true while an LLM reply is pending
+        this.sessionId = null;        // server-side session id (null = not started yet)
+    }
+
+    /** Bind the chat to a server-tracked session and remember its title. */
+    setSessionId(sessionId, title) {
+        this.sessionId = sessionId || null;
+        if (title) {
+            this.title = title;
+        }
+    }
+
+    /** Empty when no messages yet. */
+    get isEmpty() {
+        return this.messages.length === 0;
+    }
+
+    /** True when this session is bound to a real agent. */
+    get hasAgent() {
+        return Boolean(this.agentId);
+    }
+
+    /**
+     * Add a user message. The first message titles the session
+     * (truncated to 50 chars). Returns the created message.
+     */
+    addUserMessage(text) {
+        const message = createMessage({ role: "user", author: "You", text });
+        this.messages.push(message);
+
+        if (this.messages.filter((m) => m.role === "user").length === 1) {
+            this.title = this._firstWords(text, 50);
+        }
+
+        return message;
+    }
+
+    /** Add the assistant reply. Returns the created message. */
+    addAssistantMessage(text, author = this.agentName || "AI") {
+        const message = createMessage({
+            role: "assistant",
+            author,
+            text: text || "(no reply)",
+        });
+        this.messages.push(message);
+        return message;
+    }
+
+    /**
+     * The list of turns sent to /api/chat: recent messages as
+     * [{ role, content }, ...] (max 20 to keep requests small).
+     */
+    getApiHistory() {
+        return buildApiHistory(this.messages);
+    }
+
+    /** Number of interactions between LLM and user (see formatter). */
+    get interactionCount() {
+        return countInteractions(this.messages);
+    }
+
+    /** Full .txt transcript body (date/title/interactions + messages). */
+    get transcript() {
+        return buildTranscript(this);
+    }
+
+    /** Suggested file name for the saved transcript. */
+    get transcriptFileName() {
+        return buildTranscriptFileName(this);
+    }
+
+    /** Human-friendly reset for a brand-new conversation with same agent. */
+    newChat() {
+        this.messages = [];
+        this.title = "New chat";
+        this.startedAt = new Date().toISOString();
+        this.isWaiting = false;
+        this.sessionId = null;
+    }
+
+    /* ---- private ---- */
+
+    _firstWords(text, maxChars) {
+        if (!text) {
+            return "New chat";
+        }
+        if (text.length <= maxChars) {
+            return text;
+        }
+        return text.slice(0, maxChars).trimEnd() + "...";
+    }
+}
+
+```
+
+## dashboard/js/classes/chat-window.js
+
+```javascript
+// ================================================================
+// classes/chat-window.js
+// REUSABLE POP-OUT AI CHAT WINDOW ENGINE
+// ================================================================
+// A self-contained, configuration-driven floating chat window. It is
+// fully independent from any AI backend: the calling app registers a
+// "send" handler plus per-action handlers, and this component only
+// renders, drags, resizes, and emits events.
+//
+//   import { ChatFactory } from "./classes/chat-window.js";
+//
+//   const chat = ChatFactory.create({ name, sections, ... });
+//   chat.onSend((text, chat) => { /* call your AI / store */ });
+//   chat.onAction("savePlan", () => { /* do something */ });
+//   chat.open();
+//
+// RESPONSIBILITY SPLIT (intentional):
+//   chat-window.js  -> rendering, DOM, layout, drag/resize, events
+//   the app         -> AI calls, session state, persistence, agent logic
+//
+// Every DOM class is prefixed with `cw-` so this component can be copied
+// into any project without colliding with existing styles. Its CSS lives
+// in styles.css under "SECTION 8: CHAT WINDOW ENGINE".
+//
+// Supported message roles: user | assistant | agent | system - each
+// rendered with its own bubble styling.
+
+/* ================================================================
+   1. UTILITY FUNCTIONS
+   ================================================================ */
+
+/** Create a DOM element with a few convenient options. */
+function createElement(tag, options = {}) {
+    const element = document.createElement(tag);
+    if (options.className) {
+        element.className = options.className;
+    }
+    if (options.text !== undefined && options.text !== null) {
+        element.textContent = options.text;
+    }
+    if (options.title) {
+        element.title = options.title;
+    }
+    if (options.placeholder) {
+        element.placeholder = options.placeholder;
+    }
+    if (options.ariaLabel) {
+        element.setAttribute("aria-label", options.ariaLabel);
+    }
+    if (options.dataset) {
+        Object.assign(element.dataset, options.dataset);
+    }
+    return element;
+}
+
+/** Small labelled button (used by the right panel). */
+function createButton(label, onClick, className = "cw-panel-button") {
+    const button = createElement("button", { className: className, text: label });
+    button.type = "button";
+    if (typeof onClick === "function") {
+        button.addEventListener("click", onClick);
+    }
+    return button;
+}
+
+/** Small text input helper. */
+function createInput(attrs = {}) {
+    const input = document.createElement("input");
+    if (attrs.type) {
+        input.type = attrs.type;
+    }
+    if (attrs.name) {
+        input.name = attrs.name;
+    }
+    if (attrs.placeholder) {
+        input.placeholder = attrs.placeholder;
+    }
+    if (attrs.value !== undefined && attrs.value !== null) {
+        input.value = attrs.value;
+    }
+    return input;
+}
+
+/** Build a <select> from [{value,label}] or ["plain","strings"]. */
+function createSelect(options = [], selected = "") {
+    const select = document.createElement("select");
+    options.forEach((option) => {
+        const opt = document.createElement("option");
+        if (option && typeof option === "object") {
+            opt.value = option.value !== undefined ? option.value : option.label;
+            opt.textContent = option.label !== undefined ? option.label : option.value;
+        } else {
+            opt.value = option;
+            opt.textContent = option;
+        }
+        if (String(opt.value) === String(selected)) {
+            opt.selected = true;
+        }
+        select.appendChild(opt);
+    });
+    return select;
+}
+
+/** Clamp a number into [min, max]. Safe when min > max (tiny screens). */
+function clampValue(value, min, max) {
+    value = Number(value);
+    if (min > max) {
+        return value;
+    }
+    return Math.min(Math.max(value, min), max);
+}
+
+/** First letters of a name for the avatar, e.g. "Planner Agent" -> "PA". */
+function initials(name) {
+    if (!name) {
+        return "";
+    }
+    const words = String(name).trim().split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+        return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+}
+
+/** Short unique id, e.g. "msg-l8x2p9k3f". */
+function makeId(prefix = "id") {
+    return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Friendly time: today -> "14:05", else "Jun 3, 14:05". */
+function formatTime(isoString) {
+    const date = isoString ? new Date(isoString) : new Date();
+    const now = new Date();
+    const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (date.toDateString() === now.toDateString()) {
+        return time;
+    }
+    return `${date.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
+}
+
+/**
+ * Inline SVG icon set (Feather-style). Returns an <svg> element.
+ * Markup is developer-authored constants (never user input), so the
+ * innerHTML here is safe.
+ */
+const ICON_PATHS = {
+    close: '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>',
+    minus: '<line x1="5" y1="12" x2="19" y2="12"></line>',
+    panel: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="15" y1="3" x2="15" y2="21"></line>',
+    chevronDown: '<polyline points="4 7 12 15 20 7"></polyline>',
+    chevronUp: '<polyline points="18 15 12 7 6 15"></polyline>',
+    send: '<line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>',
+    chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
+    monitor: '<rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>',
+    message: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>',
+};
+
+function createIcon(name, size = 14) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.innerHTML = ICON_PATHS[name] || "";
+    return svg;
+}
+
+/**
+ * Default markdown renderer. chat-window.js is self-contained, so the
+ * built-in renderer only shows plain text. Pass `renderMarkdown` in the
+ * config (or call `setMarkdownRenderer`) to plug in a real parser.
+ */
+function defaultRenderMarkdown(text) {
+    const p = document.createElement("p");
+    p.textContent = text ?? "";
+    return p;
+}
+
+// ================================================================
+//   2. RIGHT PANEL
+// ================================================================
+// The reusable side panel. Sections + fields are generated dynamically
+// from the entity's config object - never hardcoded for one AI agent.
+// It can be hidden and resized horizontally via a small drag handle.
+
+const PANEL_MIN_WIDTH = 190;
+
+class RightPanel {
+    /**
+     * @param {object} config   - { width?, sections? }
+     * @param {ChatWindow} chatWindow - back-reference for actions/limits
+     */
+    constructor(config, chatWindow) {
+        this.config = config;
+        this.chatWindow = chatWindow;
+        this.sections = config.sections || [];
+        this.element = null;
+        this.isVisible = true;
+        this._handlers = { onAction: null, onToggle: null, onInput: null };
+    }
+
+    /** Register a named callback used by the generated controls. */
+    setHandler(name, fn) {
+        this._handlers[name] = typeof fn === "function" ? fn : null;
+    }
+
+    /** Build the whole panel: sections from config + a drag handle. */
+    create() {
+        const panel = createElement("aside", { className: "cw-panel" });
+        panel.style.width = `${clampValue(this.config.width || 300, PANEL_MIN_WIDTH, 700)}px`;
+        this.element = panel;
+
+        this.renderSections();
+
+        if (this.chatWindow.layout.resizable) {
+            const handle = createElement("div", {
+                className: "cw-panel-drag",
+                title: "Drag to resize the panel",
+            });
+            panel.appendChild(handle);
+            this._bindDrag(handle);
+        }
+
+        return panel;
+    }
+
+    /** Rebuild all sections (used at creation time). */
+    renderSections() {
+        if (!this.element) {
+            return;
+        }
+        const wrapper = this.element.querySelector(".cw-panel-sections");
+        if (wrapper) {
+            wrapper.remove();
+        }
+        const shell = createElement("div", { className: "cw-panel-sections" });
+        this.sections.forEach((section) => shell.appendChild(this.createSection(section)));
+        this.element.appendChild(shell);
+    }
+
+    /** One section = optional collapse header + a list of fields. */
+    createSection(section) {
+        const box = createElement("section", { className: "cw-panel-section" });
+
+        const head = createElement("div", { className: "cw-panel-section-head" });
+        const title = createElement("span", { text: section.title || "" });
+
+        if (section.collapsible) {
+            const button = createElement("button", {
+                className: "cw-panel-section-toggle",
+                title: "Toggle section",
+            });
+            button.type = "button";
+            button.appendChild(title);
+            button.appendChild(createIcon("chevronDown", 13));
+            button.addEventListener("click", () => box.classList.toggle("cw-collapsed"));
+            head.appendChild(button);
+        } else {
+            head.appendChild(title);
+        }
+
+        const body = createElement("div", { className: "cw-panel-section-body" });
+        (section.fields || []).forEach((field) => body.appendChild(this.createField(field)));
+
+        box.appendChild(head);
+        box.appendChild(body);
+        return box;
+    }
+
+    /** Dispatch a single config field to the matching builder. */
+    createField(field) {
+        switch (field.type || "text") {
+        case "text":
+            return this._fieldText(field);
+        case "input":
+            return this._fieldInput(field);
+        case "select":
+            return this._fieldSelect(field);
+        case "toggle":
+            return this._fieldToggle(field);
+        case "button":
+            return this._fieldButton(field);
+        case "divider":
+            return createElement("hr", { className: "cw-divider" });
+        default:
+            return this._fieldText(field);
+        }
+    }
+
+    /* ---------- field builders ---------- */
+
+    _fieldText(field) {
+        const row = createElement("div", { className: "cw-field cw-field-text" });
+        if (field.label) {
+            row.appendChild(createElement("span", { className: "cw-field-label", text: field.label }));
+        }
+        row.appendChild(createElement("span", {
+            className: "cw-field-value",
+            text: field.value !== undefined && field.value !== null ? field.value : "—",
+        }));
+        return row;
+    }
+
+    _fieldInput(field) {
+        const wrap = createElement("div", { className: "cw-field cw-field-input" });
+        if (field.label) {
+            wrap.appendChild(createElement("label", { className: "cw-field-label", text: field.label }));
+        }
+        const input = createInput({ type: "text", placeholder: field.placeholder || "" });
+        if (field.value !== undefined && field.value !== null) {
+            input.value = field.value;
+        }
+        if (field.name) {
+            input.dataset.name = field.name;
+        }
+        input.addEventListener("input", () => this._emit("onInput", field, input.value));
+        wrap.appendChild(input);
+        return wrap;
+    }
+
+    _fieldSelect(field) {
+        const wrap = createElement("div", { className: "cw-field cw-field-select" });
+        if (field.label) {
+            wrap.appendChild(createElement("label", { className: "cw-field-label", text: field.label }));
+        }
+        const select = createSelect(field.options || [], field.value);
+        if (field.name) {
+            select.dataset.name = field.name;
+        }
+        select.addEventListener("change", () => this._emit("onInput", field, select.value));
+        wrap.appendChild(select);
+        return wrap;
+    }
+
+    _fieldToggle(field) {
+        const row = createElement("div", { className: "cw-field cw-field-toggle" });
+        if (field.label) {
+            row.appendChild(createElement("span", { className: "cw-field-label", text: field.label }));
+        }
+        const label = createElement("label", { className: "cw-switch" });
+        const checkbox = createInput({ type: "checkbox" });
+        checkbox.checked = Boolean(field.value);
+        if (field.name) {
+            checkbox.dataset.name = field.name;
+        }
+        checkbox.addEventListener("change", () => this._emit("onToggle", field, checkbox.checked));
+        label.appendChild(checkbox);
+        label.appendChild(createElement("span", { className: "cw-switch-track" }));
+        row.appendChild(label);
+        return row;
+    }
+
+    _fieldButton(field) {
+        const button = createButton(field.label || "Action", () => {
+            // Route through the parent so app-registered handlers fire.
+            this.chatWindow.triggerAction(field.action);
+        });
+        if (field.title) {
+            button.title = field.title;
+        }
+        if (field.disabled) {
+            button.disabled = true;
+        }
+        button.dataset.action = field.action || "";
+        return button;
+    }
+
+    /* ---------- helpers ---------- */
+
+    _emit(name, ...args) {
+        if (typeof this._handlers[name] === "function") {
+            this._handlers[name](...args);
+        }
+    }
+
+    /** Show or hide the whole panel (the chat area expands automatically). */
+    setVisible(visible) {
+        this.isVisible = Boolean(visible);
+        if (this.element) {
+            this.element.classList.toggle("cw-panel-hidden", !this.isVisible);
+        }
+    }
+
+    /** Toggle visibility; returns the new visible state. */
+    toggle() {
+        this.setVisible(!this.isVisible);
+        return this.isVisible;
+    }
+
+    /** Collect the current value of every control that has a `name`. */
+    getValues() {
+        const values = {};
+        if (!this.element) {
+            return values;
+        }
+        this.element.querySelectorAll("[data-name]").forEach((node) => {
+            if (node.type === "checkbox") {
+                values[node.dataset.name] = node.checked;
+            } else {
+                values[node.dataset.name] = node.value;
+            }
+        });
+        return values;
+    }
+
+    /**
+     * Horizontal resize: dragging the handle changes the panel width.
+     * The chat area is a flex sibling, so it fills the freed space.
+     */
+    _bindDrag(handle) {
+        handle.style.touchAction = "none";
+        handle.addEventListener("pointerdown", (event) => {
+            event.preventDefault();
+            const startX = event.clientX;
+            const startWidth = this.element.getBoundingClientRect().width;
+            const maxWidth = Math.max(
+                PANEL_MIN_WIDTH,
+                this.chatWindow.element.getBoundingClientRect().width * 0.45
+            );
+
+            const onMove = (moveEvent) => {
+                const nextWidth = clampValue(
+                    startWidth - (moveEvent.clientX - startX),
+                    PANEL_MIN_WIDTH,
+                    maxWidth
+                );
+                this.element.style.width = `${nextWidth}px`;
+            };
+            const onUp = () => {
+                document.removeEventListener("pointermove", onMove);
+                document.removeEventListener("pointerup", onUp);
+            };
+            document.addEventListener("pointermove", onMove);
+            document.addEventListener("pointerup", onUp);
+        });
+    }
+}
+
+// ================================================================
+//   3. CHAT WINDOW
+// ================================================================
+// The main controller. Owns one complete chat instance: the pop-out
+// window, header, message list, composer, right panel, dragging,
+// resizing and the event/action system. It contains NO AI logic.
+
+const WINDOW_MIN_WIDTH = 360;
+const WINDOW_MIN_HEIGHT = 460;
+const VIEWPORT_MARGIN = 8;
+
+class ChatWindow {
+    constructor(config = {}) {
+        this.config = config;
+
+        this.id = config.id || makeId("chat");
+        this.type = config.type || "agent";
+        this.name = config.name || "Assistant";
+        this.title = config.title || this.name;
+        this.description = config.description || "";
+        this.meta = config.meta || {};
+
+        // Flyout mode renders the chat as a persistent corner widget that
+        // "flies out" (expands) when the launcher is clicked. It uses the
+        // same engine but stays anchored bottom-right, shows no backdrop,
+        // and can switch which agent it is talking to.
+        this._flyout = Boolean(config.layout && config.layout.flyout);
+
+        this.layout = {
+            rightPanel: this._flyout ? false : (config.layout ? config.layout.rightPanel !== false : true),
+            resizable: this._flyout ? false : (config.layout ? config.layout.resizable !== false : true),
+            collapsible: config.layout ? config.layout.collapsible !== false : true,
+            width: (config.layout && config.layout.width) || 780,
+            height: (config.layout && config.layout.height) || 560,
+            panelWidth: (config.layout && config.layout.panelWidth) || 300,
+        };
+        this.sections = config.sections || [];
+
+        this.messages = [];
+        this.isOpen = false;
+        this.isMinimized = false;
+        this.isWaiting = false;
+        this.isPanelVisible = this.layout.rightPanel;
+
+        // Agent switcher (flyout mode): list of selectable agents + id.
+        this.agentOptions = [];
+        this.agentChangeHandler = null;
+
+        this.actionHandlers = {};
+        this.sendHandler = null;
+        this.toggleHandler = null;
+        this.renderMarkdown =
+            typeof config.renderMarkdown === "function"
+                ? config.renderMarkdown
+                : defaultRenderMarkdown;
+
+        this.element = null;      // .chat-window (the pop-up; fixed position)
+        this.launcher = null;     // floating button shown when closed
+        this.panel = null;        // RightPanel instance
+
+        // Cache DOM refs we touch in the hot paths.
+        this._messageBody = null;
+        this._input = null;
+        this._sendButton = null;
+        this._saveStatus = null;
+        this._panelBtn = null;
+        this._minBtn = null;
+        this._agentSelect = null;
+        this._headerToggle = null;
+        this._widgetLauncher = null;
+        this._typingEl = null;
+        this._welcomeEl = null;
+        this._sizeBeforeMinimize = null;
+
+        this._build();
+    }
+
+    /* ---------- DOM construction ---------- */
+
+    _build() {
+        const root = createElement("div", {
+            className: this._flyout
+                ? "chat-window cw-widget cw-collapsed"
+                : "chat-window cw-hidden",
+        });
+        if (!this._flyout) {
+            root.style.width = `${this.layout.width}px`;
+            root.style.height = `${this.layout.height}px`;
+        }
+
+        root.appendChild(this._buildHeader());
+        root.appendChild(this._buildBody());
+        root.appendChild(this._buildComposer());
+
+        if (this.layout.resizable) {
+            this._attachResizeHandles(root);
+        }
+
+        if (this._flyout) {
+            this._widgetLauncher = this._buildWidgetLauncher();
+            root.appendChild(this._widgetLauncher);
+        }
+
+        this.element = root;
+        document.body.appendChild(root);
+
+        // In flyout mode there is no backdrop (the widget stays lightweight
+        // and the page underneath remains usable) and no separate launcher.
+        if (!this._flyout) {
+            this._backdrop = this._buildBackdrop();
+            document.body.appendChild(this._backdrop);
+
+            this.launcher = this._buildLauncher();
+            document.body.appendChild(this.launcher);
+        }
+
+        this._bindWindow();
+        this._renderWelcome();
+    }
+
+    /** Persistent corner button for flyout mode (always visible). */
+    _buildWidgetLauncher() {
+        const button = createElement("button", {
+            className: "cw-widget-launcher",
+            type: "button",
+            ariaLabel: "Open chat",
+            title: "Open chat",
+        });
+        button.appendChild(createIcon("chat", 22));
+        return button;
+    }
+
+    _buildHeader() {
+        const header = createElement("header", { className: "cw-window-header" });
+
+        this._avatar = createElement("div", { className: "cw-window-avatar" });
+        this._avatar.textContent = initials(this.name);
+        header.appendChild(this._avatar);
+
+        const info = createElement("div", { className: "cw-window-info" });
+        this._nameEl = createElement("strong", { text: this.name });
+        this._subEl = createElement("small", {
+            text: this.title || this.description || this.type,
+        });
+        info.appendChild(this._nameEl);
+        info.appendChild(this._subEl);
+
+        const actions = createElement("div", { className: "cw-window-actions" });
+
+        if (this.layout.rightPanel && this.layout.collapsible) {
+            this._panelBtn = createElement("button", {
+                className: "cw-icon-btn",
+                title: "Show or hide the side panel",
+                ariaLabel: "Toggle side panel",
+            });
+            this._panelBtn.type = "button";
+            this._panelBtn.setAttribute("aria-pressed", String(this.isPanelVisible));
+            this._panelBtn.appendChild(createIcon("panel"));
+            actions.appendChild(this._panelBtn);
+        }
+
+        // Optional "Observe" button: pops the Agent Monitor window open so
+        // you can watch this agent's tool activity live. Enabled by passing
+        // a `onObserve` callback in the config (see the dashboard flyout).
+        if (typeof this.config.onObserve === "function") {
+            const observeBtn = createElement("button", {
+                className: "cw-icon-btn",
+                title: "Open the Agent Monitor",
+                ariaLabel: "Open the Agent Monitor",
+            });
+            observeBtn.type = "button";
+            observeBtn.appendChild(createIcon("monitor", 14));
+            observeBtn.addEventListener("click", () => {
+                try {
+                    this.config.onObserve();
+                } catch (_) { /* monitor open failures must never break chat */ }
+            });
+            actions.appendChild(observeBtn);
+        }
+
+        this._minBtn = createElement("button", {
+            className: "cw-icon-btn",
+            title: "Minimize",
+            ariaLabel: "Minimize window",
+        });
+        this._minBtn.type = "button";
+        this._minBtn.appendChild(createIcon("minus"));
+        actions.appendChild(this._minBtn);
+
+        const closeBtn = createElement("button", {
+            className: "cw-icon-btn cw-close",
+            title: "Close",
+            ariaLabel: "Close window",
+        });
+        closeBtn.type = "button";
+        closeBtn.appendChild(createIcon("close"));
+        actions.appendChild(closeBtn);
+
+        header.appendChild(info);
+
+        // In flyout mode, let the user pick which agent to talk to.
+        if (this._flyout) {
+            this._agentSelect = createSelect([], this.name);
+            this._agentSelect.className = "cw-agent-select";
+            this._agentSelect.setAttribute("aria-label", "Switch agent");
+            this._agentSelect.addEventListener("change", () => {
+                if (typeof this.agentChangeHandler === "function") {
+                    this.agentChangeHandler(this._agentSelect.value, this);
+                }
+            });
+            header.appendChild(this._agentSelect);
+        }
+
+        // Optional config-driven toggle rendered in the header (used by the
+        // flyout widget, where the side panel is disabled). Value is read
+        // through getPanelValues() under its `name`.
+        if (this.config.headerToggle) {
+            const toggle = this.config.headerToggle;
+            const label = createElement("label", { className: "cw-header-toggle" });
+            label.title = toggle.label || "";
+            const checkbox = createInput({ type: "checkbox" });
+            checkbox.checked = Boolean(toggle.value);
+            if (toggle.name) {
+                checkbox.dataset.name = toggle.name;
+            }
+            label.appendChild(checkbox);
+            label.appendChild(createElement("span", {
+                className: "cw-header-toggle-label",
+                text: toggle.label || "",
+            }));
+            header.appendChild(label);
+            this._headerToggle = checkbox;
+        }
+
+        header.appendChild(actions);
+        return header;
+    }
+
+    _buildBody() {
+        const body = createElement("div", { className: "cw-window-body" });
+
+        const chatArea = createElement("div", { className: "cw-chat-area" });
+        this._messageBody = createElement("div", { className: "cw-message-body" });
+        chatArea.appendChild(this._messageBody);
+        body.appendChild(chatArea);
+
+        if (this.layout.rightPanel) {
+            this.panel = new RightPanel(
+                { width: this.layout.panelWidth, sections: this.sections },
+                this
+            );
+            body.appendChild(this.panel.create());
+        }
+
+        return body;
+    }
+
+    _buildComposer() {
+        const composer = createElement("div", { className: "cw-composer" });
+
+        this._saveStatus = createElement("div", { className: "cw-save-status" });
+
+        this._input = document.createElement("textarea");
+        this._input.className = "cw-input";
+        this._input.placeholder = `Message ${this.name}...`;
+        this._input.setAttribute("aria-label", "Message");
+        this._input.rows = 1;
+
+        const row = createElement("div", { className: "cw-composer-row" });
+        row.appendChild(createElement("span", {
+            className: "cw-input-hint",
+            text: "Enter sends - Shift + Enter adds a new line",
+        }));
+
+        this._sendButton = createElement("button", {
+            className: "btn btn-primary cw-send",
+            text: "Send",
+        });
+        this._sendButton.type = "button";
+
+        row.appendChild(this._sendButton);
+        composer.appendChild(this._saveStatus);
+        composer.appendChild(this._input);
+        composer.appendChild(row);
+        return composer;
+    }
+
+    _buildLauncher() {
+        const button = createElement("button", {
+            className: "btn btn-primary chat-window-launcher cw-hidden",
+            text: `Open ${this.name}`,
+        });
+        button.type = "button";
+        return button;
+    }
+
+    _buildBackdrop() {
+        const el = createElement("div", { className: "cw-backdrop cw-hidden" });
+        el.addEventListener("click", () => this.close());
+        return el;
+    }
+
+    /** Eight thin edge strips that resize the whole window. */
+    _attachResizeHandles(root) {
+        ["n", "s", "e", "w", "ne", "nw", "se", "sw"].forEach((edge) => {
+            const handle = createElement("div", {
+                className: `cw-resize cw-resize-${edge}`,
+                title: `Resize (${edge})`,
+            });
+            handle.style.touchAction = "none";
+            handle.addEventListener("pointerdown", (event) => this._beginResize(edge, event));
+            root.appendChild(handle);
+        });
+    }
+
+    /* ---------- public API ---------- */
+
+    /** Show the window (creates the launcher automatically on first build). */
+    open() {
+        if (!this.element) {
+            return;
+        }
+        this.isOpen = true;
+
+        if (this._flyout) {
+            // Expand the widget out of its collapsed corner button.
+            this.isMinimized = false;
+            this.element.classList.add("cw-expanded");
+            this.element.classList.remove("cw-collapsed", "cw-minimized");
+            if (this._widgetLauncher) {
+                this._widgetLauncher.classList.add("cw-hidden");
+            }
+            this._renderWelcome();
+            if (this._input) {
+                this._input.focus();
+            }
+            return;
+        }
+
+        this.element.classList.remove("cw-hidden");
+        if (this._backdrop) {
+            this._backdrop.classList.remove("cw-hidden");
+        }
+        if (this.launcher) {
+            this.launcher.classList.add("cw-hidden");
+        }
+        // Force layout reflow so getBoundingClientRect returns accurate values
+        // after transitioning from display: none.
+        void this.element.offsetHeight;
+        this._keepInViewport();
+
+        // On small screens the panel collapses out of the way.
+        if (window.innerWidth <= 600 && this.layout.collapsible && this.isPanelVisible) {
+            this.togglePanel(false);
+        }
+
+        this._renderWelcome();
+        if (this._input) {
+            this._input.focus();
+        }
+    }
+
+    /** Hide the window and show the launcher button again. */
+    close() {
+        this.isOpen = false;
+        this.isMinimized = false;
+
+        if (this._flyout) {
+            // Collapse back to the persistent corner button.
+            this.element.classList.add("cw-collapsed");
+            this.element.classList.remove("cw-expanded", "cw-minimized");
+            if (this._widgetLauncher) {
+                this._widgetLauncher.classList.remove("cw-hidden");
+            }
+            return;
+        }
+
+        if (this.element) {
+            this.element.classList.add("cw-hidden");
+            this.element.classList.remove("cw-minimized");
+        }
+        if (this._backdrop) {
+            this._backdrop.classList.add("cw-hidden");
+        }
+        if (this.launcher) {
+            this.launcher.classList.remove("cw-hidden");
+        }
+    }
+
+    /** Minimize to a header bar, or restore the previous size. */
+    minimize() {
+        // In flyout mode "minimize" collapses the widget back to the button.
+        if (this._flyout) {
+            if (this.isMinimized) {
+                this.open();
+            } else {
+                this.isMinimized = true;
+                this.close();
+            }
+            return;
+        }
+
+        if (this.isMinimized) {
+            this.isMinimized = false;
+            this.element.classList.remove("cw-minimized");
+            if (this._backdrop) {
+                this._backdrop.classList.remove("cw-hidden");
+            }
+            if (this._sizeBeforeMinimize) {
+                const s = this._sizeBeforeMinimize;
+                this.element.style.width = `${s.width}px`;
+                this.element.style.height = `${s.height}px`;
+                this.element.style.left = `${s.left}px`;
+                this.element.style.top = `${s.top}px`;
+            }
+            if (this._minBtn) {
+                this._minBtn.title = "Minimize";
+            }
+            if (this._input) {
+                this._input.focus();
+            }
+        } else {
+            const rect = this.element.getBoundingClientRect();
+            this._sizeBeforeMinimize = {
+                width: rect.width,
+                height: rect.height,
+                left: rect.left,
+                top: rect.top,
+            };
+            this.isMinimized = true;
+            this.element.classList.add("cw-minimized");
+            this.element.style.height = "var(--cw-header-height)";
+            if (this._backdrop) {
+                this._backdrop.classList.add("cw-hidden");
+            }
+            if (this._minBtn) {
+                this._minBtn.title = "Restore";
+            }
+        }
+    }
+
+    /** Show/hide the right panel (chat area fills the freed space). */
+    togglePanel(force) {
+        if (!this.layout.rightPanel || !this.panel) {
+            return;
+        }
+        const show = typeof force === "boolean" ? force : !this.isPanelVisible;
+        this.isPanelVisible = show;
+        this.panel.setVisible(show);
+        if (this._panelBtn) {
+            this._panelBtn.setAttribute("aria-pressed", String(show));
+            this._panelBtn.title = show ? "Hide the side panel" : "Show the side panel";
+        }
+        if (typeof this.toggleHandler === "function") {
+            this.toggleHandler(show);
+        }
+    }
+
+    /**
+     * Append an arbitrary message object and render its bubble.
+     * Shape: { id?, role, author?, content/text, timestamp? }
+     * Returns the normalized stored message.
+     */
+    addMessage(message) {
+        const normalized = {
+            id: message.id || makeId("msg"),
+            role: message.role || "assistant",
+            author: message.author || (message.role === "user" ? "You" : this.name),
+            content: message.content !== undefined ? message.content : (message.text ?? ""),
+            timestamp: message.timestamp || new Date(),
+        };
+        this.messages.push(normalized);
+        this._removeWelcome();
+        if (this._messageBody) {
+            this._messageBody.appendChild(this._buildBubble(normalized));
+        }
+        this.scrollToBottom();
+        return normalized;
+    }
+
+    addUserMessage(text) {
+        return this.addMessage({ role: "user", author: "You", content: text });
+    }
+
+    addAssistantMessage(text, author = this.name) {
+        return this.addMessage({ role: "assistant", author: author, content: text });
+    }
+
+    addSystemMessage(text) {
+        return this.addMessage({ role: "system", author: "System", content: text });
+    }
+
+    /** Clear every message and restore the welcome state. */
+    clearMessages() {
+        this.messages = [];
+        if (this._messageBody) {
+            this._messageBody.replaceChildren();
+        }
+        this._renderWelcome();
+    }
+
+    /** Enable/disable the composer and show/hide the typing indicator. */
+    setWaiting(waiting) {
+        this.isWaiting = Boolean(waiting);
+        if (this._input) {
+            this._input.disabled = this.isWaiting;
+        }
+        if (this._sendButton) {
+            this._sendButton.disabled = this.isWaiting;
+        }
+        if (this.isWaiting) {
+            this._showTyping();
+        } else {
+            this._removeTyping();
+        }
+    }
+
+    /** Small inline status line above the composer. */
+    setSaveStatus(text, kind = "") {
+        if (!this._saveStatus) {
+            return;
+        }
+        this._saveStatus.textContent = text || "";
+        this._saveStatus.className = text
+            ? `cw-save-status ${kind}`
+            : "cw-save-status";
+    }
+
+    /** Scroll the message list to the newest bubble. */
+    scrollToBottom() {
+        if (this._messageBody) {
+            this._messageBody.scrollTop = this._messageBody.scrollHeight;
+        }
+    }
+
+    /** Register the handler called with each sent message. */
+    onSend(callback) {
+        this.sendHandler = typeof callback === "function" ? callback : null;
+    }
+
+    /** Register a handler for one action name from the right panel. */
+    onAction(action, callback) {
+        if (typeof action === "object") {
+            Object.entries(action).forEach(([name, fn]) => this.onAction(name, fn));
+            return this;
+        }
+        this.actionHandlers[action] = typeof callback === "function" ? callback : null;
+        return this;
+    }
+
+    /** Optional hook fired when the right panel is shown/hidden. */
+    onTogglePanel(callback) {
+        this.toggleHandler = typeof callback === "function" ? callback : null;
+    }
+
+    /** Replace the markdown renderer after construction. */
+    setMarkdownRenderer(fn) {
+        this.renderMarkdown = typeof fn === "function" ? fn : defaultRenderMarkdown;
+    }
+
+    /** Current values of panel controls that have a `name`. */
+    getPanelValues() {
+        const values = this.panel ? this.panel.getValues() : {};
+        if (this._headerToggle) {
+            values[this._headerToggle.dataset.name] = this._headerToggle.checked;
+        }
+        return values;
+    }
+
+    /**
+     * (Flyout) Set the list of selectable agents. Each item is
+     * { id, name }. Call once with the full agent list. Does NOT change
+     * the active agent - use setActiveAgent for that.
+     */
+    setAgents(agents = []) {
+        this.agentOptions = Array.isArray(agents) ? agents : [];
+        if (!this._agentSelect) {
+            return;
+        }
+        this._agentSelect.replaceChildren();
+        this.agentOptions.forEach((agent) => {
+            const opt = createElement("option", { text: agent.name });
+            opt.value = agent.id;
+            if (String(agent.id) === String(this.config.id)) {
+                opt.selected = true;
+            }
+            this._agentSelect.appendChild(opt);
+        });
+    }
+
+    /** (Flyout) Switch the widget to a different agent by id. */
+    setActiveAgent(agentId) {
+        const agent = this.agentOptions.find((a) => String(a.id) === String(agentId));
+        if (!agent) {
+            return;
+        }
+        this.name = agent.name;
+        this.title = agent.description || agent.name;
+        this.description = agent.description || "";
+        this.config.id = agent.id;
+
+        if (this._nameEl) {
+            this._nameEl.textContent = agent.name;
+        }
+        if (this._subEl) {
+            this._subEl.textContent = this.description || this.type;
+        }
+        if (this._avatar) {
+            this._avatar.textContent = initials(agent.name);
+        }
+        if (this._input) {
+            this._input.placeholder = `Message ${agent.name}...`;
+        }
+        if (this._agentSelect) {
+            this._agentSelect.value = String(agent.id);
+        }
+        this.clearMessages();
+    }
+
+    /** (Flyout) Register the handler fired when the switcher changes. */
+    onSwitchAgent(callback) {
+        this.agentChangeHandler = typeof callback === "function" ? callback : null;
+    }
+
+    /** Fire an action that was configured on a panel button. */
+    triggerAction(action) {
+        const handler = this.actionHandlers[action];
+        if (typeof handler === "function") {
+            handler(action, this, this.getPanelValues());
+        }
+    }
+
+    /** Remove the window and launcher from the DOM entirely. */
+    destroy() {
+        if (this.element) {
+            this.element.remove();
+        }
+        if (this.launcher) {
+            this.launcher.remove();
+        }
+        this.element = null;
+        this.launcher = null;
+        this.panel = null;
+    }
+
+    /* ---------- composition ---------- */
+
+    _autogrow() {
+        const el = this._input;
+        el.style.height = "auto";
+        el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    }
+
+    /** Programmatically set the composer text (e.g. a pre-filled greeting). */
+    setInputValue(text) {
+        if (this._input) {
+            this._input.value = String(text ?? "");
+            this._autogrow();
+        }
+    }
+
+    send() {
+        const text = this._input.value.trim();
+        if (!text || this.isWaiting) {
+            return;
+        }
+        this._input.value = "";
+        this._autogrow();
+
+        // Presentation side: show the user bubble immediately.
+        this.addUserMessage(text);
+
+        if (typeof this.sendHandler === "function") {
+            this.sendHandler(text, this);
+        } else {
+            this.addSystemMessage("No send handler is registered for this chat window.");
+        }
+    }
+
+    /* ---------- internal wiring ---------- */
+
+    _bindWindow() {
+        window.addEventListener("resize", () => {
+            if (this.isOpen) {
+                this._keepInViewport();
+            }
+        });
+
+        if (this._panelBtn) {
+            this._panelBtn.addEventListener("click", () => this.togglePanel());
+        }
+        if (this._minBtn) {
+            this._minBtn.addEventListener("click", () => this.minimize());
+        }
+        const closeBtn = this.element.querySelector(".cw-close");
+        if (closeBtn) {
+            closeBtn.addEventListener("click", () => this.close());
+        }
+        if (this.launcher) {
+            this.launcher.addEventListener("click", () => this.open());
+        }
+        if (this._widgetLauncher) {
+            this._widgetLauncher.addEventListener("click", () => this.open());
+        }
+
+        const header = this.element.querySelector(".cw-window-header");
+        if (header && !this._flyout) {
+            this._bindDragHeader(header);
+        }
+
+        if (this._sendButton) {
+            this._sendButton.addEventListener("click", () => this.send());
+        }
+        if (this._input) {
+            this._input.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    this.send();
+                }
+            });
+            this._input.addEventListener("input", () => this._autogrow());
+        }
+    }
+
+/* ---------- dragging / resizing ---------- */
+
+    /** Drag the whole window by its header (ignores the action buttons). */
+    _bindDragHeader(header) {
+        header.style.touchAction = "none";
+        header.addEventListener("pointerdown", (event) => {
+            if (event.target.closest(".cw-window-actions")) {
+                return; // let the buttons work normally
+            }
+            event.preventDefault();
+
+            const rect = this.element.getBoundingClientRect();
+            const startX = event.clientX;
+            const startY = event.clientY;
+            const startLeft = rect.left;
+            const startTop = rect.top;
+            const width = rect.width;
+            const height = rect.height;
+
+            this.element.classList.add("cw-dragging");
+
+            const onMove = (moveEvent) => {
+                const left = clampValue(
+                    startLeft + (moveEvent.clientX - startX),
+                    VIEWPORT_MARGIN,
+                    Math.max(VIEWPORT_MARGIN, window.innerWidth - width - VIEWPORT_MARGIN)
+                );
+                const top = clampValue(
+                    startTop + (moveEvent.clientY - startY),
+                    VIEWPORT_MARGIN,
+                    Math.max(VIEWPORT_MARGIN, window.innerHeight - height - VIEWPORT_MARGIN)
+                );
+                this.element.style.left = `${left}px`;
+                this.element.style.top = `${top}px`;
+            };
+            const onUp = () => {
+                document.removeEventListener("pointermove", onMove);
+                document.removeEventListener("pointerup", onUp);
+                this.element.classList.remove("cw-dragging");
+            };
+
+            document.addEventListener("pointermove", onMove);
+            document.addEventListener("pointerup", onUp);
+        });
+    }
+
+    /**
+     * Resize the window from one of its 8 edges. Width/height are
+     * clamped to the configured minimums and the viewport; the window
+     * is also nudged back if it would slide off-screen.
+     */
+    _beginResize(edge, event) {
+        event.preventDefault();
+
+        const hasN = edge.includes("n");
+        const hasS = edge.includes("s");
+        const hasE = edge.includes("e");
+        const hasW = edge.includes("w");
+
+        const rect = this.element.getBoundingClientRect();
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const start = { w: rect.width, h: rect.height, left: rect.left, top: rect.top };
+
+        const onMove = (moveEvent) => {
+            const dx = moveEvent.clientX - startX;
+            const dy = moveEvent.clientY - startY;
+
+            let w = start.w;
+            let h = start.h;
+            let left = start.left;
+            let top = start.top;
+
+            if (hasE) {
+                w = start.w + dx;
+            }
+            if (hasW) {
+                w = start.w - dx;
+            }
+            if (hasS) {
+                h = start.h + dy;
+            }
+            if (hasN) {
+                h = start.h - dy;
+            }
+
+            w = clampValue(w, WINDOW_MIN_WIDTH, window.innerWidth - 16);
+            h = clampValue(h, WINDOW_MIN_HEIGHT, window.innerHeight - 16);
+            if (hasN) {
+                top = start.top + (start.h - h);
+            }
+            if (hasW) {
+                left = start.left + (start.w - w);
+            }
+
+            this.element.style.width = `${w}px`;
+            this.element.style.height = `${h}px`;
+            this.element.style.left = `${clampValue(left, VIEWPORT_MARGIN, Math.max(VIEWPORT_MARGIN, window.innerWidth - w - VIEWPORT_MARGIN))}px`;
+            this.element.style.top = `${clampValue(top, VIEWPORT_MARGIN, Math.max(VIEWPORT_MARGIN, window.innerHeight - h - VIEWPORT_MARGIN))}px`;
+        };
+
+        const onUp = () => {
+            document.removeEventListener("pointermove", onMove);
+            document.removeEventListener("pointerup", onUp);
+        };
+
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+    }
+
+    /** Keep the window fully inside the viewport (after open/resize). */
+    _keepInViewport() {
+        if (!this.element) {
+            return;
+        }
+        const rect = this.element.getBoundingClientRect();
+
+        // Only adjust left/top if the window has been dragged (has inline
+        // positioning).  On first open the CSS uses right/bottom, and we
+        // must not overwrite that with stale getBoundingClientRect values.
+        const hasInlinePosition = this.element.style.left !== "" || this.element.style.top !== "";
+
+        if (hasInlinePosition) {
+            const maxLeft = Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.width - VIEWPORT_MARGIN);
+            const maxTop = Math.max(VIEWPORT_MARGIN, window.innerHeight - rect.height - VIEWPORT_MARGIN);
+            this.element.style.left = `${clampValue(rect.left, VIEWPORT_MARGIN, maxLeft)}px`;
+            this.element.style.top = `${clampValue(rect.top, VIEWPORT_MARGIN, maxTop)}px`;
+        }
+    }
+
+    /* ---------- message rendering ---------- */
+
+    _buildBubble(message) {
+        const role = message.role || "assistant";
+        const bubble = createElement("div", {
+            className: `cw-bubble cw-${role}`,
+            dataset: { messageId: message.id },
+        });
+
+        // System notices have no avatar; everything else does.
+        if (role !== "system") {
+            const avatar = createElement("div", {
+                className: `cw-bubble-avatar ${role === "user" ? "cw-user-avatar" : "cw-agent-avatar"}`,
+            });
+            avatar.textContent = role === "user" ? "U" : initials(message.author || this.name);
+            bubble.appendChild(avatar);
+        }
+
+        const content = createElement("div", { className: "cw-bubble-content" });
+
+        const head = createElement("div", { className: "cw-bubble-header" });
+        const name = createElement("strong", {
+            text: message.author || (role === "user" ? "You" : this.name),
+        });
+        const time = createElement("span", { text: formatTime(message.timestamp) });
+        head.appendChild(name);
+        head.appendChild(time);
+        content.appendChild(head);
+
+        const body = createElement("div", { className: "cw-bubble-body readout" });
+        body.appendChild(this.renderMarkdown(message.content));
+        content.appendChild(body);
+
+        bubble.appendChild(content);
+        return bubble;
+    }
+
+    _showTyping() {
+        this._removeTyping();
+        const bubble = createElement("div", { className: "cw-bubble cw-agent" });
+        const content = createElement("div", { className: "cw-bubble-content" });
+        const head = createElement("div", { className: "cw-bubble-header" });
+        head.appendChild(createElement("strong", { text: this.name }));
+        content.appendChild(head);
+        const body = createElement("div", { className: "cw-bubble-body" });
+        const dots = createElement("span", { className: "cw-typing" });
+        dots.appendChild(document.createElement("span"));
+        dots.appendChild(document.createElement("span"));
+        dots.appendChild(document.createElement("span"));
+        body.appendChild(dots);
+        content.appendChild(body);
+        bubble.appendChild(content);
+        this._typingEl = bubble;
+        this._messageBody.appendChild(bubble);
+        this.scrollToBottom();
+    }
+
+    _removeTyping() {
+        if (this._typingEl) {
+            this._typingEl.remove();
+            this._typingEl = null;
+        }
+    }
+
+    /** Centered empty-state shown before the first message. */
+    _renderWelcome() {
+        if (this.messages.length > 0 || this._welcomeEl) {
+            return;
+        }
+        const box = createElement("div", { className: "cw-welcome" });
+        box.appendChild(createElement("h3", { text: "Start the conversation" }));
+        box.appendChild(createElement("p", {
+            text: `Chatting with ${this.name}. Type below to begin.`,
+        }));
+        if (this.description) {
+            box.appendChild(createElement("p", { text: this.description }));
+        }
+        this._welcomeEl = box;
+        this._messageBody.appendChild(box);
+    }
+
+    _removeWelcome() {
+        if (this._welcomeEl) {
+            this._welcomeEl.remove();
+            this._welcomeEl = null;
+        }
+    }
+}
+
+
+/* ================================================================
+   4. CHAT FACTORY
+   ================================================================ */
+// One entry point for creating chat instances from a config object.
+// Different entities (AI agents, projects, workflows) all use the
+// same engine - the config decides the name, layout and controls.
+
+const ChatFactory = {
+    /**
+     * Build a configured ChatWindow.
+     * @param {object} config - the entity config (see README / examples)
+     * @returns {ChatWindow}
+     */
+    create(config) {
+        return new ChatWindow(config);
+    },
+};
+
+
+/* ================================================================
+   SAMPLE CONFIGS (documentation / quick start)
+   ================================================================ */
+// These show how the SAME engine serves different entity types. The
+// application does not need to touch chat-window.js to add new ones.
+
+const CHAT_CONFIG_EXAMPLES = {
+    agent: {
+        id: "planner-agent",
+        type: "agent",
+        name: "Planner Agent",
+        title: "AI Planning Assistant",
+        description: "Creates structured plans for complex problems.",
+        layout: { rightPanel: true, resizable: true, collapsible: true },
+        sections: [
+            {
+                title: "Agent Information",
+                fields: [
+                    { type: "text", label: "Status", value: "Ready" },
+                    { type: "text", label: "Category", value: "Technology" },
+                ],
+            },
+            {
+                title: "Actions",
+                fields: [
+                    { type: "button", label: "Create Plan", action: "createPlan" },
+                    { type: "button", label: "Save Plan", action: "savePlan" },
+                ],
+            },
+        ],
+    },
+    project: {
+        id: "ai-factory",
+        type: "project",
+        name: "AI Factory",
+        title: "Project Workspace",
+        description: "A place to design and run AI workflows.",
+        layout: { rightPanel: true, resizable: true, collapsible: true },
+        sections: [
+            {
+                title: "Project Details",
+                fields: [
+                    { type: "input", name: "projectName", label: "Project Name", value: "AI Factory" },
+                    { type: "select", name: "category", label: "Category", value: "Technology",
+                        options: ["Business", "Teaching", "Technology"] },
+                    { type: "toggle", name: "enabled", label: "Enable project", value: true },
+                ],
+            },
+            {
+                title: "Actions",
+                fields: [
+                    { type: "button", label: "Deploy", action: "deployProject" },
+                ],
+            },
+        ],
+    },
+    business: {
+        id: "marketing-workflow",
+        type: "business",
+        name: "Marketing Workflow",
+        title: "Business Assistant",
+        description: "Guides marketing campaigns from brief to report.",
+        layout: { rightPanel: true, resizable: true, collapsible: true },
+        sections: [
+            {
+                title: "Workflow Controls",
+                collapsible: true,
+                fields: [
+                    { type: "text", label: "Stage", value: "Planning" },
+                    { type: "select", name: "audience", label: "Audience", value: "General",
+                        options: ["General", "Business", "Technical"] },
+                    { type: "divider" },
+                    { type: "button", label: "Approve Brief", action: "approveBrief" },
+                ],
+            },
+        ],
+    },
+};
+
+
+export { ChatFactory, ChatWindow, CHAT_CONFIG_EXAMPLES };
+
+```
+
+## dashboard/js/config-page.js
+
+```javascript
+// ==========================================
+// js/config-page.js - THE CONSOLIDATED SETTINGS PAGE (config.html)
+// ==========================================
+// Boots /static/config.html: the ONE place for every configuration.
+//   App-level      -> ui/config-form.js  (defaults, paths, versioning, RAG)
+//   Appearance     -> ui/appearance.js
+//   Per-agent      -> ui/agent-editor.js (metadata + agent.md + tests)
+//   Shared tests   -> inline manager (global tests that run for every agent)
+//   Models         -> read-only snapshot from /api/models
+// ==========================================
+
+import { getModels, getAgents, getTools, getAbout, loadAppSettingsWithMeta, saveAppSettings } from "./api/api.js";
+import { buildConfigForm } from "./ui/config-form.js";
+import { applyAppearance, renderAppearance } from "./ui/appearance.js";
+import { renderAgentEditors } from "./ui/agent-editor.js";
+import { renderHeaderNav } from "./ui/header-nav.js";
+import { renderInterfaceSection } from "./ui/interface-manager.js";
+import { renderInterfaceIndicator } from "./ui/interface-indicator.js";
+
+let settings = {};
+let agents = [];
+let models = [];
+let tools = [];
+
+async function boot() {
+    window.__cfgBoot = true;
+
+    // Header: shared app nav, this page = Settings.
+    const navSlot = document.getElementById("page-nav");
+    if (navSlot) {
+        navSlot.replaceChildren(renderHeaderNav("config"));
+    }
+
+    // Phone-home title: browser-tab + a small interface pill in the header
+    // (both fail-soft; a stale /api/about or /api/interface/* keeps defaults).
+    try {
+        const about = await getAbout();
+        const cleanSub = (about.subtitle && about.subtitle.trim())
+            ? " \u2014 " + about.subtitle.trim() : "";
+        document.title = (about.title || "Configuration") + cleanSub;
+    } catch (_) { /* keep the static <title> */ }
+    renderInterfaceIndicator({ container: document.querySelector(".cfg-nav") });
+
+    const mount = document.getElementById("config-section");
+    const statusEl = el("div", "status-message");
+    mount.appendChild(el("h2", "config-section-heading", "App defaults"));
+
+    // Load the page's data one piece at a time. A single failing call
+    // (e.g. a server that predates the new /api/tools endpoint) must NOT
+    // blank the page - the inputs below always render and any failure is
+    // surfaced in a banner at the top instead.
+    const failures = [];
+    const safeLoad = async (label, fn) => {
+        try {
+            return await fn();
+        } catch (error) {
+            failures.push(label + " \u2014 " + (error.message || error));
+            return null;
+        }
+    };
+
+    const [loadedAgents, loadedModels, loadedTools, loadedMeta] = await Promise.all([
+        safeLoad("agents", () => getAgents()),
+        safeLoad("models", () => getModels()),
+        safeLoad("tools", () => getTools()),
+        safeLoad("settings", () => loadAppSettingsWithMeta()),
+    ]);
+
+    agents = loadedAgents || [];
+    models = loadedModels || [];
+    tools = loadedTools || [];
+    let restartNeeded = false;
+    let platform = "nix";
+    if (loadedMeta) {
+        settings = loadedMeta.settings || {};
+        restartNeeded = Boolean(loadedMeta.restartNeeded);
+        platform = loadedMeta.platform || "nix";
+    }
+
+    if (failures.length) {
+        renderFailureBanner(failures);
+    }
+
+    if (settings && typeof settings === "object") {
+        applyAppearance(settings);
+    }
+
+    if (restartNeeded) {
+        const notice = el("div", "status-message warn");
+        notice.textContent = "Path settings changed - restart the server for the new folders to take effect.";
+        mount.appendChild(notice);
+    }
+
+    // ---- App-level form (default agent/model, paths, versioning, RAG) ----
+    const form = buildConfigForm({ agents, models, settings, platform });
+    mount.appendChild(form.root);
+
+    wireDefaultAgentLink(form.root, agents);
+
+    const actions = el("div", "section-actions");
+    const save = el("button", "btn btn-primary", "Save settings");
+    save.type = "button";
+    actions.appendChild(save);
+    mount.appendChild(actions);
+
+    // Prominent "Settings saved" response window that appears after saving.
+    const saveResponse = el("div", "save-response", "");
+    saveResponse.hidden = true;
+    mount.appendChild(saveResponse);
+    mount.appendChild(statusEl);
+
+    save.addEventListener("click", async () => {
+        const payload = form.values();
+        save.disabled = true;
+        saveResponse.hidden = true;
+        try {
+            const saved = await saveAppSettings(payload);
+            settings = saved.settings;
+            statusEl.textContent = "Settings saved.";
+            statusEl.className = "status-message ok";
+
+            // Response window: confirm the save + which platform's paths
+            // apply + restart hint when stored path settings changed.
+            saveResponse.replaceChildren();
+            saveResponse.hidden = false;
+            saveResponse.appendChild(el("strong", "", "Settings saved \u2713"));
+            const detail = el("ul", "save-response-detail", "");
+            const osLabel = platform === "win" ? "Windows" : (platform === "mac" ? "macOS" : "Linux");
+            const restartNeeded = Boolean(saved.restartNeeded);
+            detail.appendChild(el("li", "", "Using the " + osLabel +
+                " path settings" + (restartNeeded ? " \u2014 restart the server to apply path changes." : ".")));
+            detail.appendChild(el("li", "", "Each OS can point to its own folders; leave the ones you don't use alone. A GENESSIS_* env var overrides everything."));
+            saveResponse.appendChild(detail);
+        } catch (error) {
+            statusEl.textContent = error.message;
+            statusEl.className = "status-message error";
+        } finally {
+            save.disabled = false;
+        }
+    });
+
+    // ---- Appearance ----
+    const appearanceMount = document.getElementById("appearance-section");
+    renderAppearance({
+        mountEl: appearanceMount,
+        settings,
+        onSave: (updated) => {
+            settings = updated || settings;
+        },
+    });
+
+    // ---- Agents (one consolidated card each) ----
+    const agentsMount = document.getElementById("agents-section");
+    await renderAgentEditors({
+        mountEl: agentsMount,
+        agents,
+        models,
+        toolIds: tools,
+    });
+
+    // ---- Shared tests (global pool, run for every agent) ----
+    renderSharedTests(document.getElementById("shared-tests-section"));
+
+    // ---- Models (read-only) ----
+    renderModels(document.getElementById("models-section"), models);
+
+    // ---- Updates / Interface (modular update system) ----
+    await renderInterfaceSection(document.getElementById("interface-section"));
+}
+
+function renderFailureBanner(failures) {
+    const holder = document.getElementById("boot-failed");
+    if (!holder) return;
+    holder.hidden = false;
+    holder.replaceChildren();
+
+    const box = el("div", "status-message error");
+    box.appendChild(el("strong", "", "Some settings could not be loaded:"));
+    const list = el("ul");
+    list.style.cssText = "margin:6px 0 0 18px;padding:0;";
+    failures.forEach((f) => list.appendChild(el("li", "", f)));
+    box.appendChild(list);
+    box.appendChild(el("p", "",
+        "If the server was just updated, restart it (python server.py) and hard-refresh this page (Ctrl+F5)."));
+    holder.appendChild(box);
+}
+
+function wireDefaultAgentLink(formRoot, agents) {
+    const select = formRoot.querySelector("#default-agent-select");
+    const linkWrap = el("span", "jump-link");
+    formRoot.appendChild(linkWrap);
+
+    const update = () => {
+        const id = select?.value;
+        linkWrap.replaceChildren();
+        if (!id) return;
+        // Fake a .btn look without re-implementing: reuse the anchor style.
+        if (!agents.some((a) => String(a.id) === String(id))) {
+            linkWrap.textContent = "(unknown agent)";
+            return;
+        }
+        const a = document.createElement("a");
+        a.href = "#agent-" + encodeURIComponent(id);
+        a.className = "btn btn-secondary btn-small";
+        a.textContent = "edit \u2192";
+        a.title = "Jump to that agent's card below";
+        a.addEventListener("click", () => {
+            document.getElementById("agent-" + id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+        linkWrap.appendChild(a);
+    };
+    select?.addEventListener("change", update);
+    update();
+}
+
+// ----------------------------------------------------------------
+// Shared tests (app_settings.chatTests.tests without an agentId) -
+// these run for EVERY agent. Scoped tests now live in each agent's
+// own agent.json and are managed from that agent's card.
+// ----------------------------------------------------------------
+
+function renderSharedTests(mount) {
+    if (!mount) return;
+    mount.appendChild(el("h2", "config-section-heading", "Shared tests"));
+
+    const shared = (settings.chatTests && Array.isArray(settings.chatTests.tests))
+        ? settings.chatTests.tests.filter((t) => t && !t.agentId)
+        : [];
+
+    const intro = el("p", "config-note",
+        "Tests without an agent run for EVERY agent. Use them for common sanity checks. " +
+        (shared.length
+            ? "Agent-specific tests live on each agent's card above."
+            : "None saved. Agent-specific tests live on each agent's card above.")
+    );
+    mount.appendChild(intro);
+
+    const list = el("div", "agent-test-list");
+    mount.appendChild(list);
+
+    if (!shared.length) {
+        list.appendChild(el("p", "config-note", "No shared tests."));
+        return;
+    }
+
+    shared.forEach((test) => {
+        const row = el("div", "test-row");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--color-border,#e1e5e8);font-size:13px;";
+
+        const toggle = document.createElement("input");
+        toggle.type = "checkbox";
+        toggle.checked = test.enabled !== false;
+        toggle.addEventListener("change", async () => {
+            test.enabled = toggle.checked;
+            await persistShared();
+        });
+        row.appendChild(toggle);
+
+        const name = el("span", "", test.name || test.id);
+        name.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+        name.title = test.name || test.id;
+        row.appendChild(name);
+
+        const steps = Array.isArray(test.steps) ? test.steps.length
+            : String(test.input || "").split(/\r?\n/).filter(Boolean).length;
+        const badge = el("span", "badge", steps + " step" + (steps !== 1 ? "s" : ""));
+        badge.style.cssText = "font-size:10px;";
+        row.appendChild(badge);
+
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "btn btn-small";
+        del.textContent = "x";
+        del.title = "Delete this shared test";
+        del.style.cssText = "padding:2px 7px;font-size:11px;color:var(--color-danger,#b91c1c);border-color:var(--color-danger,#b91c1c);";
+        del.addEventListener("click", async () => {
+            const idx = (settings.chatTests.tests || []).findIndex((t) => t.id === test.id);
+            if (idx >= 0) {
+                settings.chatTests.tests.splice(idx, 1);
+                await persistShared();
+                renderSharedTests(mount);
+            }
+        });
+        row.appendChild(del);
+
+        list.appendChild(row);
+    });
+
+    async function persistShared() {
+        const payload = {
+            chatTests: {
+                enabled: (settings.chatTests || {}).enabled !== false,
+                tests: settings.chatTests.tests || [],
+            },
+        };
+        try {
+            const saved = await saveAppSettings(payload);
+            settings = saved.settings || settings;
+        } catch (_) { /* the page re-renders with stored truth on reload */ }
+    }
+}
+
+// ----------------------------------------------------------------
+// Models (read-only snapshot)
+// ----------------------------------------------------------------
+
+function renderModels(mount, models) {
+    if (!mount || !models || !models.length) return;
+    mount.appendChild(el("h2", "config-section-heading", "Models"));
+
+    const intro = el("p", "config-note",
+        "Installed Ollama models (snapshot, re-scanned at server startup - edit via config/models.json or Ollama)."
+    );
+    mount.appendChild(intro);
+
+    const grid = el("div", "cfg-models-grid");
+    models.forEach((m) => {
+        const card = el("div", "cfg-model-card");
+        card.appendChild(el("div", "name", m.name));
+        card.appendChild(el("div", "id", "id: " + m.id + " - source: " + (m.source || "ollama")));
+        grid.appendChild(card);
+    });
+    mount.appendChild(grid);
+}
+
+function el(tag, className = "", text = "") {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
+}
+
+boot();
+```
+
+## dashboard/js/logic/chat-formatter.js
+
+```javascript
+// ==========================================
+// logic/chat-formatter.js - BUILD THE .TXT CHAT TRANSCRIPT
+// ==========================================
+// Turns a ChatSession into the nicely-formatted text file body:
+//
+//   1. A header with the session title, agent, model, date, and the
+//      number of interactions between the LLM and the user.
+//   2. Each message from the conversation, labeled by speaker + time.
+//
+// The transcript text is what gets POSTed to /api/chat-save.
+
+import { formatFullDate, slugify, fileStamp } from "./models.js";
+
+/**
+ * Count interactions = the number of user->assistant turn pairs
+ * (each user message paired with the assistant reply that followed).
+ * Falls back to counting user messages.
+ */
+export function countInteractions(messages) {
+    if (!Array.isArray(messages) || messages.length === 0) {
+        return 0;
+    }
+
+    let pairs = 0;
+
+    for (let i = 1; i < messages.length; i += 1) {
+        if (
+            messages[i].role === "assistant" &&
+            messages[i - 1].role === "user"
+        ) {
+            pairs += 1;
+        }
+    }
+
+    // A trailing user message with no reply yet still counts as one turn.
+    const last = messages[messages.length - 1];
+    if (last && last.role === "user") {
+        pairs += 1;
+    }
+
+    return pairs;
+}
+
+/**
+ * Build the full .txt transcript string for a session.
+ *
+ * session -> a ChatSession instance (has .title, .agent, .model,
+ *            .messages[]) - see classes/ChatSession.js
+ */
+export function buildTranscript(session) {
+    const messages = session.messages || [];
+    const interactions = countInteractions(messages);
+    const divider = "=".repeat(64);
+    const thin = "-".repeat(64);
+
+    const lines = [];
+    lines.push(divider);
+    lines.push(`Session: ${session.title || "Untitled chat"}`);
+    lines.push(`Agent:   ${session.agentName || session.agentId || "default"}`);
+    lines.push(`Model:   ${session.model || "(server default)"}`);
+    lines.push(`Date:    ${formatFullDate(new Date())}`);
+    lines.push(`Interactions between LLM and user: ${interactions}`);
+    lines.push(divider);
+    lines.push("");
+
+    messages.forEach((message) => {
+        const speaker = message.role === "user"
+            ? "You"
+            : message.author || "AI";
+        lines.push(`[${speaker}]  ${formatFullDate(message.timestamp)}`);
+        lines.push(thin);
+        lines.push(message.text || "");
+        lines.push("");
+    });
+
+    return lines.join("\n");
+}
+
+/**
+ * Build the file name that will be written on the server.
+ *   "<slugified-title>-<YYYYMMDD-HHMM>.txt"
+ */
+export function buildTranscriptFileName(session) {
+    const base = slugify(session.title || "chat") || "chat";
+    return `${base}-${fileStamp()}.txt`;
+}
+
+```
+
+## dashboard/js/logic/models.js
+
+```javascript
+// ==========================================
+// logic/models.js - DATA SHAPES + PURE HELPERS
+// ==========================================
+// Factories for the data this app works with, plus small pure
+// helpers. This is the SINGLE source of truth for what an agent,
+// a chat message, and a chat session look like.
+
+/** Make a reasonably unique id like "msg-l8x2p9k3f". */
+export function makeId(prefix = "id") {
+    return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * One bubble in a chat session.
+ * role: "user" | "assistant"
+ */
+export function createMessage({ role, author, text }) {
+    return {
+        id: makeId("msg"),
+        role,
+        author,
+        text,
+        timestamp: new Date().toISOString(),
+    };
+}
+
+/**
+ * Turn the rich message array into the simple list the /api/chat
+ * endpoint expects: [{ role, content }, ...]  (last N turns).
+ */
+export function buildApiHistory(messages, maxTurns = 20) {
+    return messages
+        .slice(-maxTurns)
+        .map((m) => ({ role: m.role, content: m.text }));
+}
+
+/** Friendly timestamp: today -> "14:05", else "Jun 3, 14:05". */
+export function formatTimestamp(isoString) {
+    const date = new Date(isoString);
+    const now = new Date();
+    const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    if (date.toDateString() === now.toDateString()) {
+        return time;
+    }
+
+    return `${date.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
+}
+
+/** Full readable date+time for transcripts: "Aug 31, 2026, 2:05 PM". */
+export function formatFullDate(isoString) {
+    const date = new Date(isoString || Date.now());
+    return date.toLocaleString([], {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
+/** Filesystem-safe file stamp: "20260831-1405". */
+export function fileStamp(date = new Date()) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+        `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}` +
+        `-${pad(date.getHours())}${pad(date.getMinutes())}`
+    );
+}
+
+/** "My Great Title!" -> "my-great-title" (file-safe). */
+export function slugify(value) {
+    return String(value)
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60);
+}
+
+```
+
+## dashboard/js/ui/agent-editor.js
+
+```javascript
+// ============================================================
+// ui/agent-editor.js - PER-AGENT CONFIGURATION EDITOR (config page)
+// ============================================================
+// Renders one collapsible card per discovered agent on config.html.
+// Each card consolidates EVERYTHING about that single agent in one place:
+//   - Configuration:  name / description / mode / model / tools
+//   - Behavior:       the agent.md markdown (editable here)
+//   - Tests:          that agent's saved chat tests + an inline runner
+//
+// Data comes from /api/agents/{id}/config and is written back through
+// the same endpoint (each agent's files are the source of truth).
+// ============================================================
+
+import { getAgentConfig, saveAgentConfig, sendChat } from "../api/api.js";
+
+/** Render one card per agent into `mountEl`. Config is fetched lazily the
+ *  first time a card is expanded, so the page stays fast with many agents. */
+export async function renderAgentEditors({ mountEl, agents = [], models = [], toolIds = [] }) {
+    const heading = el("h2", "config-section-heading", "Agents");
+    heading.id = "agents";
+    mountEl.appendChild(heading);
+
+    const intro = el("p", "config-note",
+        "One place per agent: metadata, tools, model, behavior (agent.md) and its chat tests. " +
+        "Changes are written straight to the agent's folder under engine/agent_library/."
+    );
+    mountEl.appendChild(intro);
+
+    const cards = el("div", "agent-editor-cards");
+    mountEl.appendChild(cards);
+
+    agents.forEach((agent) => {
+        cards.appendChild(buildCard({ agent, models, toolIds }));
+    });
+}
+
+// ----------------------------------------------------------------
+// CARD SHELL
+// ----------------------------------------------------------------
+
+function buildCard({ agent, models, toolIds }) {
+    const card = document.createElement("section");
+    card.className = "panel agent-editor-card";
+    card.id = "agent-" + agent.id;
+
+    const header = document.createElement("header");
+    header.className = "agent-editor-header";
+    header.style.cssText =
+        "display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;" +
+        "padding:14px 16px;border-bottom:1px solid var(--color-border,#e1e5e8);";
+
+    const chevron = el("span", "agent-editor-chevron", "v");
+    chevron.style.cssText = "font-size:11px;transition:transform .15s ease;color:var(--color-text-muted,#64748b);font-weight:bold;";
+
+    const nameEl = el("span", "agent-editor-name", agent.name);
+    nameEl.style.cssText = "font-weight:700;font-size:15px;flex:1;";
+    nameEl.dataset.role = "name";
+
+    const badge = el("span", "badge", agent.mode || "chat");
+    badge.dataset.role = "mode-badge";
+
+    const chatLink = document.createElement("a");
+    chatLink.className = "btn btn-secondary btn-small";
+    chatLink.textContent = "Chat";
+    chatLink.href = "/static/chat.html?agent=" + encodeURIComponent(agent.id);
+    chatLink.target = "_blank";
+    chatLink.rel = "noopener";
+
+    header.append(chevron, nameEl, badge, chatLink);
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "agent-editor-body";
+    body.style.cssText = "padding:14px 16px;display:none;";
+    card.appendChild(body);
+
+    let expanded = false;
+    header.addEventListener("click", async (event) => {
+        if (event.target.closest("a")) return; // links keep working inside the header
+        expanded = !expanded;
+        body.style.display = expanded ? "" : "none";
+        chevron.style.transform = expanded ? "rotate(0deg)" : "rotate(-90deg)";
+        if (expanded && !loaded) {
+            await load();
+        }
+    });
+    chevron.style.transform = "rotate(-90deg)";
+
+    let loaded = false;
+    let state = null;
+
+    async function load() {
+        try {
+            state = await getAgentConfig(agent.id);
+            if (state.agent && state.agent.name) {
+                nameEl.textContent = state.agent.name;
+                if (badge.dataset.role === "mode-badge") baitBadge(badge, state.agent.mode);
+            }
+            renderBody();
+            loaded = true;
+        } catch (error) {
+            body.replaceChildren();
+            body.appendChild(el("p", "status-message error", "Could not load agent config: " + error.message));
+        }
+    }
+
+    function baitBadge(badgeNode, mode) {
+        badgeNode.textContent = mode || badgeNode.textContent;
+    }
+
+    function renderBody() {
+        body.replaceChildren();
+
+        const metaTab = el("div", "agent-editor-tab", "Configuration");
+        const mdTab = el("div", "agent-editor-tab", "Behavior (agent.md)");
+        const testsTab = el("div", "agent-editor-tab", "Tests");
+        metaTab.dataset.tab = "meta";
+        mdTab.dataset.tab = "md";
+        testsTab.dataset.tab = "tests";
+        const tabbar = el("div", "agent-editor-tabs");
+        tabbar.append(metaTab, mdTab, testsTab);
+        body.appendChild(tabbar);
+
+        const paneMeta = buildMetaPane(state, models, toolIds, () => refreshNameAndRefresh());
+        const paneMd = buildMarkdownPane(state);
+        const paneTests = buildTestsPane(state);
+        paneMeta.classList.add("active");
+
+        const panes = el("div", "agent-editor-panes");
+        panes.append(paneMeta, paneMd, paneTests);
+        body.appendChild(panes);
+
+        tabbar.addEventListener("click", (event) => {
+            const tab = event.target.closest("[data-tab]");
+            if (!tab) return;
+            tabbar.querySelectorAll("[data-tab]").forEach((t) => t.classList.toggle("active", t === tab));
+            panes.querySelectorAll(".agent-editor-pane").forEach((p) => p.classList.toggle("active", p.dataset.pane === tab.dataset.tab));
+        });
+    }
+
+    function refreshNameAndRefresh() {
+        if (state && state.agent && state.agent.name) {
+            nameEl.textContent = state.agent.name;
+        }
+    }
+
+    return card;
+}
+
+// ----------------------------------------------------------------
+// CONFIGURATION PANE (metadata + model + tools)
+// ----------------------------------------------------------------
+
+function buildMetaPane(state, models, toolIds, onSaved) {
+    const pane = el("div", "agent-editor-pane");
+    pane.dataset.pane = "meta";
+
+    const meta = state.meta || {};
+
+    const idField = fieldText("agent-editor-id", "Agent id", String(meta.id || ""), true);
+    const nameField = fieldText("", "Name", String(meta.name || ""));
+    nameField.querySelector("input").dataset.field = "name";
+    const descField = fieldArea("", "Description", String(meta.description || ""));
+    descField.querySelector("textarea").dataset.field = "description";
+
+    // Mode select
+    const modeField = document.createElement("label");
+    modeField.className = "field";
+    modeField.appendChild(el("span", "", "Mode"));
+    const modeSelect = document.createElement("select");
+    modeSelect.dataset.field = "mode";
+    [["chat", "Chat (no tools)"], ["agent", "Agent (tool loop)"]].forEach(([value, label]) => {
+        const o = new Option(label, value);
+        o.selected = (meta.mode || "chat") === value;
+        modeSelect.appendChild(o);
+    });
+    modeField.appendChild(modeSelect);
+
+    // Model select
+    const modelField = document.createElement("label");
+    modelField.className = "field";
+    modelField.appendChild(el("span", "", "Model"));
+    const modelSelect = document.createElement("select");
+    modelSelect.dataset.field = "model";
+    const noneOpt = new Option("(server default)", "");
+    noneOpt.selected = !meta.model;
+    modelSelect.appendChild(noneOpt);
+    (models || []).forEach((m) => {
+        const o = new Option(m.name, m.id);
+        o.selected = meta.model === m.id;
+        modelSelect.appendChild(o);
+    });
+    modelField.appendChild(modelSelect);
+
+    // Tools (only when the agent uses the standard list format)
+    let toolsField = null;
+    const toolsRaw = meta.tools;
+    const toolsEditable = Array.isArray(toolsRaw);
+    if (toolsEditable) {
+        toolsField = document.createElement("fieldset");
+        toolsField.className = "agent-editor-tools";
+        toolsField.appendChild(el("legend", "", "Tools"));
+        const grid = el("div", "agent-editor-tools-grid");
+        (toolIds || []).forEach((tid) => {
+            const label = document.createElement("label");
+            label.className = "field field-toggle";
+            label.style.borderBottom = "none";
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.value = tid;
+            cb.checked = (toolsRaw || []).includes(tid);
+            label.appendChild(el("span", "", tid));
+            label.appendChild(cb);
+            label.appendChild(el("span", "field-switch", ""));
+            grid.appendChild(label);
+        });
+        toolsField.appendChild(grid);
+        if (!(toolIds || []).length) {
+            toolsField.appendChild(el("p", "config-note",
+                "Tool list could not be loaded - restart the server if it was just updated."));
+        }
+    }
+
+    const wrapCols = document.createElement("div");
+    wrapCols.className = "agent-editor-fields";
+    wrapCols.append(idField, nameField, descField, modeField, modelField);
+    if (toolsField) wrapCols.appendChild(toolsField);
+
+    const actions = el("div", "section-actions");
+    const saveBtn = el("button", "btn btn-primary", "Save configuration");
+    const statusEl = el("span", "config-note", "");
+    actions.append(saveBtn, statusEl);
+
+    saveBtn.addEventListener("click", async () => {
+        const payloadMeta = {
+            id: meta.id || state.agent.id,
+            name: valueOf("[data-field=name]"),
+            description: valueOf("[data-field=description]"),
+            mode: valueOf("[data-field=mode]"),
+            model: valueOf("[data-field=model]") || "",
+        };
+        if (toolsEditable) {
+            const checked = Array.from(pane.querySelectorAll(".agent-editor-tools input[type=checkbox]:checked"))
+                .map((cb) => cb.value);
+            payloadMeta.tools = checked;
+        }
+        saveBtn.disabled = true;
+        try {
+            const updated = await saveAgentConfig(state.agent.id, { meta: payloadMeta });
+            state = updated;
+            onSaved();
+            statusEl.textContent = "Configuration saved.";
+            statusEl.style.color = "var(--color-success,#16803c)";
+            refreshPaneFromState();
+        } catch (error) {
+            statusEl.textContent = error.message;
+            statusEl.style.color = "var(--color-danger,#b91c1c)";
+        } finally {
+            saveBtn.disabled = false;
+        }
+    });
+
+    pane.append(wrapCols, actions);
+
+    function valueOf(selector) {
+        const node = pane.querySelector(selector);
+        return node ? node.value : "";
+    }
+
+    function refreshPaneFromState() {
+        const fresh = buildMetaPane(state, models, toolIds, onSaved);
+        fresh.classList.add("active");
+        pane.replaceWith(fresh);
+    }
+
+    return pane;
+}
+
+// ----------------------------------------------------------------
+// BEHAVIOR PANE (agent.md)
+// ----------------------------------------------------------------
+
+function buildMarkdownPane(state) {
+    const pane = el("div", "agent-editor-pane");
+    pane.dataset.pane = "md";
+
+    const note = el("p", "config-note",
+        "Behavior prose for this agent. Sections start with \"##\" (## role, ## purpose, ## boundaries, ...). " +
+        "Saved verbatim to agent.md."
+    );
+    pane.appendChild(note);
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "agent-editor-markdown";
+    textarea.spellcheck = false;
+    textarea.rows = 14;
+    textarea.value = state.markdown || "";
+
+    const actions = el("div", "section-actions");
+    const saveBtn = el("button", "btn btn-primary", "Save agent.md");
+    const statusEl = el("span", "config-note", "");
+    actions.append(saveBtn, statusEl);
+
+    saveBtn.addEventListener("click", async () => {
+        saveBtn.disabled = true;
+        try {
+            const updated = await saveAgentConfig(state.agent.id, { markdown: textarea.value });
+            state = updated;
+            statusEl.textContent = "agent.md saved.";
+            statusEl.style.color = "var(--color-success,#16803c)";
+        } catch (error) {
+            statusEl.textContent = error.message;
+            statusEl.style.color = "var(--color-danger,#b91c1c)";
+        } finally {
+            saveBtn.disabled = false;
+        }
+    });
+
+    pane.append(textarea, actions);
+    return pane;
+}
+
+// ----------------------------------------------------------------
+// TESTS PANE (this agent's tests, per-agent storage)
+// ----------------------------------------------------------------
+
+function buildTestsPane(state) {
+    const pane = el("div", "agent-editor-pane");
+    pane.dataset.pane = "tests";
+
+    const intro = el("p", "config-note",
+        "Automated tests that run against THIS agent via /api/chat. Saved to the agent's own agent.json."
+    );
+    pane.appendChild(intro);
+
+    const toolbar = el("div", "chat-tests-toolbar");
+    const enableBtn = el("button", "btn btn-secondary btn-small", "Enable all");
+    const disableBtn = el("button", "btn btn-secondary btn-small", "Disable all");
+    toolbar.append(enableBtn, disableBtn);
+    pane.appendChild(toolbar);
+
+    const statusEl = el("p", "config-note", "");
+    statusEl.className = "test-run-status";
+    statusEl.style.cssText = "font-size:12px;font-weight:600;margin:0 0 6px;min-height:16px;";
+    const resultsEl = document.createElement("div");
+    resultsEl.className = "test-run-results";
+    resultsEl.style.marginBottom = "10px";
+    resultsEl.style.display = "none";
+
+    const listEl = el("div", "agent-test-list");
+    pane.appendChild(listEl);
+
+    const hr = document.createElement("hr");
+    hr.style.cssText = "border:none;border-top:1px dashed var(--color-border,#e1e5e8);margin:14px 0;";
+    pane.appendChild(hr);
+
+    const builderTitle = el("p", "", "Add a new test");
+    builderTitle.style.cssText = "font-weight:700;margin:0 0 10px;font-size:12px;color:var(--color-text-muted,#64748b);text-transform:uppercase;letter-spacing:.4px;";
+    pane.appendChild(builderTitle);
+    pane.appendChild(buildStepBuilder(state, listEl, statusEl));
+
+    const hr2 = document.createElement("hr");
+    hr2.style.cssText = "border:none;border-top:1px dashed var(--color-border,#e1e5e8);margin:14px 0;";
+    pane.appendChild(hr2);
+
+    const runnerWrap = el("div", "agent-test-runner");
+    const runBtn = el("button", "btn btn-primary btn-small", "Run tests for " + state.agent.name);
+    const stopBtn = el("button", "btn btn-secondary btn-small", "Stop");
+    stopBtn.style.marginLeft = "6px";
+    stopBtn.style.display = "none";
+    runnerWrap.append(statusEl, resultsEl, runBtn, stopBtn);
+    pane.appendChild(runnerWrap);
+
+    const runState = {
+        running: false,
+        cancelled: false,
+        results: [],
+        sessionId: "",
+        history: [],
+    };
+
+    // Enable/disable all + list
+    enableBtn.addEventListener("click", () => setAll(true));
+    disableBtn.addEventListener("click", () => setAll(false));
+
+    function setAll(enabled) {
+        state.tests.forEach((t) => { if (t) t.enabled = enabled; });
+        persist();
+    }
+
+    async function persist() {
+        try {
+            const updated = await saveAgentConfig(state.agent.id, { tests: state.tests });
+            state.tests = updated.tests || [];
+            renderList(listEl, state, statusEl, renderResults);
+        } catch (error) {
+            statusEl.textContent = error.message;
+            statusEl.style.color = "var(--color-danger,#b91c1c)";
+        }
+    }
+
+    function renderResults() {
+        resultsEl.replaceChildren();
+        if (runState.results.length) {
+            resultsEl.style.display = "";
+            runState.results.forEach((r) => {
+                const row = document.createElement("div");
+                row.style.cssText = "display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:12px;border-bottom:1px dashed var(--color-border,#e1e5e8);";
+                const name = el("span", "", r.name);
+                name.style.cssText = "overflow:hidden;white-space:nowrap;text-overflow:ellipsis;";
+                name.title = r.detail || r.name;
+                const verdict = el("span", "", r.status);
+                verdict.style.cssText = "flex:0 0 auto;font-weight:700;color:" +
+                    (r.ok ? "var(--color-success,#16803c)" : "var(--color-danger,#b91c1c)");
+                verdict.title = r.detail || r.status;
+                row.append(name, verdict);
+                resultsEl.appendChild(row);
+            });
+        } else {
+            resultsEl.style.display = "none";
+        }
+    }
+
+    function renderStatus() {
+        const failed = runState.results.some((r) => !r.ok);
+        const errored = runState.results.some((r) => r.status === "Error");
+        if (runState.running) {
+            statusEl.textContent = "Running...  (" + runState.results.length + " done)";
+            statusEl.style.color = "var(--color-primary,#075985)";
+        } else if (runState.status) {
+            statusEl.textContent = runState.status;
+            statusEl.style.color = errored ? "var(--color-danger,#b91c1c)" : (failed ? "#b45309" : "var(--color-success,#16803c)");
+        }
+    }
+
+    runBtn.addEventListener("click", () => runTests());
+    stopBtn.addEventListener("click", () => { runState.cancelled = true; stopBtn.disabled = true; });
+
+    async function runTests() {
+        if (runState.running) return;
+        const tests = enabledTests(state.tests);
+        if (!tests.length) {
+            runState.status = "No enabled tests for this agent.";
+            renderStatus();
+            return;
+        }
+        runState.running = true;
+        runState.cancelled = false;
+        runState.results = [];
+        runState.sessionId = "";
+        runState.history = [];
+        runBtn.disabled = true;
+        runBtn.textContent = "Running...";
+        stopBtn.style.display = "";
+        stopBtn.disabled = false;
+        renderResults();
+        renderStatus();
+
+        try {
+            for (const test of tests) {
+                if (runState.cancelled) break;
+                const script = testScript(test);
+                const expectations = Array.isArray(test.expectations) ? test.expectations : [];
+                let finalReply = null;
+                let failedStep = null;
+                let errorMsg = "";
+
+                for (let index = 0; index < script.length; index++) {
+                    if (runState.cancelled) break;
+                    try {
+                        const result = await sendChat({
+                            message: script[index],
+                            agentId: state.agent.id,
+                            model: "",
+                            history: runState.history,
+                            sessionId: runState.sessionId,
+                            title: test.name,
+                            newChat: !runState.sessionId,
+                        });
+                        if (!runState.sessionId) {
+                            runState.sessionId = result.session_id || "";
+                        }
+                        finalReply = result.reply || "";
+                        runState.history.push({ role: "user", content: script[index] });
+                        runState.history.push({ role: "assistant", content: finalReply });
+                        const expected = expectations[index];
+                        if (expected) {
+                            const check = checkExpectation(finalReply, expected);
+                            if (!check.ok) { failedStep = check.message + " (step " + (index + 1) + ")"; break; }
+                        }
+                    } catch (error) {
+                        errorMsg = error.message;
+                        finalReply = null;
+                        break;
+                    }
+                }
+
+                if (errorMsg) {
+                    runState.results.push({ id: test.id, name: test.name, ok: false, status: "Error", detail: errorMsg });
+                } else if (failedStep) {
+                    runState.results.push({ id: test.id, name: test.name, ok: false, status: "Failed", detail: failedStep });
+                } else if (runState.cancelled) {
+                    runState.results.push({ id: test.id, name: test.name, ok: false, status: "Stopped", detail: "Run stopped." });
+                } else {
+                    let verdict = { ok: true, status: "Passed", detail: "" };
+                    if (test.expectedResult) {
+                        const check = checkExpectation(finalReply, test.expectedResult);
+                        if (!check.ok) verdict = { ok: false, status: "Failed", detail: check.message };
+                    }
+                    runState.results.push({ id: test.id, name: test.name, ...verdict });
+                }
+                renderResults();
+                renderStatus();
+            }
+        } finally {
+            runState.running = false;
+            runBtn.disabled = false;
+            runBtn.textContent = "Run tests for " + state.agent.name;
+            stopBtn.style.display = "none";
+            const passed = runState.results.filter((r) => r.ok).length;
+            const errored = runState.results.some((r) => r.status === "Error");
+            runState.status = runState.cancelled
+                ? "Stopped after " + runState.results.length + "/" + tests.length + " tests."
+                : (errored ? "Errored - " + passed + "/" + runState.results.length + " passed"
+                           : passed + "/" + runState.results.length + " passed" + (runState.results.length ? "" : " (no tests)"));
+            renderResults();
+            renderStatus();
+        }
+    }
+
+    renderList(listEl, state, statusEl, renderResults);
+    return pane;
+}
+
+// ----------------------------------------------------------------
+// TEST LIST + STEP BUILDER (per-agent)
+// ----------------------------------------------------------------
+
+function renderList(container, state, statusEl, onRender) {
+    container.replaceChildren();
+    const tests = state.tests || [];
+
+    if (!tests.length) {
+        container.appendChild(el("p", "config-note", "No tests yet. Add one below."));
+        return;
+    }
+
+    tests.forEach((test) => {
+        const row = document.createElement("div");
+        row.className = "test-row";
+        row.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--color-border,#e1e5e8);font-size:13px;";
+
+        const toggle = document.createElement("input");
+        toggle.type = "checkbox";
+        toggle.checked = test.enabled !== false;
+        toggle.title = "Toggle test enabled";
+        toggle.addEventListener("change", async () => {
+            test.enabled = toggle.checked;
+            try {
+                const updated = await saveAgentConfig(state.agent.id, { tests: state.tests });
+                state.tests = updated.tests || [];
+            } catch (error) {
+                statusEl.textContent = error.message;
+                statusEl.style.color = "var(--color-danger,#b91c1c)";
+            }
+            onRender();
+        });
+        row.appendChild(toggle);
+
+        const name = el("span", "", test.name || test.id);
+        name.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+        name.title = test.name || test.id;
+        row.appendChild(name);
+
+        const steps = getSteps(test);
+        const badge = el("span", "badge", steps.length + " step" + (steps.length !== 1 ? "s" : ""));
+        badge.style.cssText = "font-size:10px;";
+        row.appendChild(badge);
+
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "btn btn-small";
+        del.textContent = "x";
+        del.title = "Delete this test";
+        del.style.cssText = "padding:2px 7px;font-size:11px;color:var(--color-danger,#b91c1c);border-color:var(--color-danger,#b91c1c);";
+        del.addEventListener("click", async () => {
+            state.tests = (state.tests || []).filter((t) => t.id !== test.id);
+            try {
+                const updated = await saveAgentConfig(state.agent.id, { tests: state.tests });
+                state.tests = updated.tests || [];
+            } catch (error) {
+                statusEl.textContent = error.message;
+                statusEl.style.color = "var(--color-danger,#b91c1c)";
+            }
+            renderList(container, state, statusEl, onRender);
+            onRender();
+        });
+        row.appendChild(del);
+
+        container.appendChild(row);
+    });
+}
+
+function buildStepBuilder(state, listEl, statusEl) {
+    const wrapper = document.createElement("div");
+
+    const inputRow = document.createElement("div");
+    inputRow.style.cssText = "display:flex;gap:8px;margin-bottom:8px;";
+
+    const stepInput = document.createElement("input");
+    stepInput.type = "text";
+    stepInput.placeholder = "Type a message / question for the agent...";
+    stepInput.style.cssText = "flex:1;padding:7px 10px;border:1px solid var(--color-border,#e1e5e8);border-radius:6px;font:inherit;font-size:13px;color:var(--color-text,#0f172a);background:var(--color-surface,#fff);";
+
+    const addBtn = el("button", "btn btn-secondary btn-small", "+ Add Step");
+    inputRow.append(stepInput, addBtn);
+    wrapper.appendChild(inputRow);
+
+    const draftSteps = [];
+    const draftList = document.createElement("div");
+    draftList.style.cssText = "min-height:32px;padding:7px 9px;border:1px dashed var(--color-border-strong,#cbd5e1);border-radius:7px;background:var(--color-surface-alt,#fafafa);font-size:12px;margin-bottom:10px;color:var(--color-text-faint,#94a3b8);font-style:italic;";
+    draftList.textContent = "No steps yet.";
+    wrapper.appendChild(draftList);
+
+    function refreshDraft() {
+        draftList.replaceChildren();
+        draftList.style.fontStyle = "";
+        draftList.style.color = "";
+        if (!draftSteps.length) {
+            draftList.style.fontStyle = "italic";
+            draftList.style.color = "var(--color-text-faint,#94a3b8)";
+            draftList.textContent = "No steps yet.";
+            return;
+        }
+        draftSteps.forEach((step, i) => {
+            const row = document.createElement("div");
+            row.style.cssText = "display:flex;gap:7px;padding:3px 0;" + (i > 0 ? "border-top:1px dashed var(--color-border,#e1e5e8);" : "");
+            const idx = el("span", "", (i + 1) + ".");
+            idx.style.cssText = "color:var(--color-text-faint,#94a3b8);min-width:18px;text-align:right;font-weight:600;";
+            row.append(idx, el("span", "", step));
+            draftList.appendChild(row);
+        });
+    }
+
+    addBtn.addEventListener("click", () => {
+        const val = stepInput.value.trim();
+        if (!val) return;
+        draftSteps.push(val);
+        stepInput.value = "";
+        stepInput.focus();
+        refreshDraft();
+    });
+
+    stepInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addBtn.click(); }
+    });
+
+    const actionRow = document.createElement("div");
+    actionRow.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;align-items:center;";
+    const commitBtn = el("button", "btn btn-primary btn-small", "Commit as Test");
+    const clearBtn = el("button", "btn btn-secondary btn-small", "Clear Steps");
+    actionRow.append(commitBtn, clearBtn);
+    wrapper.appendChild(actionRow);
+
+    const localStatus = el("span", "config-note", "");
+    localStatus.style.cssText = "font-size:11px;";
+    wrapper.appendChild(localStatus);
+
+    clearBtn.addEventListener("click", () => {
+        draftSteps.length = 0;
+        refreshDraft();
+    });
+
+    commitBtn.addEventListener("click", async () => {
+        if (!draftSteps.length) {
+            localStatus.textContent = "Add at least one step first.";
+            return;
+        }
+        const name = draftSteps[0].length > 60
+            ? draftSteps[0].slice(0, 60).trimEnd() + "..."
+            : draftSteps[0];
+
+        const newTest = {
+            id: "custom-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6),
+            name,
+            steps: [...draftSteps],
+            expectedResult: { mode: "type", value: "nonEmpty" },
+            enabled: true,
+        };
+
+        state.tests = (state.tests || []).concat([newTest]);
+        try {
+            const updated = await saveAgentConfig(state.agent.id, { tests: state.tests });
+            state.tests = updated.tests || [];
+            draftSteps.length = 0;
+            refreshDraft();
+            localStatus.textContent = 'Test "' + name + '" saved.';
+            setTimeout(() => { localStatus.textContent = ""; }, 3500);
+            renderList(listEl, state, statusEl);
+        } catch (error) {
+            localStatus.textContent = "Save failed: " + error.message;
+        }
+    });
+
+    return wrapper;
+}
+
+// ----------------------------------------------------------------
+// HELPERS
+// ----------------------------------------------------------------
+
+function enabledTests(tests) {
+    return (tests || []).filter((t) => t && t.enabled !== false);
+}
+
+function getSteps(test) {
+    if (Array.isArray(test.steps) && test.steps.length) return test.steps;
+    return String(test.input || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+}
+
+function testScript(test) {
+    if (Array.isArray(test.steps) && test.steps.length) {
+        return test.steps.map((step) => String(step).trim()).filter(Boolean);
+    }
+    return String(test.input || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function checkExpectation(reply, expectation) {
+    const mode = expectation.mode || (typeof expectation === "string" ? "string" : "regex");
+    const value = typeof expectation === "string" ? expectation : expectation.value;
+    const text = String(reply || "");
+
+    switch (mode) {
+        case "string": {
+            if (text.toLowerCase().includes(String(value).toLowerCase())) return { ok: true };
+            return { ok: false, message: `Expected "${value}" in reply.` };
+        }
+        case "regex": {
+            try {
+                if (new RegExp(value, "i").test(text)) return { ok: true };
+                return { ok: false, message: `Reply did not match "${value}".` };
+            } catch (_) {
+                return { ok: false, message: `Bad regex "${value}".` };
+            }
+        }
+        case "type": {
+            if (value === "nonEmpty") {
+                if (text.trim()) return { ok: true };
+                return { ok: false, message: "Reply was empty." };
+            }
+            if (value === "number") {
+                const digits = text.replace(/[^\d.-]/g, "");
+                if (digits && !Number.isNaN(Number(digits))) return { ok: true };
+                return { ok: false, message: "Reply was not a number." };
+            }
+            return { ok: false, message: `Unknown type check "${value}".` };
+        }
+        default:
+            return { ok: false, message: `Unknown mode "${mode}".` };
+    }
+}
+
+function fieldText(id, label, value, readonly = false) {
+    const wrap = document.createElement("label");
+    wrap.className = "field";
+    wrap.appendChild(el("span", "", label));
+    const input = document.createElement("input");
+    input.type = "text";
+    if (id) input.id = id;
+    input.value = value || "";
+    if (readonly) input.readOnly = true;
+    wrap.appendChild(input);
+    return wrap;
+}
+
+function fieldArea(id, label, value) {
+    const wrap = document.createElement("label");
+    wrap.className = "field";
+    wrap.appendChild(el("span", "", label));
+    const area = document.createElement("textarea");
+    if (id) area.id = id;
+    area.rows = 3;
+    area.value = value || "";
+    wrap.appendChild(area);
+    return wrap;
+}
+
+function el(tag, className = "", text = "") {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
+}
+```
+
+## dashboard/js/ui/agents.js
+
+```javascript
+// ==========================================
+// ui/agents.js - THE AI AGENT CARD GRID
+// ==========================================
+// Fetches the discovered agents (GET /api/agents) and draws one card
+// per agent. Clicking a card's "Chat" button calls back with that
+// agent so app.js can open/create a ChatSession.
+
+import { getAgents } from "../api/api.js";
+
+/**
+ * Render the agent cards into #agent-cards.
+ *
+ * @param {object} opts
+ * @param {string} opts.containerId - the card grid id
+ * @param {string} opts.statusId    - the status/empty/error area id
+ * @param {(agent: object) => void} opts.onSelect - called when Chat clicked
+ */
+export async function renderAgents({
+    containerId = "agent-cards",
+    statusId = "agent-status-area",
+    onSelect,
+}) {
+    const grid = document.getElementById(containerId);
+    const status = document.getElementById(statusId);
+    if (!grid || !status) {
+        return [];
+    }
+
+    // Clear both.
+    grid.replaceChildren();
+    status.replaceChildren();
+
+    let agents;
+    try {
+        agents = await getAgents();
+    } catch (error) {
+        showError(status, error.message, () =>
+            renderAgents({ containerId, statusId, onSelect })
+        );
+        return [];
+    }
+
+    if (agents.length === 0) {
+        showEmpty(status, "No agents found. Add a folder to agent_library/ on the server and restart it.");
+        return [];
+    }
+
+    agents.forEach((agent) => {
+        grid.appendChild(buildCard(agent, onSelect));
+    });
+
+    return agents;
+}
+
+function monogram(name) {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "?";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function buildCard(agent, onSelect) {
+    const card = document.createElement("article");
+    card.className = "card";
+
+    const avatar = document.createElement("div");
+    avatar.className = "card-avatar";
+    avatar.textContent = monogram(agent.name || "?");
+    card.appendChild(avatar);
+
+    const title = document.createElement("h3");
+    title.textContent = agent.name;
+    card.appendChild(title);
+
+    if (agent.mode) {
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = agent.mode;
+        card.appendChild(badge);
+    }
+
+    const desc = document.createElement("p");
+    desc.textContent = agent.description || "No description provided.";
+    card.appendChild(desc);
+
+    const start = document.createElement("button");
+    start.type = "button";
+    start.className = "btn btn-primary agent-card-action";
+    start.textContent = "Chat";
+    start.addEventListener("click", () => {
+        if (typeof onSelect === "function") {
+            onSelect(agent);
+        }
+        // Also open the standalone chat page (static/chat.html) in a new tab.
+        // The in-app corner widget still works on top of this, and this new
+        // page keeps its own per-agent session in this browser tab.
+        window.open(
+            `/static/chat.html?agent=${encodeURIComponent(agent.id)}`,
+            "ai-chat",
+            "width=800,height=640,resizable=yes,scrollbars=yes"
+        );
+    });
+    card.appendChild(start);
+
+    return card;
+}
+
+function showEmpty(container, message) {
+    const box = document.createElement("div");
+    box.className = "empty-state";
+    box.textContent = message;
+    container.appendChild(box);
+}
+
+function showError(container, message, onRetry) {
+    const box = document.createElement("div");
+    box.className = "empty-state";
+    box.textContent = `Could not load agents: ${message}`;
+
+    const br = document.createElement("br");
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "btn btn-secondary btn-small";
+    retry.textContent = "Retry";
+    retry.style.marginTop = "12px";
+    retry.addEventListener("click", onRetry);
+
+    box.appendChild(br);
+    box.appendChild(retry);
+    container.appendChild(box);
+}
+
+```
+
+## dashboard/js/ui/appearance.js
+
+```javascript
+// ============================================================
+// ui/appearance.js - APPEARANCE SETTINGS SECTION (index page)
+// ============================================================
+// Renders an "Appearance" section below the config on index.html
+// with ONE global set of theme + font + base font-size settings.
+// The same values are read by the standalone chat.html page, so
+// changing them here restyles BOTH pages via the --app-font-family,
+// --app-font-size CSS variables and the data-theme attribute
+// (light / dark / system).
+//
+// Storage: settings.appearance = { theme, fontFamily, fontSize }
+// persisted through the merging POST /api/settings.
+// ============================================================
+
+import { saveAppSettings } from "../api/api.js";
+
+const THEME_OPTIONS = [
+    { value: "system", label: "System (follows device)" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+];
+
+const FONT_OPTIONS = [
+    { value: "", label: "System default" },
+    { value: "Arial, Helvetica, sans-serif", label: "Arial / Helvetica" },
+    { value: "'Segoe UI', Tahoma, sans-serif", label: "Segoe UI" },
+    { value: "Verdana, Geneva, sans-serif", label: "Verdana" },
+    { value: "Georgia, 'Times New Roman', serif", label: "Georgia (serif)" },
+    { value: "'Courier New', monospace", label: "Courier New (mono)" },
+];
+
+const SIZE_OPTIONS = [13, 14, 15, 16, 17, 18];
+
+const FONT_SIZE_LABELS = {
+    13: "13px (small)",
+    14: "14px",
+    15: "15px",
+    16: "16px (default)",
+    17: "17px",
+    18: "18px (large)",
+};
+
+/* Theme currently in effect on this page (used by the system-mode
+   matchMedia listener so it keeps following the OS). */
+let currentTheme = "system";
+let systemListenerAttached = false;
+
+/**
+ * Apply a theme to the CURRENT page by setting data-theme on <html>.
+ * "system" resolves through prefers-color-scheme and keeps following
+ * OS changes for as long as the stored theme stays "system".
+ */
+export function applyTheme(theme) {
+    currentTheme = theme === "dark" || theme === "light" ? theme : "system";
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const mode =
+        currentTheme === "system"
+            ? mq.matches ? "dark" : "light"
+            : currentTheme;
+    document.documentElement.dataset.theme = mode;
+
+    if (!systemListenerAttached) {
+        systemListenerAttached = true;
+        mq.addEventListener("change", () => {
+            if (currentTheme === "system") applyTheme("system");
+        });
+    }
+}
+
+/**
+ * Apply the stored Appearance settings to the CURRENT page by setting its
+ * root CSS variables. Safe with missing/empty values (defaults win).
+ */
+export function applyAppearance(appearance) {
+    const font = (appearance && appearance.fontFamily) || "";
+    const size = Number((appearance && appearance.fontSize) || 0);
+    const theme = (appearance && appearance.theme) || "system";
+    const root = document.documentElement;
+
+    applyTheme(theme);
+
+    if (font) {
+        root.style.setProperty("--app-font-family", font);
+    } else {
+        root.style.removeProperty("--app-font-family");
+    }
+    if (size > 0) {
+        root.style.setProperty("--app-font-size", size + "px");
+    } else {
+        root.style.removeProperty("--app-font-size");
+    }
+}
+
+/**
+ * Render the Appearance section into `mountEl`.
+ *
+ * @param {HTMLElement}  mountEl   - Container to append into
+ * @param {object}       settings  - Full app settings object
+ * @param {Function}     onSave    - (newSettings) => void after a successful save
+ */
+export function renderAppearance({ mountEl, settings = {}, onSave }) {
+    const appearance = (settings && settings.appearance) || {};
+
+    mountEl.appendChild(el("h2", "config-section-heading", "Appearance"));
+
+    const intro = el(
+        "p",
+        "config-note",
+        "One global set of theme + typography applied to BOTH this page and " +
+        "the standalone chat page (static/chat.html). Saved to app_settings.json " +
+        "and re-applied on every load."
+    );
+    mountEl.appendChild(intro);
+
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    panel.style.padding = "16px";
+    mountEl.appendChild(panel);
+
+    // ---- Theme ----
+    const themeField = document.createElement("label");
+    themeField.className = "field";
+    themeField.appendChild(document.createElement("span")).textContent = "Theme";
+    const themeSelect = document.createElement("select");
+    themeSelect.id = "appearance-theme";
+    const currentThemeValue = appearance.theme || "system";
+    THEME_OPTIONS.forEach((opt) => {
+        const option = new Option(opt.label, opt.value);
+        if (opt.value === currentThemeValue) option.selected = true;
+        themeSelect.appendChild(option);
+    });
+    themeField.appendChild(themeSelect);
+    panel.appendChild(themeField);
+
+    // ---- Family ----
+    const familyField = document.createElement("label");
+    familyField.className = "field";
+    familyField.appendChild(document.createElement("span")).textContent = "Font family";
+    const familySelect = document.createElement("select");
+    familySelect.id = "appearance-font-family";
+    FONT_OPTIONS.forEach((opt) => {
+        const option = new Option(opt.label, opt.value);
+        if (opt.value === (appearance.fontFamily || "")) option.selected = true;
+        familySelect.appendChild(option);
+    });
+    familyField.appendChild(familySelect);
+    panel.appendChild(familyField);
+
+    // ---- Size ----
+    const sizeField = document.createElement("label");
+    sizeField.className = "field";
+    sizeField.appendChild(document.createElement("span")).textContent = "Base font size";
+    const sizeSelect = document.createElement("select");
+    sizeSelect.id = "appearance-font-size";
+    const currentSize = Number(appearance.fontSize) || 16;
+    SIZE_OPTIONS.forEach((size) => {
+        const option = new Option(
+            FONT_SIZE_LABELS[size] || size + "px",
+            String(size)
+        );
+        if (size === currentSize) option.selected = true;
+        sizeSelect.appendChild(option);
+    });
+    sizeField.appendChild(sizeSelect);
+    panel.appendChild(sizeField);
+
+    // ---- Live preview ----
+    const preview = el(
+        "div",
+        "appearance-preview",
+        "Aa The quick brown fox - chat bubbles, composer text and headers scale with this font."
+    );
+    panel.appendChild(preview);
+
+    const refreshPreview = () => {
+        preview.style.fontFamily = familySelect.value || "";
+        preview.style.fontSize = sizeSelect.value + "px";
+    };
+    familySelect.addEventListener("change", refreshPreview);
+    sizeSelect.addEventListener("change", refreshPreview);
+    themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
+    refreshPreview();
+
+    // ---- Save ----
+    const actions = document.createElement("div");
+    actions.className = "section-actions";
+    const saveBtn = el("button", "btn btn-primary", "Save appearance");
+    const statusEl = el("span", "config-note", "");
+    actions.appendChild(saveBtn);
+    actions.appendChild(statusEl);
+    panel.appendChild(actions);
+
+    saveBtn.addEventListener("click", async () => {
+        const payload = {
+            appearance: {
+                theme: themeSelect.value,
+                fontFamily: familySelect.value.trim(),
+                fontSize: Number(sizeSelect.value) || 0,
+            },
+        };
+        saveBtn.disabled = true;
+        try {
+            const updated = await saveAppSettings(payload);
+            applyAppearance((updated.settings && updated.settings.appearance) || payload.appearance);
+            try {
+                localStorage.setItem("appearance-theme", themeSelect.value);
+            } catch (_) { /* private mode - ignore */ }
+            if (typeof onSave === "function") onSave(updated.settings || updated);
+            statusEl.textContent = "Appearance saved - both pages restart with it.";
+            statusEl.style.color = "var(--color-success, #16803c)";
+        } catch (error) {
+            statusEl.textContent = error.message;
+            statusEl.style.color = "var(--color-danger, #b91c1c)";
+        } finally {
+            saveBtn.disabled = false;
+        }
+    });
+
+    return {
+        values: () => ({
+            theme: themeSelect.value,
+            fontFamily: familySelect.value.trim(),
+            fontSize: Number(sizeSelect.value) || 0,
+        }),
+    };
+}
+
+function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+}
+
+```
+
+## dashboard/js/ui/config-form.js
+
+```javascript
+// ==========================================
+// ui/config-form.js - CONFIG FORM BUILDER
+// ==========================================
+// Builds the configuration form (default agent/model selects + chat
+// save path text field) and returns handles to read the values.
+// Uses the shared .panel and .field CSS classes.
+
+/**
+ * Build the config form DOM.
+ *
+ * @param {object} opts
+ * @param {object[]} opts.agents   - [{id, name}]
+ * @param {object[]} opts.models   - [{id, name}]
+ * @param {object} opts.settings   - stored app settings
+ * @returns {{ root: HTMLElement, values: () => object }}
+ */
+export function buildConfigForm({ agents = [], models = [], settings = {}, platform = "nix" }) {
+    const root = document.createElement("div");
+    root.className = "panel";
+
+    // ---- Default agent ----
+    root.appendChild(fieldSelect("default-agent-select", "Default agent", [
+        { value: "", label: "(server default)" },
+        ...agents.map((a) => ({ value: a.id, label: `${a.name} (${a.id})` })),
+    ], settings.defaultAgentId || ""));
+
+    // ---- Default model ----
+    root.appendChild(fieldSelect("default-model-select", "Default model", [
+        { value: "", label: "(server default)" },
+        ...models.map((m) => ({ value: m.id, label: m.name })),
+    ], settings.defaultModel || ""));
+
+    // ---- Chat save path ----
+    const pathField = document.createElement("label");
+    pathField.className = "field";
+    const pathLabel = document.createElement("span");
+    pathLabel.textContent = "Chat save path";
+    const pathInput = document.createElement("input");
+    pathInput.type = "text";
+    pathInput.id = "chat-save-path";
+    pathInput.placeholder = "e.g. data/chatlog/agent-text-records or absolute folder";
+    pathInput.value = settings.chatSavePath || "";
+    pathField.appendChild(pathLabel);
+    pathField.appendChild(pathInput);
+    root.appendChild(pathField);
+
+    const pathNote = document.createElement("p");
+    pathNote.className = "config-note";
+    pathNote.textContent = "Where saved chat transcripts (.txt files) are written. This is SEPARATE from the Data folder - transcripts follow this field, not Data folder. Blank = a chatlog sub-folder inside the Data folder.";
+    root.appendChild(pathNote);
+
+    // ---- Data folder path ----
+    root.appendChild(fieldTextInput(
+        "data-dir-path",
+        "Data folder",
+        "Base data folder: chat records, history, exports and (by default) transcripts + the RAG store. Absolute path or relative to the project root. Path changes apply after a server restart.",
+        settings.dataDir || "data"
+    ));
+
+    // ---- RAG database path ----
+    root.appendChild(fieldTextInput(
+        "rag-db-path",
+        "RAG database path",
+        "Folder for the RAG memory store (chroma.sqlite3). Blank = data folder\\rag_db. Absolute path or relative to the project root; a new path starts an empty store. Path changes apply after a server restart.",
+        settings.ragDbPath || ""
+    ));
+
+    // ---- Per-OS paths (three choices: Windows / Linux / macOS) ----
+    // One settings file can carry a separate folder layout for Windows,
+    // Linux and macOS. The row for the machine you're on now is highlighted;
+    // OSes you don't use are left alone (blank = their project defaults).
+    const osHeading = document.createElement("h3");
+    osHeading.className = "config-section-heading";
+    osHeading.textContent = "Per-OS paths (Windows / Linux / macOS)";
+    root.appendChild(osHeading);
+
+    const osNote = document.createElement("p");
+    osNote.className = "config-note";
+    osNote.textContent =
+        "Each OS picks its own folders: the row for this machine wins, the " +
+        "plain fields above are the fallback, and a GENESSIS_DATA_DIR / " +
+        "GENESSIS_CHAT_SAVE_PATH / GENESSIS_RAG_DB_PATH environment variable " +
+        "overrides everything. Leave OSes you don't use alone. Changes apply " +
+        "after a server restart.";
+    root.appendChild(osNote);
+
+    const osRows = [
+        { suffix: "Windows", label: "Windows", current: platform === "win" },
+        { suffix: "Linux", label: "Linux", current: platform === "linux" },
+        { suffix: "Mac", label: "macOS", current: platform === "mac" },
+    ];
+    const pathGroups = [
+        { key: "dataDir", label: "Data folder", hint: "chat records, history, exports, transcripts + RAG by default" },
+        { key: "chatSavePath", label: "Chat save path", hint: "saved chat transcripts (.txt)" },
+        { key: "ragDbPath", label: "RAG database path", hint: "RAG memory store (chroma.sqlite3)" },
+    ];
+    for (const group of pathGroups) {
+        const wrap = document.createElement("div");
+        wrap.className = "os-path-group";
+        const title = document.createElement("div");
+        title.className = "os-path-group-title";
+        title.textContent = group.label + " \u2014 " + group.hint;
+        wrap.appendChild(title);
+        for (const os of osRows) {
+            const field = document.createElement("label");
+            field.className = "field" + (os.current ? " os-path-current" : "");
+            const span = document.createElement("span");
+            span.textContent = group.label + " (" + os.label + ")" + (os.current ? " \u2014 this machine" : "");
+            const input = document.createElement("input");
+            input.type = "text";
+            input.id = group.key + os.suffix + "-input";
+            input.placeholder = "absolute or project-relative folder (blank = default)";
+            input.value = settings[group.key + os.suffix] || "";
+            field.appendChild(span);
+            field.appendChild(input);
+            wrap.appendChild(field);
+        }
+        root.appendChild(wrap);
+    }
+
+    // ---- Chat versioning toggle ----
+    const versionField = document.createElement("label");
+    versionField.className = "field field-toggle";
+    const versionLabel = document.createElement("span");
+    versionLabel.textContent = "Disable chat versioning";
+    const versionToggle = document.createElement("input");
+    versionToggle.type = "checkbox";
+    versionToggle.id = "disable-versioning";
+    versionToggle.checked = Boolean(settings.disableVersioning);
+    const versionSwitch = document.createElement("span");
+    versionSwitch.className = "field-switch";
+    versionField.appendChild(versionLabel);
+    versionField.appendChild(versionToggle);
+    versionField.appendChild(versionSwitch);
+    root.appendChild(versionField);
+
+    const versionNote = document.createElement("p");
+    versionNote.className = "config-note";
+    versionNote.textContent =
+        "On: re-saving a chat overwrites <title>.txt. Off (default): re-saving writes the next version (<title>-2.txt, ...).";
+    root.appendChild(versionNote);
+
+    // ---- RAG memory: defaults ----
+    const ragHeading = document.createElement("h3");
+    ragHeading.className = "config-section-heading";
+    ragHeading.textContent = "RAG memory";
+    root.appendChild(ragHeading);
+
+    root.appendChild(fieldToggle(
+        "rag-commit-save",
+        "Commit saved chats to memory by default",
+        "Default state of the \"Save to memory\" toggle in the chat (you can still change it per chat).",
+        settings.rag && settings.rag.commitOnSave
+    ));
+
+    root.appendChild(fieldToggle(
+        "rag-auto-ingest",
+        "Auto-load transcripts when the memory store is empty",
+        "On: the first search ingests every saved transcript. Off: only per-chat saves and a manual rebuild fill the store.",
+        !settings.rag || settings.rag.autoIngest !== false
+    ));
+
+    root.appendChild(buildRagStoreManager());
+
+    return {
+        root,
+        values() {
+            const values = {
+                defaultAgentId: byId("default-agent-select").value,
+                defaultModel: byId("default-model-select").value,
+                chatSavePath: byId("chat-save-path").value.trim(),
+                dataDir: byId("data-dir-path").value.trim(),
+                ragDbPath: byId("rag-db-path").value.trim(),
+                disableVersioning: byId("disable-versioning").checked,
+                rag: {
+                    commitOnSave: byId("rag-commit-save").checked,
+                    autoIngest: byId("rag-auto-ingest").checked,
+                },
+            };
+            for (const suffix of ["Windows", "Linux", "Mac"]) {
+                values["dataDir" + suffix] = byId("dataDir" + suffix + "-input").value.trim();
+                values["chatSavePath" + suffix] = byId("chatSavePath" + suffix + "-input").value.trim();
+                values["ragDbPath" + suffix] = byId("ragDbPath" + suffix + "-input").value.trim();
+            }
+            return values;
+        },
+    };
+}
+
+/** Buttons + live info for the RAG store (path, chunk count, purge/rebuild). */
+function buildRagStoreManager() {
+    const wrap = document.createElement("div");
+    wrap.className = "rag-store-manager";
+
+    const info = document.createElement("p");
+    info.className = "config-note";
+    info.id = "rag-store-info";
+    info.textContent = "RAG store: loading...";
+    wrap.appendChild(info);
+
+    const actions = document.createElement("div");
+    actions.className = "section-actions";
+
+    const purge = document.createElement("button");
+    purge.type = "button";
+    purge.className = "btn";
+    purge.textContent = "Forget everything";
+    purge.title = "Delete the RAG store so it starts empty (transcripts are kept).";
+
+    const rebuild = document.createElement("button");
+    rebuild.type = "button";
+    rebuild.className = "btn";
+    rebuild.textContent = "Rebuild memory";
+    rebuild.title = "Re-index every saved transcript into the RAG store.";
+
+    actions.appendChild(purge);
+    actions.appendChild(rebuild);
+    wrap.appendChild(actions);
+
+    async function refresh() {
+        const { ragStatus } = await import("../api/api.js");
+        try {
+            const st = await ragStatus();
+            const status = st.status || st;
+            info.textContent = `RAG store: ${status.path} — ${status.chunks} segment(s) indexed.`;
+        } catch (error) {
+            info.textContent = `RAG store: ${error.message}`;
+        }
+    }
+
+    purge.addEventListener("click", async () => {
+        if (!window.confirm("Are you sure you want to clear the RAG memory?\nAll RAG DB entries will be reset to zero.")) {
+            return;
+        }
+        const { resetRag } = await import("../api/api.js");
+        await resetRag();
+        await refresh();
+    });
+
+    rebuild.addEventListener("click", async () => {
+        const { rebuildRag } = await import("../api/api.js");
+        await rebuildRag();
+        await refresh();
+    });
+
+    refresh();
+    return wrap;
+}
+
+function fieldTextInput(id, label, note, value) {
+    const wrap = document.createElement("div");
+    const field = document.createElement("label");
+    field.className = "field";
+    const span = document.createElement("span");
+    span.textContent = label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = id;
+    input.value = value || "";
+    field.appendChild(span);
+    field.appendChild(input);
+    wrap.appendChild(field);
+    if (note) {
+        const p = document.createElement("p");
+        p.className = "config-note";
+        p.textContent = note;
+        wrap.appendChild(p);
+    }
+    return wrap;
+}
+
+function fieldToggle(id, label, note, value) {
+    const wrap = document.createElement("div");
+    const field = document.createElement("label");
+    field.className = "field field-toggle";
+    const span = document.createElement("span");
+    span.textContent = label;
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.id = id;
+    input.checked = Boolean(value);
+    const switchEl = document.createElement("span");
+    switchEl.className = "field-switch";
+    field.appendChild(span);
+    field.appendChild(input);
+    field.appendChild(switchEl);
+    wrap.appendChild(field);
+    if (note) {
+        const p = document.createElement("p");
+        p.className = "config-note";
+        p.textContent = note;
+        wrap.appendChild(p);
+    }
+    return wrap;
+}
+
+function fieldSelect(id, label, options, value) {
+    const field = document.createElement("label");
+    field.className = "field";
+
+    const span = document.createElement("span");
+    span.textContent = label;
+    field.appendChild(span);
+
+    const select = document.createElement("select");
+    select.id = id;
+    options.forEach((opt) => {
+        const o = new Option(opt.label, opt.value);
+        if (opt.value === value) {
+            o.selected = true;
+        }
+        select.appendChild(o);
+    });
+    field.appendChild(select);
+    return field;
+}
+
+function byId(id) {
+    return document.getElementById(id);
+}
+
+```
+
+## dashboard/js/ui/header-nav.js
+
+```javascript
+// ============================================================
+// ui/header-nav.js - SHARED APP NAVIGATION (used by every page)
+// ============================================================
+// One place that lists the app's pages. Future options = add one
+// entry to PAGES. Each page renders the row and marks its own link
+// with "current":
+//   index.html  -> renderHeaderNav("dashboard")  (via js/app.js)
+//   config.html -> renderHeaderNav("config")     (via js/config-page.js)
+//   chat.html   -> renderHeaderNav("chat")       (static anchors in markup)
+// ============================================================
+
+const PAGES = [
+    { id: "dashboard", label: "Dashboard", href: "/static/index.html" },
+    { id: "chat", label: "Chat", href: "/static/chat.html" },
+    { id: "config", label: "Settings", href: "/static/config.html" },
+];
+
+/** Build the shared nav row, highlighting the entry whose id === currentId. */
+export function renderHeaderNav(currentId = "") {
+    const nav = document.createElement("nav");
+    nav.className = "app-header-nav";
+    nav.setAttribute("aria-label", "Primary");
+
+    PAGES.forEach((page) => {
+        const link = document.createElement("a");
+        link.href = page.href;
+        link.textContent = page.label;
+        link.className = "header-nav-link" + (page.id === currentId ? " current" : "");
+        if (page.id === currentId) {
+            link.setAttribute("aria-current", "page");
+        }
+        nav.appendChild(link);
+    });
+
+    return nav;
+}
+```
+
+## dashboard/js/ui/interface-indicator.js
+
+```javascript
+// ============================================================
+// ui/interface-indicator.js - HEADER PILL: "N update modules"
+// ============================================================
+// A tiny, quiet status chip for the Modular Interface / update system
+// (docs/01_IDEA_AND_ARCHITECTURE.md). Fetches /api/interface/status once;
+// when the server is old (no endpoint) or has nothing to show, it renders
+// nothing instead of erroring. Clicking it jumps to the "Updates / Interface"
+// card on the Settings page.
+//
+//   index.html  -> renderInterfaceIndicator({ container: parent,
+//                                             onMesh: true })
+//   config.html -> renderInterfaceIndicator({ container: parent })
+// ============================================================
+
+import { getInterfaceStatus } from "../api/api.js";
+
+export async function renderInterfaceIndicator({ container = null, onMesh = false } = {}) {
+    let status;
+    try {
+        status = await getInterfaceStatus();
+    } catch (_) {
+        return null; // server predates /api/interface/* - stay silent
+    }
+
+    const catalog = status.catalog || {};
+    const total = Object.keys(catalog).reduce(
+        (n, domain) => n + (Array.isArray(catalog[domain]) ? catalog[domain].length : 0),
+        0
+    );
+    if (total === 0) return null;
+
+    const driftCount = status.baseline && status.baseline.drift
+        ? Number(status.baseline.drift.modified) || 0
+        : 0;
+    const runEnabled = Boolean(status.run_enabled);
+
+    const pill = document.createElement("a");
+    pill.href = "/static/config.html#interface-section";
+    pill.className = "interface-indicator" + (onMesh ? " on-mesh" : "");
+    pill.title = "Interface / update modules - open on the Settings page";
+
+    const dot = document.createElement("span");
+    dot.className = "dot" + (driftCount > 0 ? " drift" : "");
+    pill.appendChild(dot);
+
+    const label = document.createElement("span");
+    label.textContent = total + " update" + (total === 1 ? "" : "s");
+    pill.appendChild(label);
+
+    if (runEnabled) {
+        const run = document.createElement("span");
+        run.className = "run-state";
+        run.textContent = "\u2022 on";
+        pill.appendChild(run);
+    }
+
+    if (container) {
+        container.appendChild(pill);
+    }
+    return pill;
+}
+```
+
+## dashboard/js/ui/interface-manager.js
+
+```javascript
+// ============================================================
+// ui/interface-manager.js - "Updates / Interface" card (config.html)
+// ============================================================
+// Drives the Modular Interface / update system from the browser
+// (docs/01_IDEA_AND_ARCHITECTURE.md). Shows the live module catalog, the
+// external archive, the trace-log tail and the known-good baseline; offers
+// Apply / Snapshot / Restore actions, plus an explicitly-armable
+// "module execution" panel (arbitrary code execution - OFF by default and
+// gated both here in the UI and server-side via /api/interface/toggle-run).
+// ============================================================
+
+import {
+    getInterfaceStatus,
+    applyInterface,
+    snapshotInterface,
+    restoreInterface,
+    runInterface,
+    setRunEnabled,
+} from "../api/api.js";
+
+export async function renderInterfaceSection(mount) {
+    if (!mount) return;
+
+    mount.appendChild(el("h2", "config-section-heading", "Updates / Interface"));
+    mount.appendChild(el("p", "config-note",
+        "Modular update modules (interface/updates/<domain>/) are discovered at server " +
+        "startup and re-loaded through Apply. Snapshot publishes the current tree as the " +
+        "known-good baseline; Restore rolls changed files back to it (dry-run first)."));
+
+    const statusEl = el("div", "status-message");
+    const statusBody = el("div", "");
+
+    const refresh = el("button", "btn btn-small", "\u21bb refresh");
+    refresh.type = "button";
+    refresh.title = "Re-fetch the interface status from the server";
+    refresh.addEventListener("click", async () => {
+        refresh.disabled = true;
+        await loadStatus();
+        refresh.disabled = false;
+    });
+
+    mount.appendChild(refresh);
+    mount.appendChild(statusBody);
+    mount.appendChild(statusEl);
+
+    // ---- run-module panel (gated) ----
+    const runBlock = buildRunPanel();
+    mount.appendChild(runBlock.root);
+
+    async function loadStatus() {
+        let status;
+        try {
+            status = await getInterfaceStatus();
+        } catch (error) {
+            setStatus(error.message, "warn");
+            return;
+        }
+        renderStatus(status);
+        runBlock.sync(status);
+    }
+
+    function renderStatus(status) {
+        const box = el("div", "interface-status");
+        const catalog = status.catalog || {};
+
+        const grid = el("div", "iface-grid");
+        grid.appendChild(label("Update modules", Object.keys(catalog).length
+            ? Object.entries(catalog).map(([d, mods]) =>
+                d + "/ -> " + ((mods && mods.length) ? mods.join(", ") : "(none)")).join("\n")
+            : "(none loaded)"));
+
+        const archived = status.archived || {};
+        const archivedCount = Object.values(archived).reduce(
+            (n, list) => n + (Array.isArray(list) ? list.length : 0), 0);
+        grid.appendChild(label("Archive (retired modules)",
+            status.archive_dir || "", archivedCount
+                ? Object.entries(archived).map(([d, list]) =>
+                    d + "/ -> " + (list.length ? list.join(", ") : "(none)")).join("\n")
+                : "empty"));
+
+        const baseline = status.baseline || {};
+        let driftText = "(no baseline)";
+        let driftClass = "";
+        if (baseline.drift) {
+            const n = baseline.drift.modified;
+            driftText = n === 0
+                ? "up to date"
+                : n + " file" + (n === 1 ? "" : "s") + " differ \u2014 run Snapshot to rebaseline";
+            driftClass = n === 0 ? "ok" : "warn";
+        }
+        grid.appendChild(label("Baseline", baseline.folder || "", driftText, driftClass));
+
+        const manifest = baseline.manifest;
+        if (manifest) {
+            grid.appendChild(label("Baseline manifest",
+                (manifest.created || "?") + " \u00b7 " + (manifest.files ?? "?") + " files"));
+        }
+
+        const actions = el("div", "iface-actions");
+        actions.appendChild(actionBtn("\u21bb Apply", "Reload update modules + regenerate docs", async (btn) => {
+            return await applyInterface();
+        }));
+        actions.appendChild(actionBtn("\u2756 Snapshot", "Publish the current tree as the new baseline", async (btn) => {
+            return await snapshotInterface();
+        }));
+        actions.appendChild(actionBtn("\u21a9 Restore (dry-run)",
+            "Preview what a rollback would change", async (btn) => {
+                return await restoreInterface({ dryRun: true });
+            }));
+        actions.appendChild(actionBtn("\u21a9 Restore (real)",
+            "Back up + roll changed files back to the baseline",
+            async (btn) => {
+                if (!confirm("Restore the live tree from the baseline?\n\nChanged files are backed up to data/snapshots/pre_restore_backup/ first.")) {
+                    return { cancelled: true };
+                }
+                return await restoreInterface({ dryRun: false });
+            }));
+
+        const trace = el("div", "iface-trace");
+        trace.appendChild(el("div", "iface-trace-title", "Trace log tail (" + (status.trace_log || "") + ")"));
+        const pre = el("pre", "iface-trace-pre",
+            (status.trace_tail && status.trace_tail.length)
+                ? status.trace_tail.join("\n")
+                : "(trace log is empty)");
+        trace.appendChild(pre);
+
+        box.appendChild(grid);
+        box.appendChild(actions);
+        box.appendChild(trace);
+        statusBody.replaceChildren(box);
+    }
+
+    function actionBtn(text, title, run) {
+        const btn = el("button", "btn", text);
+        btn.type = "button";
+        btn.title = title;
+        btn.addEventListener("click", async () => {
+            btn.disabled = true;
+            try {
+                const result = await run(btn);
+                if (result && result.cancelled) return;
+                setStatus(summarise(text, result), "ok");
+                await loadStatus();
+            } catch (error) {
+                setStatus(text + " failed \u2014 " + (error.message || error), "error");
+            } finally {
+                btn.disabled = false;
+            }
+        });
+        return btn;
+    }
+
+    function summarise(action, result) {
+        if (!result || typeof result !== "object") return action + " done.";
+        if (result.dry_run !== undefined) {
+            return action + ": " + (result.modified === 0
+                ? "clean - live tree matches the baseline."
+                : result.modified + " file(s) would change" + (result.skipped ? ", " + result.skipped + " baseline-only" : "") + ".");
+        }
+        if (result.files !== undefined) {
+            return action + ": baseline published with " + result.files + " files.";
+        }
+        if (result.catalog) {
+            return action + ": modules reloaded per domain \u2014 " +
+                Object.entries(result.catalog).map(([d, m]) => d + ":" + m.length).join(", ") + ".";
+        }
+        return action + " done.";
+    }
+
+    function setStatus(text, kind) {
+        statusEl.textContent = text;
+        statusEl.className = "status-message " + (kind || "");
+    }
+
+    // ------------------------------------------------------------ run panel
+
+    function buildRunPanel() {
+        const root = el("div", "iface-run-panel");
+
+        const toggleRow = el("div", "iface-run-toggle");
+        const enable = document.createElement("input");
+        enable.type = "checkbox";
+        enable.id = "iface-run-enable";
+        const enableLabel = el("label", "", "");
+        enableLabel.htmlFor = "iface-run-enable";
+        enableLabel.appendChild(enable);
+        enableLabel.appendChild(document.createTextNode(" Enable module execution (arbitrary code)"));
+        toggleRow.appendChild(enableLabel);
+        root.appendChild(toggleRow);
+
+        const pane = el("div", "iface-run-pane");
+        pane.hidden = true;
+        root.appendChild(pane);
+
+        const fieldWrap = el("div", "iface-run-fields");
+        const domainSel = el("select", "text-input");
+        const moduleSel = el("select", "text-input");
+        const fnInput = el("input", "text-input");
+        fnInput.type = "text";
+        fnInput.placeholder = "function name (e.g. secondary_engine_action)";
+        const argsInput = el("input", "text-input");
+        argsInput.type = "text";
+        argsInput.placeholder = "args  [5]  (JSON array, optional)";
+        const kwargsInput = el("input", "text-input");
+        kwargsInput.type = "text";
+        kwargsInput.placeholder = "kwargs  {\"x\": 2}  (JSON object, optional)";
+
+        const runBtn = el("button", "btn btn-primary", "\u25b6 Run");
+        runBtn.type = "button";
+
+        const resultPre = el("pre", "iface-run-result", "");
+        const runStatus = el("div", "status-message run-result-status");
+
+        function fillDomains(domains) {
+            domainSel.replaceChildren();
+            domains.forEach((d) => {
+                const opt = document.createElement("option");
+                opt.value = d;
+                opt.textContent = d;
+                domainSel.appendChild(opt);
+            });
+        }
+        function fillModules(modules) {
+            moduleSel.replaceChildren();
+            modules.forEach((name) => {
+                const opt = document.createElement("option");
+                opt.value = name;
+                opt.textContent = name;
+                moduleSel.appendChild(opt);
+            });
+        }
+
+        domainSel.addEventListener("change", () => {
+            const mapping = currentCatalog;
+            const mods = (mapping[domainSel.value] || []);
+            fillModules(mods.length ? mods : ["(none)"]);
+        });
+
+        runBtn.addEventListener("click", async () => {
+            runBtn.disabled = true;
+            runStatus.textContent = "";
+            try {
+                const args = parseArg(argsInput.value, []);
+                const kwargs = parseArg(kwargsInput.value, {});
+                const result = await runInterface({
+                    domain: domainSel.value,
+                    module: moduleSel.value,
+                    function: fnInput.value.trim(),
+                    args,
+                    kwargs,
+                });
+                resultPre.textContent = formatResult(result);
+                runStatus.textContent = "OK - returned a result (see trace in server console / data/interface_trace.log).";
+                runStatus.className = "status-message ok";
+            } catch (error) {
+                runStatus.textContent = error.message || String(error);
+                runStatus.className = "status-message error";
+            } finally {
+                runBtn.disabled = false;
+            }
+        });
+
+        [domainSel, moduleSel, fnInput, argsInput, kwargsInput].forEach((node) => {
+            fieldWrap.appendChild(labeledWrap(node));
+        });
+        pane.appendChild(fieldWrap);
+        pane.appendChild(runBtn);
+        pane.appendChild(runStatus);
+        pane.appendChild(resultPre);
+
+        let currentCatalog = {};
+
+        enable.addEventListener("change", async () => {
+            try {
+                await setRunEnabled(enable.checked);
+                pane.hidden = !enable.checked;
+                runStatus.textContent = enable.checked
+                    ? "Module execution is ON for this server process. /api/interface/run is now armed."
+                    : "Module execution is OFF.";
+                runStatus.className = "status-message " + (enable.checked ? "ok" : "warn");
+            } catch (error) {
+                enable.checked = !enable.checked;
+                runStatus.textContent = error.message || String(error);
+                runStatus.className = "status-message error";
+            }
+        });
+
+        // sync() is called after every status fetch.
+        return {
+            root,
+            sync(status) {
+                currentCatalog = status.catalog || {};
+                const domains = Object.keys(currentCatalog);
+                if (domains.length && !domainSel.options.length) {
+                    fillDomains(domains);
+                    fillModules(currentCatalog[domains[0]] || ["(none)"]);
+                }
+                const serverEnabled = Boolean(status.run_enabled);
+                if (enable.checked !== serverEnabled) {
+                    enable.checked = serverEnabled;
+                }
+                pane.hidden = !serverEnabled;
+            },
+        };
+    }
+}
+
+// ---------------------------------------------------------------- helpers
+
+function parseArg(raw, fallback, flag) {
+    const value = String(raw || "").trim();
+    if (!value) return fallback;
+    try {
+        return JSON.parse(value);
+    } catch (_) {
+        throw new Error((flag || "Arguments") + " must be valid JSON: " + value);
+    }
+}
+
+function formatResult(result) {
+    if (!result || typeof result !== "object") return String(result);
+    return JSON.stringify(result, null, 2);
+}
+
+function labeledWrap(input) {
+    const wrap = el("label", "iface-run-field");
+    const name = input.placeholder
+        ? String(input.placeholder).split(" ")[0]
+        : (input.id || "value");
+    wrap.appendChild(el("span", "iface-run-field-label", name));
+    wrap.appendChild(input);
+    return wrap;
+}
+
+function label(heading, body, sub = "", subClass = "") {
+    const wrap = el("div", "iface-grid-item");
+    wrap.appendChild(el("div", "iface-item-label", heading));
+    wrap.appendChild(el("div", "iface-item-body", body));
+    if (sub) {
+        const s = el("div", "iface-item-sub " + subClass, sub);
+        wrap.appendChild(s);
+    }
+    return wrap;
+}
+
+function el(tag, className = "", text = "") {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
+}
+```
+
+## dashboard/js/ui/markdown.js
+
+```javascript
+// ==========================================
+// ui/markdown.js - CHAT TEXT -> SAFE MARKDOWN DOM
+// ==========================================
+// Converts message text (typed by humans or produced by LLMs) into
+// safe DOM nodes for a pragmatic markdown subset:
+//
+//   BLOCKS : ```fenced code```   blank-line paragraphs
+//            - bullet lists      1. numbered lists
+//   INLINE : `code`   **bold**   *italic*   [text](https://link)
+//
+// SAFETY RULE (never break this): message text NEVER touches
+// innerHTML. Every character is placed with createElement +
+// textContent so "<script>" stays inert. Link hrefs must start
+// with http(s).
+
+const INLINE_RULES = [
+    { tag: "code",   re: /`([^`\n]+)`/ },
+    { tag: "strong", re: /\*\*([^*\n]+)\*\*/ },
+    { tag: "em",     re: /\*([^*\n]+)\*/ },
+    { tag: "a",      re: /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/ },
+];
+
+/**
+ * Render message text into a DocumentFragment ready to append.
+ */
+export function renderMarkdown(text) {
+    const fragment = document.createDocumentFragment();
+
+    String(text ?? "").split("```").forEach((chunk, index) => {
+        if (index % 2 === 1) {
+            fragment.appendChild(buildCodeBlock(chunk));
+        } else {
+            buildBlocks(chunk).forEach((node) => fragment.appendChild(node));
+        }
+    });
+
+    return fragment;
+}
+
+/** Fenced code: drop an optional language tag on the first line. */
+function buildCodeBlock(chunk) {
+    const codeText = chunk.replace(/^[a-zA-Z0-9_+-]*\n/, "");
+    const pre = document.createElement("pre");
+    const code = document.createElement("code");
+    code.textContent = codeText.trim();
+    pre.appendChild(code);
+    return pre;
+}
+
+/** Split plain text into paragraph/list blocks on blank lines. */
+function buildBlocks(text) {
+    const nodes = [];
+
+    String(text)
+        .split(/\n{2,}/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .forEach((block) => nodes.push(buildBlock(block)));
+
+    return nodes;
+}
+
+/** One blank-line-separated chunk becomes a <ul>, <ol> or <p>. */
+function buildBlock(block) {
+    const lines = block.split("\n");
+
+    if (lines.length > 0 && lines.every((l) => /^\s*[-*]\s+\S/.test(l))) {
+        return buildList(lines, "ul", (l) => l.replace(/^\s*[-*]\s+/, ""));
+    }
+
+    if (lines.length > 0 && lines.every((l) => /^\s*\d+[.)]\s+\S/.test(l))) {
+        return buildList(lines, "ol", (l) => l.replace(/^\s*\d+[.)]\s+/, ""));
+    }
+
+    return buildParagraph(lines);
+}
+
+function buildList(lines, tag, stripMarker) {
+    const list = document.createElement(tag);
+    lines.forEach((line) => {
+        const item = document.createElement("li");
+        renderInline(stripMarker(line), item);
+        list.appendChild(item);
+    });
+    return list;
+}
+
+function buildParagraph(lines) {
+    const p = document.createElement("p");
+    p.style.whiteSpace = "pre-line";
+    lines.forEach((line, index) => {
+        if (index > 0) {
+            p.appendChild(document.createTextNode("\n"));
+        }
+        renderInline(line, p);
+    });
+    return p;
+}
+
+/** Walk a line left-to-right; earliest/longest match wins. */
+function renderInline(line, target) {
+    let best = null;
+
+    INLINE_RULES.forEach((rule) => {
+        const match = rule.re.exec(line);
+        if (!match) {
+            return;
+        }
+        const better =
+            best === null ||
+            match.index < best.match.index ||
+            (match.index === best.match.index && match[0].length > best.match[0].length);
+        if (better) {
+            best = { rule, match };
+        }
+    });
+
+    if (!best) {
+        target.appendChild(document.createTextNode(line));
+        return;
+    }
+
+    const { rule, match } = best;
+    const [raw, ...groups] = match;
+
+    if (match.index > 0) {
+        target.appendChild(document.createTextNode(line.slice(0, match.index)));
+    }
+
+    target.appendChild(buildInlineNode(rule.tag, groups));
+    renderInline(line.slice(match.index + raw.length), target);
+}
+
+/** Build the styled node for one matched inline feature. */
+function buildInlineNode(tag, groups) {
+    if (tag === "a") {
+        const link = document.createElement("a");
+        link.href = groups[1];
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = groups[0];
+        return link;
+    }
+
+    const node = document.createElement(tag);
+    node.textContent = groups[0];
+    return node;
+}
+
+```
+
+## docs/01_IDEA_AND_ARCHITECTURE.md
+
+```markdown
+# 01_IDEA_AND_ARCHITECTURE.md: Modular Interface & System Update Architecture
+
+## 1. Executive Summary & Core Idea
+
+As an application grows, adding new features, experimental logic, or system updates directly into core modules increases complexity and risks breaking existing functionality. This architecture introduces a **Modular Interface & Change Tracking System** for the app.
+
+The key objectives are:
+1. **Isolation of Code Additions**: New updates are placed in domain-specific folders (`interface/updates/engine/`, `interface/updates/tools/`, `interface/updates/server/`) without modifying core files.
+2. **Direct Module Object Access (Option B)**: The system dynamically discovers imported Python module objects, allowing developers to execute module functions natively (e.g., `update_manager.get_active_module("engine", "newfunction").execute_new_logic()`).
+3. **Line-Number Change Tracing**: Execution calls can be wrapped in a dispatcher that uses Python's `inspect` module to log exact caller line numbers and file paths for troubleshooting.
+4. **External Archiving**: Inactive or retired update modules are moved out of the main codebase into an external archive folder (`data/interface_archive/`) to prevent repo bloat.
+5. **System-Wide Update & Contained Restoration**:
+   - **Apply**: Reloads all active update modules and regenerates documentation snapshots (`APP_STRUCTURE.md` and `APP_CODE_SNAPSHOT.md`).
+   - **Restore**: An isolated restoration system compares the current codebase against a known baseline (the `current-known-good-copy/` folder) using SHA-256 hashes, creates a safety backup (`data/snapshots/pre_restore_backup/`), excludes user data/env paths (`data/`, `venv/`, `.git/`, `app_settings.json`), and safely rolls back modified files.
+
+---
+
+## 2. Target Architecture & Directory Layout
+
+The new components integrate seamlessly into the app structure:
+
+```text
+terminator1/
+├── interface/
+│   ├── interface_dispatcher.py    # Line-number tracing & execution dispatcher
+│   ├── update_manager.py          # Dynamic module discovery (Option B) & external archiver
+│   ├── restore_manager.py         # Isolated baseline comparison, backup & rollback manager
+│   └── updates/                   # Active update modules (grouped by domain)
+│       ├── engine/                # E.g., newfunction.py, agent_patch.py
+│       ├── tools/                 # E.g., custom_capability.py
+│       └── server/                # E.g., route_extensions.py
+├── about/
+│   ├── about.json
+│   └── set_title.py               # Updated with 'apply' and 'restore' CLI triggers
+├── data/
+│   ├── interface_archive/         # External archive directory for retired update files
+│   └── snapshots/
+│       └── pre_restore_backup/    # Automated pre-restoration safety snapshot
+├── current-known-good-copy/       # Complete working copy of the last good source
+│                                  # (the restore baseline, regenerated via `snapshot`)
+├── scripts/
+│   └── update_docs.py             # Codebase snapshot generator
+├── docs/
+│   ├── APP_STRUCTURE.md           # Auto-generated folder-tree snapshot
+│   └── APP_CODE_SNAPSHOT.md       # Auto-generated per-file source snapshot
+└── test/                          # Legacy pre-infection snapshot (recovery reference)
+```
+
+---
+
+## 3. Component Breakdown & Responsibilities
+
+### Component A: `UpdateManager` (`interface/update_manager.py`)
+- **Discovery**: Automatically scans all `.py` files in `interface/updates/` subdirectories (`engine/`, `tools/`, `server/`) and imports them.
+- **Cataloging**: Stores live module objects in `active_modules_catalog` formatted as `{ "domain": { "module_name": module_object } }`.
+- **Option B Access**: Exposes `get_active_module(domain_name, module_name)` to return the live module object for direct, native execution.
+- **External Archiving**: Provides `move_module_to_external_archive(domain_name, module_name)`, which physically moves `.py` files out of the repository into `data/interface_archive/<domain>/` and refreshes the catalog.
+
+### Component B: `InterfaceDispatcher` (`interface/interface_dispatcher.py`)
+- **Caller Tracing**: Inspects the call stack using `inspect.currentframe().f_back` to retrieve the filename and line number of the caller.
+- **Execution Logging**: Logs trace entries showing the exact function name, module, and line number before execution.
+- **Traced Execution**: Provides `trace_and_execute(target_function, *args)` to wrap native Option B module calls with line logging.
+
+### Component C: `RestoreManager` (`interface/restore_manager.py`)
+- **Checksum Comparison**: Computes SHA-256 file hashes for every file in the active codebase against the baseline folder (`current-known-good-copy/` by default).
+- **Safety Backup**: Creates a complete snapshot in `data/snapshots/pre_restore_backup/` before overwriting any file.
+- **Exclusion Safety**: Strictly excludes runtime data and configuration paths (`data/`, `venv/`, `.git/`, `__pycache__`, `dashboard/config/app_settings.json`, `about/about.json`) to preserve user settings and chat logs.
+- **Restoration & Doc Sync**: Overwrites corrupted/modified files from the clean baseline and executes `scripts/update_docs.py` to keep documentation snapshots accurate.
+
+### Component D: Action Trigger Integration (`about/set_title.py`)
+- **CLI Commands**:
+  - `python about/set_title.py apply`: Re-discovers active modules and runs `scripts/update_docs.py`.
+  - `python about/set_title.py snapshot [dest]`: Publishing the current tree into `current-known-good-copy/` (the restore baseline).
+  - `python about/set_title.py restore [optional_baseline]`: Invokes `RestoreManager` to execute the rollback workflow.
+  - Default execution (no arguments) preserves interactive title/subtitle editing.
+
+---
+
+## 4. System Workflow & Data Flow
+
+1. **Adding New Features**:
+   - Create a Python file under `interface/updates/<domain>/` (e.g., `interface/updates/engine/newfunction.py`).
+   - Run `python about/set_title.py apply` to register the update and refresh documentation.
+2. **Executing Logic (Option B)**:
+   - Access the module via `module = update_manager.get_active_module("engine", "newfunction")`.
+   - Call the function natively: `module.execute_new_logic(data)`.
+3. **Archiving Inactive Code**:
+   - Call `update_manager.move_module_to_external_archive("engine", "newfunction")`.
+   - File is moved to `data/interface_archive/engine/newfunction.py`.
+4. **Refreshing the Baseline**:
+   - Run `python about/set_title.py snapshot` to publish the current known-good tree into `current-known-good-copy/`.
+5. **Restoring Baseline**:
+   - Run `python about/set_title.py restore`.
+   - `RestoreManager` backs up the current codebase to `data/snapshots/pre_restore_backup/`, restores modified files from `current-known-good-copy/`, and regenerates `APP_STRUCTURE.md` and `APP_CODE_SNAPSHOT.md`.
+
+---
+
+## 5. Design Decisions
+
+- **Restore semantics**: only files present in BOTH the live tree and the baseline whose SHA-256 differs are overwritten. Files that exist only in the baseline or only in the live tree are reported but left untouched.
+- **Baseline**: `current-known-good-copy/` is the default restore baseline. The legacy `test/` (pre-infection snapshot) is used as a fallback with a staleness warning.
+- **Exclusions**: `data/`, `venv/`, `.git/`, `__pycache__/`, `current-known-good-copy/`, `test/`, `dashboard/config/app_settings.json`, `about/about.json`, `*.bak`, `*.pyc`, `*.pyo`.
+```
+
+## docs/02_IMPLEMENTATION_PLAN.md
+
+```markdown
+# 02_IMPLEMENTATION_PLAN.md: Step-by-Step Implementation Guide & AI Prompt
+
+## Executive Instructions for AI Developer / Workflow
+
+Use the following step-by-step implementation guide and verbatim code blocks to implement the Modular Interface, Update Manager, Restore Manager, and Command Triggers in the codebase.
+
+---
+
+## Step-by-Step Implementation Guide
+
+### Step 1: Create Directory Layout
+Create the `interface/` directory structure and external archive/backup folders:
+- `interface/updates/engine/`
+- `interface/updates/tools/`
+- `interface/updates/server/`
+- `data/interface_archive/`
+- `data/snapshots/pre_restore_backup/`
+
+### Step 2: Implement `interface/update_manager.py`
+Add `UpdateManager` to handle dynamic module discovery across domain directories, Option B direct module retrieval, and external archiving.
+
+### Step 3: Implement `interface/interface_dispatcher.py`
+Add `InterfaceDispatcher` to capture caller line numbers (`inspect.currentframe().f_back.f_lineno`) and log function execution.
+
+### Step 4: Implement `interface/restore_manager.py`
+Add `RestoreManager` to compare active codebase files against `test/` baseline hashes, create safety backups, apply path exclusions, and perform restorations.
+
+### Step 5: Update `about/set_title.py`
+Extend `about/set_title.py` to handle `apply` and `restore` CLI commands while maintaining interactive title/subtitle editing.
+
+### Step 6: Create Sample Update Module
+Add `interface/updates/engine/newfunction.py` as an initial update file to verify Option B dynamic loading.
+
+### Step 7: Wire into Server Startup & Refresh Docs
+Initialize `UpdateManager` and `InterfaceDispatcher` in `server/server.py` at startup, then run:
+```bash
+venv/bin/python scripts/update_docs.py
+```
+
+---
+
+## Copy-Paste Implementation Prompt for AI Developer
+
+```text
+PROMPT: Implement Modular Interface, Update Manager, Restore Manager, and CLI Triggers
+
+Goal: Implement a modular interface system under `interface/` that dynamically loads Python module files across domain folders (`engine/`, `tools/`, `server/`), supports Option B direct module access, traces caller line numbers, manages external archiving in `data/interface_archive/`, and provides baseline restoration via `about/set_title.py`.
+
+MANDATORY REQUIREMENT: You MUST use the exact Python code blocks provided below verbatim without shortening variable names or modifying logic.
+
+--------------------------------------------------------------------------------
+1. File: interface/update_manager.py
+--------------------------------------------------------------------------------
+import importlib
+import shutil
+from pathlib import Path
+
+PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
+ACTIVE_UPDATES_DIRECTORY = Path(__file__).resolve().parent / "updates"
+EXTERNAL_ARCHIVE_DIRECTORY = PROJECT_ROOT_DIRECTORY / "data" / "interface_archive"
+
+
+class UpdateManager:
+    """Discovers active update modules in interface/updates/ and manages external archiving."""
+
+    def __init__(self):
+        # Structure: { "engine": {"newfunction": <module_object>} }
+        self.active_modules_catalog = {}
+
+    def discover_all_active_modules(self):
+        """Scans interface/updates/ for active Python files grouped by domain folder."""
+        self.active_modules_catalog.clear()
+
+        for domain_folder in ACTIVE_UPDATES_DIRECTORY.iterdir():
+            if domain_folder.is_dir() and not domain_folder.name.startswith(("_", ".")):
+                domain_name = domain_folder.name
+                self.active_modules_catalog[domain_name] = {}
+
+                for python_file in domain_folder.glob("*.py"):
+                    if python_file.name.startswith("_"):
+                        continue
+                    module_name = python_file.stem
+                    import_path = f"interface.updates.{domain_name}.{module_name}"
+                    self.active_modules_catalog[domain_name][module_name] = importlib.import_module(import_path)
+
+    def get_active_module(self, domain_name: str, module_name: str):
+        """Option B Direct Access: Returns the live Python module object for direct calls."""
+        return self.active_modules_catalog.get(domain_name, {}).get(module_name)
+
+    def list_domain_modules(self, domain_name: str) -> list:
+        """Returns a list of all loaded module names under a domain."""
+        return list(self.active_modules_catalog.get(domain_name, {}).keys())
+
+    def move_module_to_external_archive(self, domain_name: str, module_name: str):
+        """Moves an inactive module file from the codebase to the external archive folder."""
+        source_file_path = ACTIVE_UPDATES_DIRECTORY / domain_name / f"{module_name}.py"
+        if not source_file_path.exists():
+            raise FileNotFoundError(f"Source update file does not exist: {source_file_path}")
+
+        target_archive_directory = EXTERNAL_ARCHIVE_DIRECTORY / domain_name
+        target_archive_directory.mkdir(parents=True, exist_ok=True)
+        target_file_path = target_archive_directory / f"{module_name}.py"
+
+        shutil.move(str(source_file_path), str(target_file_path))
+        self.discover_all_active_modules()  # Refresh catalog after moving
+        return str(target_file_path)
+
+
+--------------------------------------------------------------------------------
+2. File: interface/interface_dispatcher.py
+--------------------------------------------------------------------------------
+import inspect
+import logging
+
+logger = logging.getLogger("app_change_tracker")
+
+
+class InterfaceDispatcher:
+    """Provides line-number execution tracing and function dispatching."""
+
+    def __init__(self, update_manager):
+        self.update_manager = update_manager
+
+    def trace_and_execute(self, target_function, *arguments, **keyword_arguments):
+        """Option B Traced Execution: Accepts a direct module function reference, logs caller line numbers, and executes."""
+        caller_frame = inspect.currentframe().f_back
+        line_number_in_code = caller_frame.f_lineno if caller_frame else "Unknown Line"
+        source_file_path = caller_frame.f_code.co_filename if caller_frame else "Unknown File"
+
+        function_name = getattr(target_function, "__name__", str(target_function))
+        module_name = getattr(target_function, "__module__", "Unknown Module")
+
+        logger.info(
+            f"[TRACE LOG] Executing '{function_name}' from '{module_name}' "
+            f"called from {source_file_path} at line {line_number_in_code}"
+        )
+
+        return target_function(*arguments, **keyword_arguments)
+
+    def execute_action(self, domain_category: str, submodule_name: str, function_to_call: str, *arguments, **keyword_arguments):
+        """Dispatches an action via string identifiers."""
+        target_module = self.update_manager.get_active_module(domain_category, submodule_name)
+        if not target_module:
+            raise ModuleNotFoundError(
+                f"Active update module '{submodule_name}' under domain '{domain_category}' was not found."
+            )
+
+        target_function = getattr(target_module, function_to_call)
+        return self.trace_and_execute(target_function, *arguments, **keyword_arguments)
+
+
+--------------------------------------------------------------------------------
+3. File: interface/restore_manager.py
+--------------------------------------------------------------------------------
+import hashlib
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
+DEFAULT_BASELINE_DIRECTORY = PROJECT_ROOT_DIRECTORY / "test"
+SNAPSHOT_BACKUP_DIRECTORY = PROJECT_ROOT_DIRECTORY / "data" / "snapshots" / "pre_restore_backup"
+
+EXCLUDED_RESTORE_PATHS = {
+    "data",
+    "venv",
+    ".git",
+    "__pycache__",
+    "dashboard/config/app_settings.json",
+}
+
+
+class RestoreManager:
+    """Manages baseline verification, pre-restore backups, file restoration, and doc updates."""
+
+    def __init__(self, project_root: Path = PROJECT_ROOT_DIRECTORY):
+        self.project_root = Path(project_root)
+
+    def calculate_file_hash(self, file_path: Path) -> str:
+        """Calculates SHA-256 hash for file comparison."""
+        sha256_hash = hashlib.sha256()
+        with open(file_path, "rb") as target_file:
+            for byte_block in iter(lambda: target_file.read(65536), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
+
+    def should_exclude_path(self, relative_path_str: str) -> bool:
+        """Checks if a path should be skipped during restoration."""
+        normalized_path = relative_path_str.replace("\\", "/")
+        for excluded_item in EXCLUDED_RESTORE_PATHS:
+            if normalized_path == excluded_item or normalized_path.startswith(f"{excluded_item}/"):
+                return True
+        return False
+
+    def create_pre_restore_backup(self):
+        """Copies the current working codebase into a pre-restore backup directory."""
+        print(f"[RESTORE] Creating safety backup in: {SNAPSHOT_BACKUP_DIRECTORY}")
+        if SNAPSHOT_BACKUP_DIRECTORY.exists():
+            shutil.rmtree(SNAPSHOT_BACKUP_DIRECTORY)
+
+        SNAPSHOT_BACKUP_DIRECTORY.mkdir(parents=True, exist_ok=True)
+
+        for source_item in self.project_root.rglob("*"):
+            relative_path = source_item.relative_to(self.project_root)
+            relative_str = str(relative_path)
+
+            if self.should_exclude_path(relative_str):
+                continue
+
+            destination_item = SNAPSHOT_BACKUP_DIRECTORY / relative_path
+            if source_item.is_dir():
+                destination_item.mkdir(parents=True, exist_ok=True)
+            elif source_item.is_file():
+                destination_item.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_item, destination_item)
+
+        print("[RESTORE] Safety backup created successfully.")
+
+    def restore_from_baseline(self, baseline_source_directory: str = None):
+        """Restores codebase files from a known good baseline directory."""
+        source_dir = Path(baseline_source_directory) if baseline_source_directory else DEFAULT_BASELINE_DIRECTORY
+
+        if not source_dir.exists():
+            raise FileNotFoundError(f"[RESTORE ERROR] Baseline directory does not exist: {source_dir}")
+
+        print(f"[RESTORE] Initiating restoration from baseline: {source_dir}")
+
+        # 1. Create safety backup of current state
+        self.create_pre_restore_backup()
+
+        # 2. Compare and restore files
+        restored_files_count = 0
+        for baseline_file in source_dir.rglob("*"):
+            if not baseline_file.is_file():
+                continue
+
+            relative_path = baseline_file.relative_to(source_dir)
+            relative_str = str(relative_path)
+
+            if self.should_exclude_path(relative_str):
+                continue
+
+            target_file_path = self.project_root / relative_path
+
+            # Check if file needs updating
+            needs_copy = False
+            if not target_file_path.exists():
+                needs_copy = True
+            else:
+                if self.calculate_file_hash(baseline_file) != self.calculate_file_hash(target_file_path):
+                    needs_copy = True
+
+            if needs_copy:
+                target_file_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(baseline_file, target_file_path)
+                print(f"  -> Restored: {relative_str}")
+                restored_files_count += 1
+
+        print(f"[RESTORE] Total files restored: {restored_files_count}")
+
+        # 3. Refresh documentation snapshots
+        print("[RESTORE] Regenerating documentation snapshots...")
+        update_script = self.project_root / "scripts" / "update_docs.py"
+        subprocess.run([sys.executable, str(update_script)], check=True)
+        print("[RESTORE] System restoration completed successfully.")
+
+
+--------------------------------------------------------------------------------
+4. File: about/set_title.py
+--------------------------------------------------------------------------------
+"""Change the app title/subtitle shown on index.html OR execute app update commands.
+
+Usage:
+    python about/set_title.py [title [subtitle]]
+    python about/set_title.py apply
+    python about/set_title.py restore [snapshot_path]
+"""
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+ABOUT_JSON_FILE_PATH = Path(__file__).parent / "about.json"
+PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
+
+
+def execute_system_update():
+    """Refreshes active interface modules and regenerates documentation snapshots."""
+    print("[UPDATE TRIGGER] Discovering and refreshing active update modules...")
+    from interface.update_manager import UpdateManager
+    update_manager = UpdateManager()
+    update_manager.discover_all_active_modules()
+    print("[UPDATE TRIGGER] Active modules successfully cataloged.")
+
+    print("[UPDATE TRIGGER] Regenerating APP_STRUCTURE.md and APP_CODE_SNAPSHOT.md...")
+    update_script = PROJECT_ROOT_DIRECTORY / "scripts" / "update_docs.py"
+    subprocess.run([sys.executable, str(update_script)], check=True)
+    print("[UPDATE TRIGGER] Documentation snapshots successfully updated.")
+
+
+def execute_system_restore(baseline_source_directory: str = None):
+    """Triggers the isolated RestoreManager to rollback code to a known baseline."""
+    from interface.restore_manager import RestoreManager
+    restore_manager = RestoreManager()
+    restore_manager.restore_from_baseline(baseline_source_directory=baseline_source_directory)
+
+
+def handle_title_update(arguments_list):
+    """Default interactive/argument-driven title and subtitle editor."""
+    data = json.loads(ABOUT_JSON_FILE_PATH.read_text(encoding="utf-8")) if ABOUT_JSON_FILE_PATH.exists() else {}
+    data.setdefault("title", "Genessis")
+    data.setdefault("subtitle", "Home")
+
+    for index_key, key_name in enumerate(("title", "subtitle")):
+        value = arguments_list[index_key] if index_key < len(arguments_list) else None
+        if value is None:
+            try:
+                value = input(f"{key_name} [{data[key_name]}]: ").strip()
+            except EOFError:
+                break
+        if value:
+            data[key_name] = value
+
+    ABOUT_JSON_FILE_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print("Saved ->", data["title"])
+
+
+def main():
+    command_line_arguments = sys.argv[1:]
+
+    if command_line_arguments:
+        first_argument_action = command_line_arguments[0].lower()
+        if first_argument_action == "apply":
+            execute_system_update()
+            return
+        elif first_argument_action == "restore":
+            target_snapshot = command_line_arguments[1] if len(command_line_arguments) > 1 else None
+            execute_system_restore(baseline_source_directory=target_snapshot)
+            return
+
+    handle_title_update(command_line_arguments)
+
+
+if __name__ == "__main__":
+    main()
+
+
+--------------------------------------------------------------------------------
+5. File: interface/updates/engine/newfunction.py
+--------------------------------------------------------------------------------
+"""
+LOCATION: interface/updates/engine/newfunction.py
+USAGE (Option B Direct Access):
+    module = update_manager.get_active_module("engine", "newfunction")
+    result = module.execute_new_logic("Input Data")
+"""
+import logging
+
+logger = logging.getLogger("app_change_tracker")
+
+
+def execute_new_logic(data_payload: str):
+    """Example logic function for engine updates."""
+    logger.info(f"[ENGINE: newfunction] Processing payload: {data_payload}")
+    return f"Engine processed payload: {data_payload}"
+
+
+def secondary_engine_action(value: int):
+    """Secondary action inside the same module file."""
+    return value * 10
+
+
+--------------------------------------------------------------------------------
+6. Execution Tasks:
+--------------------------------------------------------------------------------
+1. Create folder structure (`interface/updates/engine/`, `interface/updates/tools/`, `interface/updates/server/`, `data/interface_archive/`).
+2. Write `interface/update_manager.py` verbatim.
+3. Write `interface/interface_dispatcher.py` verbatim.
+4. Write `interface/restore_manager.py` verbatim.
+5. Update `about/set_title.py` verbatim.
+6. Write sample module `interface/updates/engine/newfunction.py`.
+7. Execute: `python about/set_title.py apply`
+8. Execute: `venv/bin/python scripts/update_docs.py`
+```
+
+```
+
+## docs/APP_STRUCTURE.md
+
+```markdown
+# Terminator1 — App Structure
+
+_Auto-generated on 2026-09-13T12:57:57 by `scripts/update_docs.py`._
+
+
+```
+genV2_Interface_projectManager/
+
+|-- about
+|   `-- set_title.py
+|-- config
+|   `-- models.json
+|-- dashboard
+|   |-- css
+|   |   `-- styles.css
+|   |-- js
+|   |   |-- api
+|   |   |   `-- api.js
+|   |   |-- classes
+|   |   |   |-- ChatSession.js
+|   |   |   `-- chat-window.js
+|   |   |-- logic
+|   |   |   |-- chat-formatter.js
+|   |   |   `-- models.js
+|   |   |-- ui
+|   |   |   |-- agent-editor.js
+|   |   |   |-- agents.js
+|   |   |   |-- appearance.js
+|   |   |   |-- config-form.js
+|   |   |   |-- header-nav.js
+|   |   |   |-- interface-indicator.js
+|   |   |   |-- interface-manager.js
+|   |   |   `-- markdown.js
+|   |   |-- app.js
+|   |   `-- config-page.js
+|   |-- chat.html
+|   |-- config.html
+|   `-- index.html
+|-- docs
+|   |-- 01_IDEA_AND_ARCHITECTURE.md
+|   |-- 02_IMPLEMENTATION_PLAN.md
+|   |-- APP_CODE_SNAPSHOT.md
+|   |-- APP_STRUCTURE.md
+|   |-- CHANGELOG.md
+|   `-- RESTRUCTURE_README.md
+|-- engine
+|   |-- agent_library
+|   |   |-- basic_chat
+|   |   |   |-- agent.json
+|   |   |   `-- agent.md
+|   |   |-- dev_assistant
+|   |   |   |-- agent.json
+|   |   |   `-- agent.md
+|   |   |-- problem_discovery_agent
+|   |   |   |-- agent.json
+|   |   |   `-- agent.md
+|   |   `-- rag_assistant
+|   |       |-- agent.json
+|   |       `-- agent.md
+|   |-- agents
+|   |   |-- __init__.py
+|   |   |-- factory.py
+|   |   |-- loader.py
+|   |   `-- registry.py
+|   |-- core
+|   |   |-- __init__.py
+|   |   |-- agent.py
+|   |   |-- llm.py
+|   |   `-- prompt.py
+|   `-- __init__.py
+|-- interface
+|   |-- updates
+|   |   |-- engine
+|   |   |   |-- __init__.py
+|   |   |   |-- hello_update.py
+|   |   |   |-- newfunction.py
+|   |   |   `-- project_creator.py
+|   |   |-- server
+|   |   |   |-- __init__.py
+|   |   |   `-- project_routes.py
+|   |   |-- tools
+|   |   |   `-- __init__.py
+|   |   `-- __init__.py
+|   |-- __init__.py
+|   |-- interface_dispatcher.py
+|   |-- restore_manager.py
+|   `-- update_manager.py
+|-- memory
+|   |-- __init__.py
+|   |-- ingest.py
+|   |-- main.py
+|   |-- rag_commit.py
+|   `-- search.py
+|-- scripts
+|   |-- rebuild_rag.py
+|   |-- update_docs.py
+|   `-- version_chats.py
+|-- server
+|   |-- chat_store
+|   |   |-- __init__.py
+|   |   |-- logger.py
+|   |   `-- store.py
+|   |-- paths.py
+|   `-- server.py
+|-- tools
+|   |-- __init__.py
+|   |-- registry.py
+|   |-- state.py
+|   `-- tools.py
+|-- .gitignore
+|-- README.md
+`-- requirements.txt
+```
+
+_76 tracked source file(s)._
+
+```
+
+## docs/CHANGELOG.md
+
+```markdown
+# Changelog
+
+All notable changes to this project. Format based on Keep a Changelog
+(https://keepachangelog.com/), grouped by date.
+
+## 2026-09-12 — Cross-platform paths (Windows/Linux/macOS) + save feedback
+
+The app now runs from the same checkout on Windows, Linux, macOS and the
+ChromeOS Linux container, and where data is saved can be changed without
+editing a file. (A merge combined a Windows-side `GENESSIS_*` env-var approach
+with the Chromebook-side per-OS-key approach, so both are supported.)
+
+### Added — portable path resolution (`server/paths.py`)
+
+- **Per-OS path keys** in `dashboard/config/app_settings.json`: one settings
+  file can carry three layouts — the plain `dataDir` / `chatSavePath` /
+  `ragDbPath` plus `dataDirWindows` / `dataDirLinux` / `dataDirMac` (and the
+  matching chat/rag variants). The key for the CURRENT machine wins; keys for
+  OSes you do not use are left alone. Relative -> project root; absolute ->
+  used as-is; empty -> default.
+- **Env-var overrides** (highest precedence): `GENESSIS_DATA_DIR`,
+  `GENESSIS_CHAT_SAVE_PATH`, `GENESSIS_RAG_DB_PATH` override the stored
+  settings; `~` and `$VAR` are expanded, so `~/genessis-data` works.
+  Precedence chain: env var -> per-OS key -> plain key -> project-relative
+  `data/`.
+- **Windows drive-path guard**: a Windows absolute path (`E:\...`, `E:/...`,
+  `\\server\share`) in the plain key is ignored on non-Windows hosts when no
+  per-OS key is set — the app falls back to a project default instead of
+  creating a literal `E:\...` folder on Linux/macOS. `server.py`'s legacy
+  `/api/chat-save` resolver uses the same guard.
+- `platform()` now reports `win` / `linux` / `mac`; `about()` gained a
+  `sources` map telling which key or env var resolved each setting. Stray
+  `E:\data\rag_store` folders created by old resolutions were removed.
+- `.gitignore` — `[A-Z]:*` rule so accidental drive-letter folders can never
+  be tracked.
+
+### Added — resilient model selection
+
+- `engine/core/llm.py` — `_resolve_model()`: an uninstalled requested model is
+  dropped with an `[ask_llm]` warning and the first detected model is used
+  instead; tool-calling agents prefer a tools-capable detected model;
+  per-model capabilities are cached briefly; an explicit request is still
+  honoured when no models are visible.
+- `dashboard/config/app_settings.json` — `defaultModel` is `""` (resolves to
+  the first detected model; the user picks from the dropdown).
+
+### Changed — save flow + startup visibility
+
+- `server/server.py` — `GET /api/settings` returns `platform`; save merges
+  without rewriting path values; `lifespan()` prints the resolved data / chat
+  records / RAG folders at boot and flags env-overridden keys.
+- `dashboard/js/ui/config-form.js` — an always-visible **per-OS paths** section
+  (Windows / Linux / macOS inputs for Data folder, Chat save path and RAG
+  database) with the current platform's row highlighted. `config-page.js` /
+  `api.js` pass the detected platform through.
+- `dashboard/js/config-page.js` — save shows a green **"Settings saved"**
+  response window with a restart hint when stored paths changed since boot.
+  `dashboard/config.html` gained the `.save-response` styles.
+
+### Changed — docs
+
+- `README.md` — "Running on Linux / macOS / ChromeOS (Chromebook)" quickstart,
+  "Changing where data is saved" (per-OS keys vs env vars vs defaults) and
+  "Model selection" sections; folder tree updated (`js/ui/` added, `test/`
+  removed); the deleted `docs/documentation_CREATING_AGENTS.md` link replaced;
+  "Recent changes" points at the current entry.
+- `docs/RESTRUCTURE_README.md` — `test/` + the deleted agent-authoring doc
+  removed from the tree; portable-`paths.py` note added under "Launching".
+
+### Verified
+
+- Path unit tests (forged Linux/macOS semantics): drive/UNC detection;
+  per-OS key selection; env override wins over stored settings; `$HOME`/`~`
+  expansion; `about()["sources"]` populated.
+- `/api/settings` returns `{settings, restartNeeded, platform}` and merges
+  cleanly.
+- uvicorn boot with `GENESSIS_DATA_DIR` set to a temp folder: boot log shows
+  data/records/rag under the override; `/api/rag/status` 200.
+
+## 2026-09-12 — AI-readable app snapshot docs
+
+The whole app is readable as two auto-generated markdown files an AI can
+ingest: `docs/APP_STRUCTURE.md` (file/folder tree) and
+`docs/APP_CODE_SNAPSHOT.md` (every source file's name and full contents).
+Both are produced by `scripts/update_docs.py`; refresh them after any
+meaningful change with `venv/bin/python scripts/update_docs.py` (the walk
+skips `test/`, `venv/`, `.git/`, `data/`, `__pycache__/` and `*.bak`/`*.pyc`
+so the snapshot spans only the running app).
+
+## 2026-09-12 — Frontend wiring for the interface system + title propagation
+
+The Modular Interface / update system is now reachable from the browser.
+New `server/server.py` endpoints power a Settings card, a header pill shows
+module activity, and the about.json title/tagline is propagated to the
+browser tab on every page.
+
+### Added — `/api/interface/*` endpoints (`server/server.py`)
+
+- `GET /api/interface/status` — live module catalog (per domain), external
+  archive contents, trace-log tail (`data/interface_trace.log`, last 20
+  lines), and baseline info: folder, `BASELINE_MANIFEST.json` metadata and a
+  live **drift count** (SHA-256 diff vs `current-known-good-copy/`).
+- `POST /api/interface/apply` — `reload_all()` the update modules, then
+  regenerate `docs/APP_STRUCTURE.md` + `docs/APP_CODE_SNAPSHOT.md`.
+- `POST /api/interface/snapshot` — publish the current tree as the new
+  baseline (rebaseline via `RestoreManager.snapshot_baseline()`).
+- `POST /api/interface/restore` — `{baseline?, apply?, dryRun?}`; **dry-run by
+  default**. A real restore backs up overwritten files to
+  `data/snapshots/pre_restore_backup/` before rolling back, then regenerates
+  the docs.
+- `POST /api/interface/run` — `{domain, module, function, args?, kwargs?}`
+  through `InterfaceDispatcher.execute_action()`. Arbitrary code execution;
+  **disabled by default** and gated server-side by `INTERFACE_RUN_ENABLED`.
+  Flipped with:
+- `POST /api/interface/toggle-run` — `{enabled}` arms/disarms `/run` for the
+  current process (logged to `data/interface_trace.log`).
+- `RestoreManager.diff(baseline)` — silent SHA-256 comparison returning
+  `{baseline, shared, modified, skipped, untracked}`; `restore()` and the
+  status endpoint share it (no more double file-map builds).
+- `about/set_title.py apply --snapshot` now snapshots AFTER the docs
+  regeneration (was reversed, so the baseline captured stale docs and
+  `restore --dry-run` reported the two doc files as modified).
+
+### Added — frontend (`dashboard/`)
+
+- `js/api/api.js` — `getInterfaceStatus`, `applyInterface`,
+  `snapshotInterface`, `restoreInterface`, `runInterface`, `setRunEnabled`.
+- `js/ui/interface-manager.js` — the "Updates / Interface" card on the
+  Settings page (below Models): module catalog, archive, baseline freshness +
+  drift, trace-log tail, Apply / Snapshot / Restore (dry-run) / Restore
+  (real) buttons, and an **opt-in "Enable module execution" gated** run-module
+  panel (function name + JSON args/kwargs) mirroring `run_enabled` from the
+  server.
+- `js/ui/interface-indicator.js` — quiet "N updates" header pill (green dot,
+  amber when the baseline drifts, "\u2022 on" when run is armed); hidden on
+  servers without `/api/interface/*`; links to `config.html#interface-section`.
+  Rendered on `index.html` and `config.html`.
+- `config.html` — `#interface-section` mount + local card styles.
+- Title propagation: `app.js#setPageTitle()` now sets `document.title`
+  (`<title> – <subtitle>`); `config-page.js` boot fetches `/api/about` for the
+  tab title; `chat.html` fetches `/api/about` and shows a small site chip
+  (`#sc-site-title`) in its header plus the tab title.
+
+### Verified
+
+- `py_compile` clean on `server/server.py` and `interface/restore_manager.py`.
+- TestClient: `/api/interface/status` 200 (catalog, drift); `/run` denied with
+  403 while disabled; `toggle-run` on -> `secondary_engine_action(5)` == `50`
+  (traced); bad function -> 500; `apply` reloaded `engine=2` + regenerated
+  docs; `restore` dry-run reported the expected modified files. All six pages
+  endpoints serve 200.
+
+## 2026-09-12 — 02 implementation plan folded in; server startup wiring
+
+Follow-up to the Modular Interface build, based on `docs/02_IMPLEMENTATION_PLAN.md`
+(dropped into `docs/`). The plan's missing pieces were folded into the existing
+implementation instead of a verbatim overwrite, preserving the earlier choices
+(`current-known-good-copy/` baseline, `--dry-run`, `snapshot` command, safer
+exclusions). The plan's Linux path (`venv/bin/python`) is `venv\Scripts\python.exe`
+on this Windows project.
+
+### Added
+
+- `interface/updates/engine/newfunction.py` — sample engine update module
+  (`execute_new_logic()` / `secondary_engine_action()`), the 02-plan Step 6
+  example. `hello_update.py` is kept alongside.
+- `update_manager.discover_all_active_modules()` — alias for `reload_all()`
+  (clear catalog, drop cached modules, re-import from disk).
+- `update_manager.list_domain_modules(domain)` — sorted module names per domain.
+- `interface_dispatcher.execute_action(domain, module, function, *args)` —
+  resolve a module by name through the update manager and run it traced;
+  raises `ModuleNotFoundError` for unknown modules.
+- Trace logging now also goes through the `app_change_tracker` logger with a
+  `FileHandler` on `data/interface_trace.log` (02-plan Step 3); stdout print
+  kept.
+
+### Changed — server startup (02-plan Step 7)
+
+- `server/server.py` — `lifespan()` now builds `UpdateManager`, runs
+  `discover_all_active_modules()`, builds `InterfaceDispatcher`, and exposes
+  both on `app.state` (`app.state.update_manager`,
+  `app.state.interface_dispatcher`). Discovery failures print a warning and
+  leave the state `None` so a broken update module never blocks server boot.
+
+## 2026-09-12 — Modular Interface & System Update Architecture
+
+Introduced a pluggable update/restore layer so new features never touch core
+modules again. Design reference: `docs/01_IDEA_AND_ARCHITECTURE.md`.
+
+### Added — `interface/` package
+
+- `interface/update_manager.py` (`UpdateManager`) — dynamically discovers and
+  imports every `.py` under `interface/updates/<domain>/` (`engine/`,
+  `tools/`, `server/`), keeps live module objects in `active_modules_catalog`,
+  and exposes `get_active_module(domain, module)` for direct native execution.
+  `move_module_to_external_archive(domain, module)` relocates retired update
+  modules to `data/interface_archive/<domain>/`.
+- `interface/interface_dispatcher.py` (`InterfaceDispatcher`) —
+  `trace_and_execute(fn, *args)` logs the caller file + line number
+  (via `inspect`) before running a module function, to
+  `data/interface_trace.log`.
+- `interface/restore_manager.py` (`RestoreManager`) — SHA-256 baseline
+  comparison (`current-known-good-copy/` by default, `test/` fallback),
+  `snapshot_baseline()` to publish a complete working copy of the last good
+  source, and `restore()` which backs up every overwritten file to
+  `data/snapshots/pre_restore_backup/<timestamp>/` before rolling back and
+  then regenerates the docs snapshots. Restore semantics: only files present
+  in BOTH trees whose checksum differs are overwritten; baseline-only and
+  live-only files are reported but left untouched. User data is excluded
+  (`data/`, `venv/`, `.git/`, `__pycache__/`, `current-known-good-copy/`,
+  `test/`, `dashboard/config/app_settings.json`, `about/about.json`,
+  `*.bak`, `*.pyc`).
+- `interface/updates/` — seeded with `engine/`, `tools/`, `server/` domains
+  and one example module (`engine/hello_update.py`: `run_example()` /
+  `double()`).
+
+### Added — documentation snapshots
+
+- `scripts/update_docs.py` — regenerates `docs/APP_STRUCTURE.md` (folder-tree
+  snapshot) and `docs/APP_CODE_SNAPSHOT.md` (per-file source snapshot; never
+  embeds itself). Runs automatically on `apply` and after `restore`.
+
+### Changed — CLI
+
+- `about/set_title.py` now dispatches `apply`, `snapshot` and `restore`:
+  - `python about/set_title.py apply [--snapshot]` — reload all active update
+    modules (+ publish the baseline when `--snapshot` is passed), then
+    regenerate the docs snapshots.
+  - `python about/set_title.py snapshot [folder]` — publish the current tree
+    into `current-known-good-copy/` (the default restore baseline).
+  - `python about/set_title.py restore [baseline] [--dry-run]` — compare the
+    live tree against the baseline, back up + restore modified files, and
+    regenerate the docs snapshots.
+  - no args still edits about.json interactively / positionally.
+
+### Verified
+
+- `python -m py_compile` passes on every new/changed module.
+- `apply` discovered + imported `engine/hello_update` and generated both docs
+  snapshots.
+- Option B access returned live module: `run_example()` and `double(21) == 42`.
+- `trace_and_execute()` logged the caller (`file:line -> module.function`) to
+  `data/interface_trace.log`.
+- `move_module_to_external_archive()` moved the example to
+  `data/interface_archive/engine/` and refreshed the catalog.
+- A real restore: tampered `docs/APP_STRUCTURE.md` was detected (1 modified),
+  backed up to `data/snapshots/pre_restore_backup/<timestamp>/`, rolled back
+  from the baseline, and both docs snapshots were regenerated. A fresh
+  baseline yields `modified: 0` on `restore --dry-run`.
+- Exclusions confirmed: no `.git/`, `data/`, or `venv/` content leaks into the
+  generated snapshots.
+
+### Changed — other
+
+- `current-known-good-copy/` added to `.gitignore` (generated baseline copy;
+  `data/` was already ignored).
+
+## 2026-09-12 — Agent Monitor removed; launch fixed; docs updated
+
+The Agent Monitoring feature (live activity feed) was removed and the affected
+backend modules were restored to their original, working versions. Chats are
+fully functional again.
+
+### Removed — Agent Monitor (frontend)
+
+The monitor was a companion window that polled a live activity feed while an
+agent worked. It is gone entirely:
+
+- `dashboard/monitor.html` — deleted (the monitor page).
+- `dashboard/js/monitor.js` — deleted (polling loop + rendering).
+- `dashboard/js/api/api.js` — `getActivity()` / `clearActivity()` removed
+  (they called `/api/activity` and `/api/activity/clear`).
+- `dashboard/chat.html` — the "Monitor" header button and its click listener
+  removed.
+- `dashboard/js/app.js` — `openAgentMonitor()` and the `config.onObserve`
+  wiring removed.
+- `dashboard/config.html` + `dashboard/js/config-page.js` — the "Agent
+  Monitor" settings section (`#monitor-section`, `renderMonitorSection()`)
+  removed.
+- `server/__pycache__/activity.cpython-314.pyc` — stale bytecode cleaned.
+
+Note: `dashboard/js/classes/chat-window.js` still has a generic `onObserve`
+extension hook, but nothing sets it, so it never triggers.
+
+### Removed — Agent Monitor (backend)
+
+- `server/activity.py` — deleted (the ActivityFeed singleton + `/api/activity`
+  endpoints no longer exist, so the poller 404s are gone).
+
+### Restored — backend modules rolled back to working originals
+
+- `engine/core/agent.py` — restored from the original; the monitor-era
+  sink/events/`_emit`/`_clip_args` and stdout-capturing `act()` are gone.
+  `think()` / `act()` / `observe()` behave as before.
+- `server/server.py` — restored from the original base and the legitimate
+  pre-monitor endpoints re-added so the Settings page keeps working:
+  - `GET /api/tools`
+  - `GET /api/agents/{agent_id}/config`
+  - `PUT /api/agents/{agent_id}/config`
+  - `GET /api/about`
+
+Pre-rollback copies are kept as recovery backups:
+`server/server.py.infected.bak` and `engine/core/agent.py.infected.bak`.
+
+### Fixed — launching `server.py` from any directory
+
+`server/server.py` now bootstraps `sys.path` at the top: it inserts the
+project root and drops its own folder from the path so this file can never
+shadow the `server/` package. Previously `python server.py` failed with
+`ModuleNotFoundError: No module named 'engine'` (and the `server`/`server.py`
+name collision made a simple path fix impossible).
+
+Now all three of these work:
+`python server.py` (from `server/`), `python server/server.py` (from the
+project root), and `venv\Scripts\python -m uvicorn server.server:app` (root).
+
+### Changed — documentation
+
+- `README.md` — rewritten to match the current layout (`engine/`, `server/`,
+  `tools/`, `memory/`, `dashboard/`, ...), with a module-by-module inventory,
+  up-to-date API table and launch instructions.
+- `docs/RESTRUCTURE_README.md` — folder tree refreshed, monitor removal and
+  launch-anywhere noted.
+```
+
+## docs/RESTRUCTURE_README.md
+
+```markdown
+﻿# Terminator1 â€” Reorganized Layout
+
+This is your original app, regrouped into four clear domains. All import
+paths were rewritten to match â€” this isn't just a file shuffle, it's a
+working package layout.
+
+```
+terminator1/
+â”œâ”€â”€ engine/                 # The agent factory ("engine")
+â”‚   â”œâ”€â”€ core/
+â”‚   â”‚   â”œâ”€â”€ agent.py        # Agent runtime: think/act/observe loop
+â”‚   â”‚   â”œâ”€â”€ llm.py          # ask_llm(), model resolution (falls back to a
+â”‚   â”‚   â”‚                   # detected model; prefers tools-capable), Ollama scan
+â”‚   â”‚   â””â”€â”€ prompt.py       # agent.md sections + tools -> system prompt
+â”‚   â”œâ”€â”€ agents/
+â”‚   â”‚   â”œâ”€â”€ loader.py       # Reads agent_library/{id}/agent.md + agent.json
+â”‚   â”‚   â”œâ”€â”€ registry.py     # Scans agent_library/ -> available agents
+â”‚   â”‚   â””â”€â”€ factory.py      # build_agent(agent_id, model) -> ready Agent
+â”‚   â””â”€â”€ agent_library/      # Agent definitions (data, not code)
+â”‚       â”œâ”€â”€ basic_chat/
+â”‚       â”œâ”€â”€ dev_assistant/
+â”‚       â”œâ”€â”€ problem_discovery_agent/
+â”‚       â””â”€â”€ rag_assistant/
+â”‚
+â”œâ”€â”€ tools/                  # Tools available to agents (per-agent capabilities)
+â”‚   â”œâ”€â”€ registry.py         # TOOL_REGISTRY: tool IDs -> Python functions
+â”‚   â”œâ”€â”€ state.py            # FileSession: shared/persisted file-working state
+â”‚   â””â”€â”€ tools.py            # map/read/write/delete + date/time + search tools
+â”‚
+â”œâ”€â”€ memory/                 # RAG memory store (was "rag/")
+â”‚   â”œâ”€â”€ ingest.py           # Transcript chunking (ingest_file / ingest_directory)
+â”‚   â”œâ”€â”€ search.py           # RAGStorage: Chroma store + fallback vector DB
+â”‚   â”œâ”€â”€ main.py             # Standalone RAG CLI / cognitive loop experiment
+â”‚   â””â”€â”€ rag_commit.py       # Commit, purge, rebuild, status for the store
+â”‚
+â”œâ”€â”€ dashboard/               # Frontend (was "static/")
+â”‚   â”œâ”€â”€ index.html          # Main UI shell (agent cards, floating chat)
+â”‚   â”œâ”€â”€ chat.html           # Standalone self-contained chat page
+â”‚   â”œâ”€â”€ config.html         # NEW: consolidated settings page (one place for
+â”‚   â”‚                       #      app defaults, appearance, every agent,
+â”‚   â”‚                       #      shared tests, models)
+â”‚   â”œâ”€â”€ config/app_settings.json
+â”‚   â”œâ”€â”€ css/styles.css
+â”‚   â””â”€â”€ js/
+â”‚       â”œâ”€â”€ app.js
+â”‚       â”œâ”€â”€ config-page.js  # NEW: boot module for config.html
+â”‚       â”œâ”€â”€ api/api.js
+â”‚       â”œâ”€â”€ classes/ (ChatSession.js, chat-window.js)
+â”‚       â”œâ”€â”€ logic/  (models.js, chat-formatter.js)
+â”‚       â””â”€â”€ ui/     (markdown.js, agents.js, appearance.js, config-form.js,
+â”‚                    agent-editor.js, header-nav.js,
+â”‚                    interface-indicator.js,   # header "N updates" pill
+â”‚                    interface-manager.js)     # Settings "Updates/Interface" card
+â”‚
+â”œâ”€â”€ server/                  # Thin glue: FastAPI app + chat log + path config
+â”‚   â”œâ”€â”€ server.py            # HTTP endpoints, static mount, lifespan; also
+â”‚   â”‚                        # discovers interface/updates at startup and
+â”‚   â”‚                        # exposes update_manager + dispatcher on app.state;
+â”‚   â”‚                        # /api/interface/{status,apply,snapshot,restore,
+â”‚   â”‚                        # run,toggle-run} wire the UI to the update system
+â”‚   â”œâ”€â”€ paths.py             # Config-driven runtime path authority (dataDir /
+â”‚   â”‚                         # chatSavePath / ragDbPath, incl. per-OS Windows /
+â”‚   â”‚                         # Linux / macOS keys + GENESSIS_* env overrides)
+â”‚   â””â”€â”€ chat_store/
+â”‚       â”œâ”€â”€ logger.py
+â”‚       â””â”€â”€ store.py
+â”‚
+â”œâ”€â”€ config/
+â”‚   â””â”€â”€ models.json          # auto-generated model snapshot (the old
+â”‚                            # settings.json is gone - one default now lives
+â”‚                            # in app_settings.json#defaultAgentId)
+â”œâ”€â”€ scripts/
+â”‚   â”œâ”€â”€ rebuild_rag.py
+â”‚   â”œâ”€â”€ version_chats.py
+â”‚   â””â”€â”€ update_docs.py        # NEW: regenerates APP_STRUCTURE.md + APP_CODE_SNAPSHOT.md
+â”œâ”€â”€ interface/                # NEW: modular update & restore layer
+â”‚   â”œâ”€â”€ update_manager.py     #    discover/import interface/updates/<domain>/*
+â”‚   â”œâ”€â”€ interface_dispatcher.py  # trace_and_execute() caller line tracing
+â”‚   â”œâ”€â”€ restore_manager.py    #    baseline compare/restore + snapshot_baseline()
+â”‚   â””â”€â”€ updates/              #    engine/ | tools/ | server/
+â”œâ”€â”€ about/
+â”‚   â”œâ”€â”€ about.json           # title/subtitle served by GET /api/about
+â”‚   â””â”€â”€ set_title.py         # + 'apply' / 'snapshot' / 'restore' CLI triggers
+â”œâ”€â”€ docs/
+â”‚   â”œâ”€â”€ CHANGELOG.md
+â”‚   â”œâ”€â”€ RESTRUCTURE_README.md
+â”‚   â”œâ”€â”€ 01_IDEA_AND_ARCHITECTURE.md   # NEW: design doc for the update/restore layer
+â”‚   â”œâ”€â”€ APP_STRUCTURE.md              # AUTO-GENERATED
+â”‚   â””â”€â”€ APP_CODE_SNAPSHOT.md          # AUTO-GENERATED
+â”œâ”€â”€ current-known-good-copy/ # GENERATED restore baseline (python about/set_title.py snapshot)
+â”œâ”€â”€ requirements.txt
+â””â”€â”€ README.md                 # Original project README (kept up to date)
+```
+
+## Launching
+
+`python server.py` now works from any directory (a `sys.path` bootstrap at the
+top of the file adds the project root and drops the script's own folder so the
+`server` package is never shadowed). Equivalent launch from the project root:
+
+```
+# Windows
+venv\Scripts\python -m uvicorn server.server:app
+
+# Linux
+venv/bin/python -m uvicorn server.server:app
+```
+
+The app is cross-platform (Windows / Linux / macOS / ChromeOS Linux). All
+runtime storage is resolved by `server/paths.py` from `dataDir` /
+`chatSavePath` / `ragDbPath` (defaults = project-relative `data/`), with
+`GENESSIS_DATA_DIR` / `GENESSIS_CHAT_SAVE_PATH` / `GENESSIS_RAG_DB_PATH` env
+overrides taking precedence. Windows absolute paths (`E:\...`) saved in
+`app_settings.json` are auto-mapped to project-relative folders on non-Windows
+OSes, and cleared on save from the Settings page. See the README's "Changing
+where data is saved".
+
+> The Agent Monitor feature (`dashboard/monitor.html`, `dashboard/js/monitor.js`,
+> `server/activity.py` and the `/api/activity*` endpoints) was removed in
+> 2026-09-12. See `docs/CHANGELOG.md`.
+
+> Since 2026-09-12 the app also runs cross-platform: per-OS path overrides
+> (`dataDirLinux` / `chatSavePathLinux` / `ragDbPathLinux`) keep one settings
+> file working on Windows and Linux, and `engine/core/llm.py` falls back to a
+> detected model when a requested one is not installed. See `docs/CHANGELOG.md`.
+
+## What changed under the hood
+
+Every cross-module import was rewritten to match the new folder names:
+
+| Old import | New import |
+|---|---|
+| `from app.core.agent import Agent` | `from engine.core.agent import Agent` |
+| `from app.core.llm import ask_llm` | `from engine.core.llm import ask_llm` |
+| `from app.agents.factory import build_agent` | `from engine.agents.factory import build_agent` |
+| `from app.tools.registry import resolve_tools` | `from tools.registry import resolve_tools` |
+| `from app.tools.state import FileSession` | `from tools.state import FileSession` |
+| `from rag.ingest import ingest_directory` | `from memory.ingest import ingest_directory` |
+| `from rag.search import RAGStorage` | `from memory.search import RAGStorage` |
+| `from app.rag_commit import status` | `from memory.rag_commit import status` |
+| `from app.chat_store import store` | `from server.chat_store import store` |
+| `from app import paths` | `from server import paths` |
+
+`server/server.py`'s `STATIC_DIR` now points at `dashboard/` instead of
+`static/`, and `server/paths.py`'s `APP_SETTINGS_FILE` now points at
+`dashboard/config/app_settings.json`.
+
+The dashboard's **Settings** page (`dashboard/config.html` +
+`dashboard/js/config-page.js`) consolidates all configuration into one
+place: app defaults, appearance, every agent's metadata/behavior/tests
+(via `GET/PUT /api/agents/{id}/config`, writing the agent's own
+`agent.json` / `agent.md`), the shared test pool, and the model list.
+
+`engine/agents/loader.py`'s `AGENT_LIBRARY_DIR` now resolves to
+`engine/agent_library/` (previously the project-root `agent_library/`).
+
+## Verified
+
+- Every `.py` file compiles (`python3 -m py_compile`).
+- `engine.agents.registry.list_agents()` runs end-to-end and correctly
+  discovers all four agents from `engine/agent_library/`.
+- The only remaining import failures are missing third-party packages
+  (`ollama`, `chromadb`, `docling`) â€” install with
+  `pip install -r requirements.txt`, then run:
+
+  ```
+  python -m uvicorn server.server:app --reload
+  ```
+
+  (run this from the project root, i.e. the folder containing `server/`,
+  `engine/`, `tools/`, `memory/`, `dashboard/`).
+
+## Note on scope
+
+This reorganization is based on `APP_SNAPSHOT.md` (the v1-11 era of your
+project â€” before "Genessis Step 1/2" added `app/core/environment.py`,
+`app/core/project_creator.py`, `app/contracts/`, and `app/engine/`). If
+you want those newer modules folded into this same layout, upload the
+current `APP_SNAPSHOT.md` (or the actual project files) for
+`app/core/environment.py`, `app/core/project_creator.py`,
+`app/contracts/*`, and `app/engine/*`, and I'll fold them in â€” they'd
+naturally slot into `engine/` (project provisioning) and a new
+`engine/contracts/` (the host class-library contracts) respectively.
+
+## About the "dashboard" idea
+
+The frontend files are copied over as-is (functionally identical, just
+relocated). If you want an actual visual refresh â€” nicer typography, a
+real dashboard layout with sidebar navigation between agents/memory/tools
+status â€” say the word and I'll rework `dashboard/index.html` +
+`styles.css` on top of this structure rather than just relocating files.
+
+```
+
+## engine/__init__.py
+
+```python
+
+```
+
+## engine/agent_library/basic_chat/agent.json
+
+```json
+{
+  "id": "basic_chat",
+  "name": "Basic Chat",
+  "description": "A simple chatbot with no tools.",
+  "mode": "agent",
+  "model": "llama3:latest",
+  "tools": []
+}
+```
+
+## engine/agent_library/basic_chat/agent.md
+
+```markdown
+# Basic Chat
+
+## role
+
+You are a helpful Basic Chat.
+
+## purpose
+
+Help the user with general questions and tasks.
+
+## communication
+
+- Be concise and clear.
+- Answer directly.
+- Use examples when useful.
+
+## boundaries
+
+- Do not fabricate results.
+- If you do not know something, say so.
+
+## principles
+
+- Be accurate.
+- Explain concepts clearly.
+
+```
+
+## engine/agent_library/dev_assistant/agent.json
+
+```json
+{
+  "id": "dev_assistant",
+  "name": "Dev Assistant",
+  "description": "AI agent development teacher with full file tools.",
+  "mode": "agent",
+  "model": "gemma4:e2b",
+  "tools": [
+    "read_file",
+    "write_text_file",
+    "map_files",
+    "delete_files",
+    "get_current_date",
+    "tell_me_the_date_and_time",
+    "search_chat_logs"
+  ],
+  "tests": [
+    {
+      "id": "custom-mtnwyh6t-krgy",
+      "name": "what is you objective",
+      "steps": [
+        "what is you objective",
+        "who is the user",
+        "list all the cities in california"
+      ],
+      "expectedResult": {
+        "mode": "type",
+        "value": "nonEmpty"
+      },
+      "enabled": true
+    },
+    {
+      "id": "custom-mty2mshm-d756",
+      "name": "who is your user?",
+      "steps": [
+        "who is your user?",
+        "what are your tools?"
+      ],
+      "expectedResult": {
+        "mode": "type",
+        "value": "nonEmpty"
+      },
+      "enabled": true
+    }
+  ]
+}
+```
+
+## engine/agent_library/dev_assistant/agent.md
+
+```markdown
+# Dev Assistant
+
+## role
+
+You are an **AI Agent Development Assistant**.
+
+Your primary purpose is to help the user:
+
+* Learn how AI agents work.
+* Build AI agents with Python.
+* Understand agent architecture.
+* Create reusable AI-agent components.
+* Experiment with different approaches.
+* Understand what works, what does not work, and why.
+* Gradually move from simple examples to more advanced systems.
+
+You are both a **software developer** and a **teacher**.
+
+## purpose
+
+Help the user learn how AI agents work and build AI agents with Python.
+
+## personality
+
+You are patient, practical, clear, direct, and analytical. You act as both a software developer and a teacher. You explain concepts step by step, starting with the simple idea before showing advanced patterns.
+
+## communication
+
+- Be concise and clear.
+- Use examples when useful.
+- Avoid unnecessary repetition.
+- When introducing a new concept, explain unfamiliar terminology.
+- Keep examples small, copy-pasteable, and easy to modify.
+- Write simple code over clever code.
+
+## boundaries
+
+- You have full permission to use every listed tool on this Windows machine.
+- When asked to create/read/write files or folders, you MUST call the matching tool - never only describe the action, and never claim you lack permission.
+- Use absolute Windows paths. Home folder: C:\Users\43319.
+- **When asked about past chats, previous sessions, what was worked on 'earlier', or 'last time', you MUST call the `search_chat_logs` tool to search your memory database.**
+- **CRITICAL: When calling `search_chat_logs`, translate temporal keywords (like 'last session', 'yesterday', 'earlier') into topical keywords (like 'venv', 'chromadb', 'test_app', 'FastAPI') to find matching records. Do not search for the literal phrase 'last session'.**
+- Do not claim a tool was used when it was not.
+
+...
+
+## decision_style
+
+- Prefer simple solutions before complex ones.
+- Separate facts from assumptions.
+- Use tools when external information is required.
+- **Actively use the `search_chat_logs` tool when Jesus makes relative references, translating those references into technical topics (e.g. searching for 'venv' instead of 'last session') to find historical facts before proposing changes.**
+- Do not make hidden assumptions.
+## principles
+
+- Be accurate.
+- Do not invent information.
+- Explain concepts clearly.
+- Prefer maintainable and simple solutions.
+- When a more advanced design is useful, explain the simple version first, then show the advanced one.
+
+## decision_style
+
+- Prefer simple solutions before complex ones.
+- Separate facts from assumptions.
+- Use tools when external information is required.
+- Do not make hidden assumptions.
+
+## priorities
+
+1. Accuracy
+2. Safety
+3. Relevance
+4. Clarity
+5. Brevity
+
+## user
+
+**Name:** Jesus
+
+**Current knowledge:**
+
+* Knows some Python.
+* Is still becoming comfortable with Python.
+* Is learning AI agents.
+* Understands basic programming concepts but may need explanations of unfamiliar Python syntax.
+
+**Goal:**
+
+Jesus wants to create **off-the-shelf AI-agent components** that can be reused to build different AI agents. The long-term goal is to understand how individual components work and how they can be combined into larger agent systems.
+
+## job
+
+Teach like a patient software-development instructor.
+
+When explaining something:
+
+1. Start with the simple idea.
+2. Explain why it exists.
+3. Show a small example.
+4. Explain the important parts of the example.
+5. Show how it can be modified.
+6. Explain how it fits into an AI-agent system.
+
+Do not assume the user already understands advanced Python, LangChain, LangGraph, RAG, or agent architecture. When introducing a new concept, explain unfamiliar terminology.
+
+Keep examples small, copy-pasteable, and easy to modify. Write simple code over clever code. When a more advanced design is useful, explain the simple version first, then show the advanced one.
+
+## greeting
+
+Initial greeting is Hello Jesus
+
+```
+
+## engine/agent_library/problem_discovery_agent/agent.json
+
+```json
+{
+  "name": "Problem Discovery Agent",
+  "id": "problem_discovery_agent",
+  "mode": "chat",
+  "agent_name": "Problem Discovery Agent",
+  "agent_type": "discovery",
+  "description": "Investigates user problems, asks focused questions, analyzes answers, and identifies the core problem before sending a planning topic to the Planner Agent.",
+
+  "system_prompt_file": "problem_discovery_agent.md",
+
+  "workflow": {
+    "minimum_questions": 1,
+    "maximum_questions": 7,
+
+    "steps": [
+      "Understand the user's initial problem",
+      "Identify known and missing information",
+      "Ask focused questions",
+      "Analyze the user's answers",
+      "Continue questioning only when necessary",
+      "Identify the root cause",
+      "Define the desired outcome",
+      "Create a planning topic"
+    ]
+  },
+
+  "tools": {
+    "present_questions": {
+      "enabled": true,
+      "purpose": "Collect answers interactively from the user",
+      "question_types": [
+        "open",
+        "choice"
+      ]
+    }
+  },
+
+  "investigation_focus": [
+    "stated_problem",
+    "symptoms",
+    "user_goal",
+    "obstacles",
+    "root_causes",
+    "previous_attempts",
+    "constraints",
+    "success_criteria"
+  ],
+
+  "rules": [
+    "Do not solve the problem immediately",
+    "Do not create a detailed project plan",
+    "Do not invent missing information",
+    "Ask only meaningful questions",
+    "Focus on root causes instead of symptoms",
+    "Stop asking questions when the problem is sufficiently clear"
+  ],
+
+  "final_output": [
+    "Problem Discovery Summary",
+    "What We Learned",
+    "Analysis",
+    "THE CORE PROBLEM",
+    "Desired Outcome",
+    "Planning Topic"
+  ],
+
+  "next_agent": "Planner Agent"
+}
+
+```
+
+## engine/agent_library/problem_discovery_agent/agent.md
+
+```markdown
+# Problem Discovery Agent
+
+## Purpose
+
+You investigate a user's problem to discover the underlying cause. You do not solve the problem or create the plan.
+
+## Workflow
+
+1. Read the user's problem, idea, goal, or situation.
+2. Identify what is already known and what is missing.
+3. Ask between 1 and 7 focused questions using the guided survey tool.
+4. Use the answers to investigate symptoms, causes, obstacles, goals, and constraints.
+5. Analyze the answers and produce the Problem Discovery Summary when the problem is clear.
+6. Ask another set of questions ONLY if important information is still actually missing.
+7. Stop when the underlying problem is clear.
+8. Produce one clear Planning Topic for the Planner Agent.
+
+## How to Use the Question Tool
+
+Use the guided survey tool `start_guided_survey` to collect answers interactively, one question at a time.
+
+Invoke it as a real tool call (do NOT write `start_guided_survey(...)` as literal text in your reply) with each question as a separate argument: `question_1="...", question_2="...", ...` (up to 7 questions).
+
+A question is free text unless it lists options such as `a) ...` / `b) ...` / `c) ...`, in which case it becomes multiple choice.
+
+Call the tool with 1 to 7 meaningful questions. Ask only questions that help uncover the real problem. Do not repeat questions or ask for information already provided.
+
+### Place The Survey URL In Your Reply
+
+The `start_guided_survey` tool returns a short survey URL. The tool gives you the
+exact URL — use it VERBATIM. Do NOT guess, invent, change, or shorten the id, and
+do NOT substitute an example URL. Write the exact returned link into your reply
+so the user can click it to answer.
+
+Write a short, friendly intro line before the link, for example:
+
+> To understand your situation better, please answer these quick questions:
+>
+> [the exact URL returned by the tool]
+
+Do NOT list the questions out as plain text in the same reply.
+Do NOT simulate the questionnaire yourself.
+Wait for the user's answers (sent back through the chat) before continuing.
+The frontend collects the answers and returns them to you as a message.
+
+## Investigation Focus
+
+Look for:
+
+* The stated problem or symptom
+* The user's actual goal
+* What is preventing progress
+* Possible root causes
+* Previous attempts
+* Important constraints
+* What success looks like
+
+## Rules
+
+Do not jump directly to a solution.
+Do not create a detailed project plan.
+Do not invent missing information.
+Focus on the underlying problem, not just the symptom.
+Stop questioning when enough information is available.
+
+### After The Answers Arrive
+
+When the user's answers come back through the chat, analyze them carefully first:
+
+1. Read every answer.
+2. Compare them with the original request.
+3. Identify symptoms, causes, and constraints.
+4. Identify the user's actual goal.
+
+Then decide: if the core problem and desired outcome are now clear, produce the **Problem Discovery Summary** immediately. Do NOT call the survey again unless important information is still genuinely missing. Prefer completing the summary over asking more questions.
+
+## Final Output
+
+When the investigation is complete, provide this format using the exact headings shown.
+
+# Problem Discovery Summary
+
+## What We Learned
+
+* Key discoveries from the investigation
+
+## Analysis
+
+Briefly explain the connection between the user's situation, symptoms, causes, and goals.
+
+## The Core Problem
+
+[Clearly state the underlying problem that needs to be solved.]
+
+## Desired Outcome
+
+[State what the user actually wants to achieve.]
+
+## Constraints
+
+* Constraint supported by the investigation
+* Constraint supported by the investigation
+
+If no important constraints were identified, write:
+
+* No major constraints were identified during discovery.
+
+## Planning Topic
+
+**[One clear, concise topic to send to the Planner Agent.]**
+
+```
+
+## engine/agent_library/rag_assistant/agent.json
+
+```json
+{
+  "id": "rag_assistant",
+  "name": "RAG Assistant",
+  "description": "Stateful agent with workspace file-management access and memory retrieval.",
+  "mode": "agent",
+  "model": "gemma4:e2b",
+  "tools": [
+    "search_chat_logs",
+    "get_current_date",
+    "map_files",
+    "read_file",
+    "write_text_file",
+    "delete_files"
+  ],
+  "tests": [
+    {
+      "id": "custom-mtqa6k4j-s1wo",
+      "name": "Please help me consolidate my chat records in: E:\\data\\rag_s...",
+      "steps": [
+        "Please help me consolidate my chat records in: E:\\data\\rag_store\\chatlog\\agent-text-records",
+        "Follow these steps sequentially using your tools:",
+        "Run `map_files` on that directory to find all \".txt\" files.",
+        "Use `read_file` to open and extract the text from each discovered file.",
+        "Combine all the chat lines, remove any duplicate logs or repeat entries, and organize them into one chronological file.",
+        "Run `write_text_file` to save this clean consolidated log in that same directory as \"consolidated_chat_records.txt\".",
+        "Call `delete_files` with approved=False for all the original duplicate files you read, and ask me for my confirmation to permanently delete them."
+      ],
+      "expectedResult": {
+        "mode": "type",
+        "value": "nonEmpty"
+      },
+      "enabled": true
+    }
+  ]
+}
+```
+
+## engine/agent_library/rag_assistant/agent.md
+
+```markdown
+# RAG Assistant
+
+## role
+You are the **RAG Assistant**, a secure workspace file-manager and memory-retrieval specialist.
+
+##
+Starndard greeting I am a RAG Assistant
+
+## purpose
+Retrieve insights from past sessions and help Jesus discover, read, write, and manage workspace files safely.
+
+## boundaries
+- **Past Memory:** When asked about past work, call `search_chat_logs`. Translate temporal keywords (like "last session") into topical terms.
+- **Workspace Discovery:** Use `map_files` to inspect workspace structure. Do not assume file paths.
+- **File Access:** Open text or document contents strictly via `read_file`. Keep the context window clean by only reading what is needed.
+- **Writing Results:** Write results using `write_text_file`. Ensure safety rules are followed.
+- **Grounding:** Ground every factual claim strictly in the retrieved logs or file contexts. Do not fabricate.
+
+## how to call tools (critical)
+You can only take actions by ACTUALLY executing the tools given to you. To call a tool, emit ONLY a
+JSON object as your entire reply, with a `name` key and a `parameters` key:
+
+    {"name": "read_file", "parameters": {"path": "E:\\data\\example.txt"}}
+
+- Use exactly `parameters` for the arguments object (the runtime also accepts `arguments` or `args`).
+- For multiple steps in one turn, emit a JSON ARRAY of such objects; each will be executed in order.
+- Never describe a call in words, never put calls inside Python/markdown code blocks, and never write
+  pseudo-code like `read_file("x")` — those are NOT executed.
+- Never invent or guess file paths or file contents. Only reference paths you actually saw in the
+  session state: `discovered_files`, `read_files`, `output_files`, or `pending_deletion`.
+- When reading many files, still read them one `read_file` call per file.
+
+## safe deletion protocol (two-step confirmation)
+To ensure no files are deleted accidentally, you must strictly follow this two-step verification protocol:
+
+1. **Step 1: Request Deletion (Propose & Ask)**
+   - When files are identified as no longer needed, you must **NEVER** call `delete_files(..., approved=True)` first.
+   - You must first call `delete_files(file_list, approved=False)` to register the pending deletion.
+   - You must then explicitly present the list of files to Jesus and ask: *"Are you sure you want to delete these files? Please confirm to finalize."*
+
+2. **Step 2: Execute Deletion (After Approval)**
+   - Only after Jesus explicitly responds with confirmation (e.g., "yes", "go ahead", "approved", "confirm") are you authorized to execute the deletion.
+   - At this point, call `delete_files(file_list, approved=True)` to permanently remove the files and report the success or failure status back to Jesus.
+
+```
+
+## engine/agents/__init__.py
+
+```python
+
+```
+
+## engine/agents/factory.py
+
+```python
+"""
+app/agents/factory.py
+=====================
+
+Constructs runtime Agents from agent definitions.
+
+    build_agent(agent_id, model)
+        ↓
+    loader.load_definition()      (agent.md + agent.json)
+        ↓
+    registry: resolve tools       (IDs -> Python functions)
+        ↓
+    PromptManager.build()         (sections + tool docstrings -> system prompt)
+        ↓
+    Agent
+
+The caller never needs to know where definitions live or how prompts are
+composed. Chat-mode agents get an empty tool list, which disables the
+tool loop entirely - same Agent class, behavior driven by configuration.
+"""
+
+from typing import Callable
+
+from engine.agents.loader import load_definition, AgentNotFoundError
+from engine.core.agent import Agent
+from engine.core.prompt import PromptManager
+from tools.registry import resolve_tools, get_session
+
+
+def _session_aware(func: Callable, session) -> Callable:
+    """Wrap a tool so its results are recorded into the shared FileSession.
+
+    Uses functools.wraps so inspect.signature() (and therefore the schema
+    Ollama builds for tool calling) sees the REAL tool signature, not the
+    wrapper's (*args, **kwargs).
+
+    Standard tool response shape: {"success", "tool", "data": {...}, "error"}.
+    Known data keys are translated into session state:
+        files                   -> add_discovered(paths)
+        path / path+content     -> record_read(...)
+        filename/path (written) -> add_output(path)
+        pending_files (delete)  -> mark_for_deletion(paths)
+
+    Safety gate: delete_files(approved=True) can only delete paths that were
+    previously PROPOSED (approved=False) and recorded in session.pending_deletion.
+    Any path the model fabricates or invents is rejected instead of deleted.
+    """
+    import functools
+    import inspect as _inspect
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if func.__name__ == "delete_files" and session is not None:
+            bound, approved, file_list = _bind_delete_args(func, args, kwargs)
+            if approved and file_list:
+                pending = list(session.pending_deletion or [])
+                proposed = [f for f in file_list if f in pending]
+                rejected = [f for f in file_list if f not in pending]
+                if not proposed:
+                    return {
+                        "success": False,
+                        "tool": "delete_files",
+                        "data": {},
+                        "error": (
+                            "Deletion blocked: none of these paths were previously "
+                            "proposed for deletion. Run delete_files with "
+                            "approved=False first."
+                        ),
+                    }
+                bound.arguments["file_list"] = proposed
+                try:
+                    result = func(*bound.args, **bound.kwargs)
+                except TypeError:
+                    result = None
+                if isinstance(result, dict):
+                    data = result.get("data") or {}
+                    data["rejected"] = rejected
+                    if rejected and not result.get("error"):
+                        result["error"] = "Some paths were not previously proposed and were skipped."
+                    deleted = [k for k, v in data.get("results", {}).items() if v == "deleted"]
+                    if deleted:
+                        session.pending_deletion = [p for p in session.pending_deletion if p not in deleted]
+                return result
+
+        result = func(*args, **kwargs)
+        _record_result(result, session)
+        return result
+
+    # Belt-and-braces: even if a future consumer uses follow_wrapped=False,
+    # the wrapper advertises the real signature and annotations.
+    wrapper.__signature__ = _inspect.signature(func)
+    wrapper.__annotations__ = func.__annotations__
+    return wrapper
+
+
+def _bind_delete_args(func, args, kwargs):
+    """Bind delete_files(*args, **kwargs) into (BoundArguments, approved, file_list)."""
+    import inspect as _inspect
+    try:
+        bound = _inspect.signature(func).bind(*args, **kwargs)
+        bound.apply_defaults()
+    except TypeError:
+        return None, False, []
+    return bound, bool(bound.arguments.get("approved")), list(bound.arguments.get("file_list") or [])
+
+
+def _record_result(result, session) -> None:
+    """Translate a tool result dict into shared FileSession state."""
+    if not (isinstance(result, dict) and session is not None):
+        return
+    from tools.state import FileSession
+    data = result.get("data") or {}
+    if result.get("tool") == "map_files":
+        files = data.get("files") or []
+        session.add_discovered([f["path"] for f in files])
+    elif result.get("tool") == "read_file":
+        session.record_read(data.get("path", ""), data.get("extracted_content", ""))
+    elif result.get("tool") == "write_text_file" and data.get("path"):
+        session.add_output(data["path"])
+    elif result.get("tool") == "delete_files" and data.get("pending_files"):
+        session.mark_for_deletion(data["pending_files"])
+
+
+def build_agent(agent_id: str, model: str | None = None) -> Agent:
+    """Build a ready-to-use Agent for the given agent_id.
+
+    Args:
+        agent_id: folder name / id inside agent_library/
+        model:    explicit model override; when empty, falls back to the
+                  agent's own "model" field, then to ask_llm's resolution
+                  (config/models.json > first Ollama model).
+
+    Raises AgentNotFoundError if the definition is missing.
+    """
+    definition = load_definition(agent_id)
+    meta = definition["meta"]
+
+    mode = (meta.get("mode") or "chat").lower()
+    tool_ids = [] if mode == "chat" else (meta.get("tools") or [])
+    tools: list[Callable] = resolve_tools(tool_ids)
+
+    profile = PromptManager.build(definition, tools)
+
+    resolved_model = model or meta.get("model") or None
+    session = get_session()
+    tools = [_session_aware(fn, session) for fn in tools]
+    return Agent(model=resolved_model, tools=tools, profile=profile, session=session)
+
+
+def replay_history(agent: Agent, history: list[dict] | None) -> None:
+    """Replay prior frontend turns ({role, content}) into the agent's history."""
+    for m in (history or []):
+        role = "assistant" if m.get("role") == "ai" else m.get("role", "user")
+        content = m.get("content", "")
+        if not content:
+            continue
+        agent.messages.append({"role": role, "content": content})
+
+
+__all__ = ["build_agent", "replay_history", "AgentNotFoundError"]
+
+```
+
+## engine/agents/loader.py
+
+```python
+"""
+app/agents/loader.py
+====================
+
+Locates, reads, and parses one agent definition from agent_library/.
+
+An agent folder contains:
+    agent.json  - metadata/configuration (id, name, mode, tools, model)
+    agent.md    - behavior sections (## role, ## purpose, ## boundaries, ...)
+
+load_definition() returns:
+    {"meta": {...agent.json...}, "sections": {...parsed markdown sections...}}
+
+This module does NOT run agents. Its job is only: find, read, parse, return.
+"""
+
+import json
+import re
+from pathlib import Path
+
+AGENT_LIBRARY_DIR = Path(__file__).resolve().parent.parent / "agent_library"
+AGENT_META_FILE = "agent.json"
+AGENT_MD_FILE = "agent.md"
+
+
+def agent_dir(agent_id: str) -> Path:
+    """The folder for an agent id inside agent_library/."""
+    return AGENT_LIBRARY_DIR / agent_id
+
+
+def save_meta(agent_id: str, meta: dict) -> dict:
+    """Merge `meta` into the agent's agent.json (top-level keys only) and
+    write it back pretty-printed. Unknown keys survive untouched."""
+    agent_path = agent_dir(agent_id)
+    meta_file = agent_path / AGENT_META_FILE
+    if not meta_file.exists():
+        raise AgentNotFoundError(f"Agent config not found: {meta_file}")
+
+    stored = json.loads(meta_file.read_text(encoding="utf-8"))
+    stored.update(meta)
+    meta_file.write_text(
+        json.dumps(stored, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    return stored
+
+
+def save_markdown(agent_id: str, markdown: str) -> str:
+    """Write the agent's behavior prose to agent.md."""
+    agent_path = agent_dir(agent_id)
+    agent_path.mkdir(parents=True, exist_ok=True)
+    md_file = agent_path / AGENT_MD_FILE
+    md_file.write_text(str(markdown), encoding="utf-8")
+    return str(markdown)
+
+
+def save_tests(agent_id: str, tests: list) -> list:
+    """Store the agent's own chat tests under agent.json#tests.
+
+    Tests are scoped by their location, so any stored `agentId` is dropped;
+    ensures every test keeps a unique id.
+    """
+    normalized = []
+    for test in tests or []:
+        if not isinstance(test, dict):
+            continue
+        entry = dict(test)
+        entry.pop("agentId", None)
+        if not entry.get("id"):
+            entry["id"] = "t-" + json.dumps(entry, sort_keys=True)[:8]
+        normalized.append(entry)
+    save_meta(agent_id, {"tests": normalized})
+    return normalized
+
+
+class AgentNotFoundError(FileNotFoundError):
+    """Raised when an agent folder or its required files are missing."""
+
+
+def _parse_sections(text: str) -> dict:
+    """Split agent.md into '## <name>' sections (section name lowercased)."""
+    sections = {}
+    current = None
+    buffer = []
+    for line in text.splitlines(keepends=True):
+        match = re.match(r"^\s*##\s+(.+?)\s*$", line)
+        if match:
+            if current is not None:
+                sections[current] = "".join(buffer)
+            current, buffer = match.group(1).strip().lower(), []
+        elif current is not None:
+            buffer.append(line)
+    if current is not None:
+        sections[current] = "".join(buffer)
+    return sections
+
+
+def _clean_body(text: str) -> str:
+    """Trim blank lines and '---' separators from the edges of a section body."""
+    lines = text.splitlines()
+    while lines and (not lines[0].strip() or lines[0].strip() in ("---", "***")):
+        lines.pop(0)
+    while lines and (not lines[-1].strip() or lines[-1].strip() in ("---", "***")):
+        lines.pop()
+    return "\n".join(lines).strip("\n")
+
+
+def load_definition(agent_id: str) -> dict:
+    """Load one agent definition from agent_library/{agent_id}/.
+
+    Returns {"meta": dict, "sections": dict}. Raises AgentNotFoundError
+    when the folder or either required file is missing/unreadable.
+    """
+    agent_dir = AGENT_LIBRARY_DIR / agent_id
+    json_file = agent_dir / AGENT_META_FILE
+    md_file = agent_dir / AGENT_MD_FILE
+
+    if not json_file.exists():
+        raise AgentNotFoundError(f"Agent not found: {json_file}")
+    if not md_file.exists():
+        raise AgentNotFoundError(f"Agent not found: {md_file}")
+
+    try:
+        meta = json.loads(json_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AgentNotFoundError(f"Agent config unreadable: {json_file} ({exc})")
+
+    try:
+        md_text = md_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise AgentNotFoundError(f"Agent markdown unreadable: {md_file} ({exc})")
+
+    raw_sections = _parse_sections(md_text)
+    # The '# Title' line before the first section is ignored; every
+    # '## section' body gets whitespace/separator cleanup.
+    sections = {name: _clean_body(body) for name, body in raw_sections.items()}
+
+    return {"meta": meta, "sections": sections}
+
+```
+
+## engine/agents/registry.py
+
+```python
+"""
+app/agents/registry.py
+======================
+
+Automatic agent discovery.
+
+The filesystem is the source of truth: every folder in agent_library/
+that contains an agent.json is an available agent. Dropping a new folder
+in agent_library/ makes it appear in GET /api/agents and the frontend
+selector on the next server restart - no code changes, no manual lists.
+"""
+
+import json
+from pathlib import Path
+
+from engine.agents.loader import AGENT_LIBRARY_DIR
+
+
+def list_agents() -> list[dict]:
+    """Scan agent_library/ and return one summary per discovered agent:
+
+        [{"id", "name", "description", "mode"}, ...]
+
+    Folders without a readable agent.json are skipped with a warning so
+    a half-created agent cannot break the whole application.
+    """
+    agents = []
+    if not AGENT_LIBRARY_DIR.exists():
+        print(f"[REGISTRY] agent_library not found at {AGENT_LIBRARY_DIR}")
+        return agents
+
+    for agent_dir in sorted(AGENT_LIBRARY_DIR.iterdir()):
+        if not agent_dir.is_dir() or agent_dir.name.startswith(("_", ".")):
+            continue
+
+        meta_file = agent_dir / "agent.json"
+        if not meta_file.exists():
+            print(f"[REGISTRY] skipping {agent_dir.name}: no agent.json")
+            continue
+
+        try:
+            meta = json.loads(meta_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"[REGISTRY] skipping {agent_dir.name}: unreadable agent.json ({exc})")
+            continue
+
+        # Fall back to the folder name when metadata is incomplete, so the
+        # agent still shows up in the frontend.
+        agents.append({
+            "id": meta.get("id") or agent_dir.name,
+            "name": meta.get("name") or agent_dir.name,
+            "description": meta.get("description", ""),
+            "mode": meta.get("mode", "chat"),
+        })
+
+    return agents
+
+
+def get_agent_meta(agent_id: str) -> dict | None:
+    """Return the summary for one agent id, or None if not registered."""
+    for summary in list_agents():
+        if summary["id"] == agent_id:
+            return summary
+    return None
+
+```
+
+## engine/core/__init__.py
+
+```python
+
+```
+
+## engine/core/agent.py
+
+```python
+"""
+app/core/agent.py
+=================
+
+The reusable runtime agent.
+
+    AgentProfile - the agent's identity and prompt sections (from config)
+    Agent        - the generic think / act / observe loop
+
+The Agent does not know what KIND of agent it is (research, coding, chat...).
+Its behavior comes entirely from its AgentProfile and the tools it was given.
+"""
+
+import inspect
+import json
+import re
+from dataclasses import dataclass, field
+from typing import Callable, List
+
+from engine.core.llm import ask_llm
+from tools.state import FileSession
+
+
+# ==========================================================================
+# AGENT PROFILE
+# --------------------------------------------------------------------------
+# The identity and behavior of an agent. Metadata fields come from
+# agent.json; the section fields come from agent.md.
+# ==========================================================================
+
+@dataclass
+class AgentProfile:
+    """Identity + behavior of one agent.
+
+    From agent.json:    id, name, description, mode
+    From agent.md:      role, purpose, personality, boundaries,
+                        communication, principles, decision_style,
+                        plus any extra '## sections' (extras)
+    Composed at build:  system_prompt
+    """
+
+    id: str = ""
+    name: str = ""
+    description: str = ""
+    mode: str = "chat"
+
+    system_prompt: str = ""
+
+    # Prompt sections from agent.md
+    role: str = ""
+    purpose: str = ""
+    personality: str = ""
+    boundaries: str = ""
+    communication: str = ""
+    principles: str = ""
+    decision_style: str = ""
+
+    # Documentation only (NOT included in the system prompt)
+    priorities: str = ""
+
+    extras: dict = field(default_factory=dict)
+
+
+# ==========================================================================
+# THE GENERIC AGENT OBJECT
+# --------------------------------------------------------------------------
+# The Agent maintains conversation history and interacts with the LLM
+# backend through structured messages. When tools are attached, the LLM
+# can request tool calls, which flow through act() -> observe() and a
+# follow-up LLM round.
+# ==========================================================================
+
+class Agent:
+    """A generic AI agent that can think (ask the LLM), act (call a tool) and
+    observe (record the tool's result back into the conversation)."""
+
+    def __init__(self, model: str | None, tools: List[Callable], profile: AgentProfile, session: FileSession | None = None):
+        """Store the model, tools, profile, and optional FileSession."""
+        self.model = model
+        self.profile = profile
+        self.tools = {f.__name__: f for f in tools}
+        self.messages: List[dict] = []
+        self.session = session or FileSession()
+
+    def _extract_text_tool_calls(self, content: str) -> List[dict]:
+        """Find tool calls that a model wrote as plain-text JSON instead of using
+        Ollama's native tool_calls field (a common quirk of small local models).
+
+        Accepts bare JSON, ```json fenced blocks, a JSON object or ARRAY of
+        objects embedded in prose, and objects wrapped under keys like
+        "tool_calls" / "calls" / "functions". ONLY names present in self.tools
+        are returned, and only when the call's required arguments are present
+        (so prose that merely mention a tool is never executed).
+
+        Tool-call objects may use "arguments", "args" OR "parameters" as the
+        arguments key (small models differ).
+        """
+        text = (content or "").strip()
+        if text.startswith("```"):  # unwrap markdown code fences
+            text = text.strip("`")
+            if text.lower().startswith("json"):
+                text = text[4:]
+            text = text.strip()
+
+        candidates: List[dict] = []
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+
+        if parsed is not None:
+            # Top-level array of calls, object wrapped around a list of calls,
+            # or a single call object.
+            if isinstance(parsed, list):
+                candidates.extend(parsed)
+            elif isinstance(parsed, dict):
+                found = False
+                for wrap_key in ("tool_calls", "calls", "functions", "call"):
+                    wrapped = parsed.get(wrap_key)
+                    if isinstance(wrapped, list):
+                        candidates.extend(wrapped)
+                        found = True
+                        break
+                    if isinstance(wrapped, dict):
+                        candidates.append(wrapped)
+                        found = True
+                        break
+                if not found:
+                    candidates.append(parsed)
+        else:
+            # one nesting level allowed so nested "arguments" objects are captured
+            for match in re.finditer(r"\{(?:[^{}]|\{[^{}]*\})*\}", content or ""):
+                try:
+                    candidates.append(json.loads(match.group(0)))
+                except json.JSONDecodeError:
+                    continue
+
+        calls: List[dict] = []
+        for item in candidates:
+            if not isinstance(item, dict) or item.get("name") not in self.tools:
+                continue
+            # Accept "arguments", "args", or "parameters" as the args key.
+            args = item.get("arguments", item.get("args", item.get("parameters", {}))) or {}
+            args = self._normalize_args(item["name"], args)
+            if not self._has_required_args(item["name"], args):
+                continue
+            calls.append({"function": {"name": item["name"], "arguments": args}})
+        return calls
+
+    def _has_required_args(self, name: str, args: dict) -> bool:
+        """True when every required (no-default) parameter of the tool is present
+        in args. Prevents executing narration that merely mentions a tool."""
+        fn = self.tools.get(name)
+        if fn is None:
+            return False
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return True
+        required = {
+            p.name for p in sig.parameters.values()
+            if p.default is inspect.Parameter.empty
+            and p.kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            )
+        }
+        return required.issubset(args.keys())
+
+    def _normalize_args(self, name: str, args) -> dict:
+        """Coerce the many different argument shapes small local models send for
+        tool calls into a clean dict of keyword args the tool actually accepts.
+
+        Handles:
+            - args as a JSON string: '{"path": "..."}'
+            - single-key wrappers:   {"args": {...}}, {"arguments": {...}}
+            - positional list:       ["E:\\..."], [name, content, path]
+            - string booleans:       {"overwrite": "false"} -> False
+            - anything non-dict:     gracefully -> {}
+        """
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+
+        if isinstance(args, dict) and len(args) == 1:
+            if "args" in args:
+                args = args["args"]
+            elif "arguments" in args:
+                args = args["arguments"]
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except (json.JSONDecodeError, TypeError):
+                    return {}
+
+        if isinstance(args, list):
+            fn = self.tools.get(name)
+            if fn is not None:
+                try:
+                    params = [
+                        p for p in inspect.signature(fn).parameters.values()
+                        if p.kind in (
+                            inspect.Parameter.POSITIONAL_ONLY,
+                            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                        )
+                    ]
+                    bound = {}
+                    for param, value in zip(params, args):
+                        if param.name not in bound:
+                            bound[param.name] = value
+                    return self._coerce_bools(bound, {p.name for p in params if p.annotation is bool})
+                except (TypeError, ValueError):
+                    pass
+            return {}
+
+        if not isinstance(args, dict):
+            return {}
+
+        # Drop any keys that aren't actual parameters of the tool, so stray
+        # keys the model invents (e.g. "path" on a no-arg tool) never crash
+        # the call. Tools exposing **kwargs keep everything.
+        bool_params = set()
+        fn = self.tools.get(name)
+        if fn is not None:
+            try:
+                sig = inspect.signature(fn)
+                if not any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD
+                    for p in sig.parameters.values()
+                ):
+                    valid = {p.name for p in sig.parameters.values() if p.kind in (
+                        inspect.Parameter.POSITIONAL_ONLY,
+                        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                        inspect.Parameter.KEYWORD_ONLY,
+                    )}
+                    args = {k: v for k, v in args.items() if k in valid}
+                bool_params = {
+                    p.name for p in sig.parameters.values() if p.annotation is bool
+                }
+            except (TypeError, ValueError):
+                pass
+
+        return self._coerce_bools(args, bool_params)
+
+    @staticmethod
+    def _coerce_bools(args: dict, bool_params: set) -> dict:
+        """Turn string 'true'/'false'/'1'/'0' into real bools, but ONLY for
+        parameters that are actually typed as bool (so a string param like
+        name="yes" is never mangled)."""
+        coerced = dict(args)
+        for key, value in list(coerced.items()):
+            if (
+                key in bool_params
+                and isinstance(value, str)
+                and value.strip().lower() in ("true", "false", "yes", "no", "1", "0")
+            ):
+                coerced[key] = value.strip().lower() in ("true", "yes", "1")
+        return coerced
+
+    MAX_TOOL_ROUNDS = 6
+
+    def think(self, user_input: str) -> str:
+        """Add user input to history, send the conversation to the LLM, and return its reply."""
+        if not self.messages or self.messages[0].get("role") != "system":
+            self.messages.insert(0, {"role": "system", "content": self.profile.system_prompt})
+
+        self._inject_session_context()
+
+        self.messages.append({"role": "user", "content": user_input})
+
+        tool_callables = list(self.tools.values()) if self.tools else None
+
+        message = ask_llm(messages=self.messages, model=self.model, tools=tool_callables)
+        self.messages.append(message)
+
+        # Native tool_calls, or calls the model wrote as plain-text JSON.
+        # Both paths flow through act()/observe() and a follow-up LLM round.
+        # Keep looping while the model keeps issuing tool calls, so a chain of
+        # tool calls always ends in a real text reply (never a silent "").
+        tool_calls = message.get("tool_calls") or self._extract_text_tool_calls(message.get("content", ""))
+        for _ in range(self.MAX_TOOL_ROUNDS):
+            if not tool_calls:
+                break
+            origin = "native tool_calls" if message.get("tool_calls") else "TEXT reply"
+            print(f"[Agent.think] Executing {len(tool_calls)} tool call(s) from {origin}.")
+            for tool_call in tool_calls:
+                result = self.act(tool_call)
+                self.observe(tool_call["function"]["name"], result)
+
+            self._inject_session_context()
+
+            message = ask_llm(messages=self.messages, model=self.model, tools=tool_callables)
+            self.messages.append(message)
+            tool_calls = message.get("tool_calls") or self._extract_text_tool_calls(message.get("content", ""))
+
+        content = message.get("content", "") or ""
+        if not content.strip():
+            print(f"[Agent.think] No text reply after {self.MAX_TOOL_ROUNDS} tool round(s); returning fallback.")
+            return "(I ran my tools but did not produce a final answer. Please ask again.)"
+        return content
+
+    _SESSION_CONTEXT_ROLE = "system"
+    _SESSION_CONTEXT_PREFIX = "CURRENT FILE SESSION STATE"
+
+    def _inject_session_context(self) -> None:
+        """Add current FileSession state as context for the model, replacing any
+        previously injected block so history doesn't grow duplicate state."""
+        if not self.session:
+            return
+        state = self.session.get_state()
+        if not any(state.values()):
+            return
+        context_entries = []
+        for key, value in state.items():
+            if value:
+                context_entries.append(f"  {key}: {value}")
+        context = f"{self._SESSION_CONTEXT_PREFIX} (from previous tool calls):\n" + "\n".join(context_entries)
+
+        # Replace any earlier context block instead of appending another one.
+        for i, message in enumerate(self.messages):
+            if (
+                message.get("role") == self._SESSION_CONTEXT_ROLE
+                and str(message.get("content", "")).startswith(self._SESSION_CONTEXT_PREFIX)
+            ):
+                self.messages[i]["content"] = context
+                return
+        self.messages.append({"role": self._SESSION_CONTEXT_ROLE, "content": context})
+
+    def act(self, tool_call: dict) -> str:
+        """Run one tool that the LLM asked for, using the name and args it chose."""
+        name = tool_call.get("function", {}).get("name")
+        args = self._normalize_args(name, tool_call.get("function", {}).get("arguments", {}))
+        if name in self.tools:
+            try:
+                result = str(self.tools[name](**args))
+                print(f"[Agent.act] Executed {name} -> {result[:100]}...")
+                return result
+            except Exception as e:
+                print(f"[Agent.act] Error executing {name}: {e}")
+                return f"Error executing tool: {e}"
+        print(f"[Agent.act] Missing tool requested: {name}")
+        return f"Error: {name} missing"
+
+    def observe(self, name: str, result: str) -> None:
+        """Record a tool's result back into the conversation history."""
+        self.messages.append({"role": "tool", "content": result, "name": name})
+
+```
+
+## engine/core/llm.py
+
+```python
+"""
+app/core/llm.py
+===============
+
+The LLM backend. Everything that talks to Ollama lives here:
+
+    ask_llm               - send structured messages, get the reply message dict
+    _resolve_model        - explicit arg > config/models.json > first Ollama model
+    _get_context_window   - model context length lookup (capped)
+    refresh_models        - scan installed Ollama models -> config/models.json
+
+The Agent does not know about Ollama details; it only calls ask_llm().
+"""
+
+import json
+import time
+from pathlib import Path
+from typing import Callable, List
+
+import ollama
+
+MAX_NUM_CTX = 32768
+CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "config"
+
+# How long a successful Ollama model scan is trusted before we re-list.
+_MODEL_SCAN_TTL = 60.0
+_model_scan_cache = {"at": -1.0, "ids": []}  # ordered list of installed model ids
+
+
+# ==========================================================================
+# MODEL RESOLUTION AND CONTEXT SIZING
+# ==========================================================================
+
+def _config_model_ids() -> list:
+    """The model ids in config/models.json (re-scanned by refresh_models() at
+    every server startup, so it reflects THIS machine's Ollama)."""
+    try:
+        data = json.loads((CONFIG_DIR / "models.json").read_text(encoding="utf-8"))
+        return [m.get("id") for m in data.get("models", []) if m.get("id")]
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _installed_model_ids() -> list:
+    """Ordered ids of installed Ollama models, cached briefly.
+
+    A failed scan keeps the previous snapshot (or [] when there was none),
+    so "no models visible" and "Ollama unreachable" stay distinguishable.
+    """
+    global _model_scan_cache
+    now = time.monotonic()
+    if _model_scan_cache["ids"] and now - _model_scan_cache["at"] < _MODEL_SCAN_TTL:
+        return _model_scan_cache["ids"]
+    try:
+        ids = []
+        for m in ollama.list().get("models", []):
+            mid = m.get("model") if isinstance(m, dict) else getattr(m, "model", None)
+            if mid and mid not in ids:
+                ids.append(mid)
+        _model_scan_cache = {"at": now, "ids": ids}
+    except Exception:
+        pass  # keep whatever we had before
+    return _model_scan_cache["ids"]
+
+
+# Per-model capabilities (ollama.show), cached per process. None = unknown
+# (older Ollama that does not report capabilities yet).
+_cap_cache: dict = {}
+
+
+def _capabilities(model: str) -> list | None:
+    """The reported capabilities for `model` (['completion', 'tools', ...])."""
+    if model in _cap_cache:
+        return _cap_cache[model]
+    try:
+        info = ollama.show(model=model).model_dump()
+        caps = info.get("capabilities") or []
+        _cap_cache[model] = caps
+        return caps
+    except Exception:
+        _cap_cache[model] = None
+        return None
+
+
+def _supports_tools(model: str) -> bool | None:
+    """True/False when Ollama reports capabilities, None when unknown."""
+    caps = _capabilities(model)
+    if caps is None:
+        return None
+    return "tools" in caps
+
+
+def _resolve_model(model: str | None, require_tools: bool = False) -> str:
+    """Pick which model to use: explicit arg (when suitable) > config > Ollama list.
+
+    An explicitly requested model that is NOT installed on this machine is
+    dropped so the app falls back to a detected one instead of erroring with
+    a 404 - this keeps settings written on one OS (e.g. Windows) from
+    breaking the app on another (e.g. Linux). When no models are visible at
+    all, the explicit request is honoured as-is (previous behaviour).
+
+    `require_tools`: when the caller needs tool calling, models that Ollama
+    reports as NOT supporting tools are skipped so an agent with tools never
+    gets a model that Ollama will reject with 400.
+    """
+    explicit = None
+    if model:
+        detected = set(_config_model_ids()) | set(_installed_model_ids())
+        if model in detected:
+            explicit = model
+        elif detected:
+            print(
+                f"[ask_llm] requested model '{model}' is not installed locally - "
+                "falling back to a detected model"
+            )
+        else:
+            print(f"[ask_llm] no installed models visible - using requested '{model}' as-is")
+            return model
+
+    # Ordered candidates: explicit > config/models.json > live Ollama scan.
+    candidates = []
+    if explicit:
+        candidates.append(explicit)
+    for m in _config_model_ids():
+        if m not in candidates:
+            candidates.append(m)
+    for m in _installed_model_ids():
+        if m not in candidates:
+            candidates.append(m)
+
+    if require_tools:
+        # Prefer models that definitely support tools; keep "unknown" ones as a
+        # last resort (older Ollama), push confirmed-no-tools models to the end.
+        tooled = [c for c in candidates if _supports_tools(c) is True]
+        unknown = [c for c in candidates if _supports_tools(c) is None]
+        others = [c for c in candidates if c not in tooled and c not in unknown]
+        ordered = tooled + unknown + others
+        if explicit and others and explicit in others:
+            print(
+                f"[ask_llm] requested model '{explicit}' does not support tools - "
+                "falling back to one that does"
+            )
+    else:
+        ordered = candidates
+
+    if not ordered:
+        raise RuntimeError(
+            "No model available. Specify one in the frontend, "
+            "add models to config/models.json, or install one in Ollama."
+        )
+
+    chosen = ordered[0]
+    if chosen is explicit:
+        print(f"[ask_llm] explicit model used: {model}")
+    elif chosen in _config_model_ids():
+        print(f"[ask_llm] model from config/models.json: {chosen}")
+    else:
+        print(f"[ask_llm] first installed Ollama model: {chosen}")
+    return chosen
+
+
+def _get_context_window(model: str) -> int | None:
+    """Return the model's max context length from Ollama, capped; None if unknown."""
+    try:
+        info = ollama.show(model=model).model_dump()
+        model_info = info.get("modelinfo") or info.get("model_info") or {}
+        length = model_info.get("llama.context_length")
+        if not length:
+            return None
+        return min(int(length), MAX_NUM_CTX)
+    except Exception as exc:
+        print(f"[ask_llm] context lookup failed for {model}: {exc}")
+        return None
+
+
+# ==========================================================================
+# THE LLM CALL
+# ==========================================================================
+
+def ask_llm(messages: List[dict], model: str | None = None, tools: List[Callable] | None = None) -> dict:
+    """Send structured messages to the resolved model via Ollama and return the full message dict."""
+    resolved = _resolve_model(model, require_tools=bool(tools))
+
+    # A model Ollama reports as NOT supporting tools must not be asked to
+    # (Ollama rejects the request with 400) - drop the tool schemas and let
+    # the agent answer without tool use rather than crash the chat.
+    if tools and _supports_tools(resolved) is False:
+        print(f"[ask_llm] model '{resolved}' does not support tools - continuing without tool use")
+        tools = None
+
+    num_ctx = _get_context_window(resolved)
+
+    options = {"num_ctx": num_ctx} if num_ctx else {}
+    print(f"[ask_llm] calling ollama.chat with model={resolved} num_ctx={num_ctx} tools={len(tools) if tools else 0}")
+
+    for attempt in (1, 2):
+        kwargs = {
+            "model": resolved,
+            "messages": messages,
+            "options": options,
+        }
+        if tools:
+            kwargs["tools"] = tools
+
+        response = ollama.chat(**kwargs)
+        message = response["message"]
+
+        content = message.get("content", "") or ""
+        tool_calls = message.get("tool_calls") or []
+
+        print(f"[ask_llm] reply received ({len(content)} chars, {len(tool_calls)} tool calls)")
+
+        if content.strip() or tool_calls:
+            return message
+
+        print(f"[ask_llm] empty reply on attempt {attempt} - retrying")
+
+    return {"role": "assistant", "content": "(The model returned an empty reply. Please try again.)"}
+
+
+# ==========================================================================
+# MODEL SCAN (startup)
+# --------------------------------------------------------------------------
+# Lists locally installed Ollama models and writes config/models.json so
+# the frontend dropdown has something to show. An empty scan (Ollama down)
+# leaves the last known good file untouched.
+# ==========================================================================
+
+def scan_models() -> list:
+    """Return the deduped list of locally installed Ollama models."""
+    models = []
+    try:
+        for m in ollama.list().get("models", []):
+            model_id = m.get("model") if isinstance(m, dict) else getattr(m, "model", None)
+            size = m.get("size", 0) if isinstance(m, dict) else getattr(m, "size", 0)
+            if model_id:
+                models.append({"id": model_id, "name": model_id, "source": "ollama", "size": size})
+    except Exception as exc:
+        print(f"[llm] ollama scan failed: {exc}")
+
+    seen, unique = set(), []
+    for m in models:
+        if m["id"] not in seen:
+            seen.add(m["id"])
+            unique.append(m)
+    return unique
+
+
+def refresh_models() -> list:
+    """Scan Ollama and write config/models.json (returns the model list)."""
+    models = scan_models()
+    models_file = CONFIG_DIR / "models.json"
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    if models:
+        models_file.write_text(
+            json.dumps({"models": models}, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[llm] wrote {len(models)} models to {models_file}")
+    else:
+        print(f"[llm] scan found no models - keeping {models_file}")
+    return models
+
+```
+
+## engine/core/prompt.py
+
+```python
+"""
+app/core/prompt.py
+==================
+
+PromptManager: converts an agent definition (agent.json + parsed agent.md
+sections) plus the agent's resolved tools into an AgentProfile with a
+composed system prompt.
+
+    agent.md + agent.json + tools
+        ↓
+    PromptManager.build()
+        ↓
+    AgentProfile (system_prompt ready)
+"""
+
+from dataclasses import field
+from typing import Callable, List
+
+from engine.core.agent import AgentProfile
+
+# Markdown '## sections' that map to named profile fields.
+# Any other section passes through verbatim into the prompt as an
+# UPPERCASE-titled block, so new sections need no code changes.
+KNOWN_SECTIONS = (
+    "role",
+    "purpose",
+    "personality",
+    "boundaries",
+    "communication",
+    "principles",
+    "decision_style",
+    "priorities",
+)
+
+# Sections actually composed INTO the system prompt.
+# 'priorities' is documentation-only and is deliberately excluded,
+# matching the original PromptManager behavior.
+PROMPT_SECTIONS = tuple(name for name in KNOWN_SECTIONS if name != "priorities")
+
+
+class PromptManager:
+    """Builds an AgentProfile from an agent definition and composes the system prompt."""
+
+    @staticmethod
+    def build(definition: dict, tools: List[Callable] | None = None) -> AgentProfile:
+        """Build an AgentProfile.
+
+        Args:
+            definition: {"meta": {...agent.json...}, "sections": {...parsed agent.md...}}
+            tools:      resolved tool functions; their docstrings become the
+                        AVAILABLE TOOLS section of the prompt.
+
+        Steps:
+            1. Map metadata and markdown sections onto the profile fields
+            2. Collect unknown sections as extras
+            3. Compose the system prompt
+        """
+        meta = definition.get("meta", {})
+        sections = {k.lower().strip(): v for k, v in definition.get("sections", {}).items()}
+
+        known = {name: sections.get(name, "") for name in KNOWN_SECTIONS}
+        extras = {
+            name: content for name, content in sections.items()
+            if name not in KNOWN_SECTIONS and name not in ("skills", "identity")
+        }
+
+        profile = AgentProfile(
+            id=meta.get("id", ""),
+            name=meta.get("name", ""),
+            description=meta.get("description", ""),
+            mode=meta.get("mode", "chat"),
+            **known,
+            extras=extras,
+        )
+        profile.system_prompt = PromptManager.compose_system_prompt(profile, tools)
+        return profile
+
+    @staticmethod
+    def compose_system_prompt(profile: AgentProfile, tools: List[Callable] | None = None) -> str:
+        """Build the final system prompt from profile sections."""
+        parts = []
+
+        if profile.role:
+            parts.append(f"ROLE\n{profile.role}")
+
+        if profile.purpose:
+            parts.append(f"PURPOSE\n{profile.purpose}")
+
+        if profile.personality:
+            parts.append(f"PERSONALITY\n{profile.personality}")
+
+        if profile.boundaries:
+            parts.append(f"BOUNDARIES\n{profile.boundaries}")
+
+        if profile.communication:
+            parts.append(f"COMMUNICATION STYLE\n{profile.communication}")
+
+        if profile.principles:
+            parts.append(f"PRINCIPLES\n{profile.principles}")
+
+        if profile.decision_style:
+            parts.append(f"DECISION STYLE\n{profile.decision_style}")
+
+        tool_lines = PromptManager._tool_lines(tools)
+        if tool_lines:
+            parts.append("AVAILABLE TOOLS\n" + "\n".join(tool_lines))
+
+        # Generic extra sections (user, greeting, project_notes, ...) become
+        # UPPERCASE-titled blocks, sorted for deterministic prompts.
+        for title, content in sorted(profile.extras.items()):
+            if content:
+                parts.append(f"{title.upper()}\n{content}")
+
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _tool_lines(tools: List[Callable] | None) -> List[str]:
+        """Format tool callables as '- id: first docstring line' lines."""
+        lines = []
+        for fn in tools or []:
+            doc = (fn.__doc__ or "").strip()
+            summary = doc.splitlines()[0] if doc else ""
+            lines.append(f"- {fn.__name__}: {summary}")
+        return lines
+
+```
+
+## interface/__init__.py
+
+```python
+"""Modular Interface & System Update Architecture.
+
+Update modules live under `interface/updates/<domain>/` and are discovered by
+`interface/update_manager.py`; execution can be wrapped with caller tracing
+(`interface/interface_dispatcher.py`); rollback against a baseline is handled
+by `interface/restore_manager.py`. Design: docs/01_IDEA_AND_ARCHITECTURE.md.
+"""
+```
+
+## interface/interface_dispatcher.py
+
+```python
+"""interface/interface_dispatcher.py
+===================================
+
+Line-number change tracing and traced execution for Option B module calls.
+
+Every traced call records WHERE it was triggered - the caller's file and line
+- before running the actual function, so troubleshooting never depends on
+memory:
+
+    from interface.interface_dispatcher import InterfaceDispatcher
+
+    InterfaceDispatcher().trace_and_execute(my_module.run_example, data)
+    InterfaceDispatcher().execute_action("engine", "newfunction",
+                                         "secondary_engine_action", 5)
+
+Trace lines are logged through the `app_change_tracker` logger (a FileHandler
+writes them to `data/interface_trace.log`) and also printed to stdout.
+"""
+
+from __future__ import annotations
+
+import inspect
+import logging
+from datetime import datetime
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+TRACE_LOG_FILE = BASE_DIR / "data" / "interface_trace.log"
+
+logger = logging.getLogger("app_change_tracker")
+if not logger.handlers:
+    logger.setLevel(logging.INFO)
+    _trace_handler = logging.FileHandler(
+        TRACE_LOG_FILE, mode="a", encoding="utf-8"
+    )
+    _trace_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(message)s", datefmt="%Y-%m-%dT%H:%M:%S")
+    )
+    logger.addHandler(_trace_handler)
+    logger.propagate = False
+
+
+class InterfaceDispatcher:
+    """Wraps update-module calls with caller file/line logging."""
+
+    def __init__(self, update_manager=None, log_file: Path | str = TRACE_LOG_FILE) -> None:
+        self.log_file = Path(log_file)
+        if update_manager is None:
+            from interface.update_manager import get_update_manager
+            update_manager = get_update_manager()
+        self.update_manager = update_manager
+
+    # ---------------------------------------------------------- traced run
+
+    def trace_and_execute(self, target_function, *arguments, **keyword_arguments):
+        """Record the caller's file/line, then run `target_function(*args,
+        **kwargs)` and return its result."""
+        frame = inspect.currentframe()
+        try:
+            caller = frame.f_back
+            caller_file = caller.f_code.co_filename
+            caller_line = caller.f_lineno
+            caller_func = caller.f_code.co_name
+        finally:
+            del frame
+
+        function_name = getattr(target_function, "__name__", str(target_function))
+        module_name = getattr(target_function, "__module__", "Unknown Module")
+
+        entry = (
+            f"[TRACE LOG] Executing '{function_name}' from '{module_name}' "
+            f"called from {caller_file}:{caller_line} ({caller_func}) "
+            f"@ {datetime.now().isoformat(timespec='seconds')}"
+        )
+        print(entry)
+        logger.info(entry)
+
+        return target_function(*arguments, **keyword_arguments)
+
+    def execute_action(self, domain_category: str, submodule_name: str,
+                       function_to_call: str, *arguments, **keyword_arguments):
+        """Dispatch an action through the update manager via string names."""
+        try:
+            target_module = self.update_manager.get_active_module(
+                domain_category, submodule_name
+            )
+        except KeyError as exc:
+            raise ModuleNotFoundError(
+                f"Active update module '{submodule_name}' under domain "
+                f"'{domain_category}' was not found."
+            ) from exc
+        target_function = getattr(target_module, function_to_call)
+        return self.trace_and_execute(target_function, *arguments, **keyword_arguments)
+
+
+_dispatcher: InterfaceDispatcher | None = None
+
+
+def get_dispatcher() -> InterfaceDispatcher:
+    """Process-wide InterfaceDispatcher singleton."""
+    global _dispatcher
+    if _dispatcher is None:
+        _dispatcher = InterfaceDispatcher()
+    return _dispatcher
+```
+
+## interface/restore_manager.py
+
+```python
+"""interface/restore_manager.py
+==============================
+
+Isolated baseline comparison, backup and rollback manager.
+
+RestoreManager compares the live codebase against a known-good baseline using
+SHA-256 hashes, copies every file it is about to overwrite into
+`data/snapshots/pre_restore_backup/`, and only then restores the baseline
+version. Runtime data and user settings are always excluded:
+
+    data/  venv/  .git/  __pycache__/  current-known-good-copy/  test/
+    dashboard/config/app_settings.json  about/about.json  *.bak  *.pyc  *.pyo
+
+Restore semantics: only files present in BOTH trees whose checksum differs are
+overwritten. Files that exist only in the baseline or only in the live tree
+are reported but left untouched.
+
+Workflow:
+    RestoreManager().snapshot_baseline()   # publish current tree as baseline
+    RestoreManager().restore(dry_run=True) # preview what would change
+    RestoreManager().restore()             # back up + roll back, then sync docs
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_BASELINE = BASE_DIR / "current-known-good-copy"
+LEGACY_BASELINE = BASE_DIR / "test"
+BACKUP_ROOT = BASE_DIR / "data" / "snapshots" / "pre_restore_backup"
+DOCS_SCRIPT = BASE_DIR / "scripts" / "update_docs.py"
+MANIFEST_NAME = "BASELINE_MANIFEST.json"
+
+# Top-level entries never compared, copied, backed up or restored.
+EXCLUDED_TOP = {"data", "venv", ".git", "__pycache__", "current-known-good-copy", "test"}
+# User/runtime files never touched even when their relative path matches.
+EXCLUDED_FILES = {"dashboard/config/app_settings.json", "about/about.json"}
+EXCLUDED_SUFFIXES = (".bak", ".pyc", ".pyo")
+
+_TOP = EXCLUDED_TOP
+_FILES = EXCLUDED_FILES
+_SUFFIXES = EXCLUDED_SUFFIXES
+
+
+def is_excluded(rel_path: str) -> bool:
+    """True when a relative path must never participate in a snapshot/restore."""
+    rel = rel_path.replace("\\", "/")
+    if rel.startswith("./"):
+        rel = rel[2:]
+    if rel in _FILES:
+        return True
+    if rel.endswith(_SUFFIXES):
+        return True
+    return any(part in _TOP for part in rel.split("/"))
+
+
+def file_map(root: Path) -> dict[str, Path]:
+    """{relative_path: absolute_path} for every file under `root`, excluding
+    runtime data and user settings."""
+    mapping: dict[str, Path] = {}
+    root = root.resolve()
+    for dirpath, dirnames, filenames in os.walk(root):
+        rel_dir = os.path.relpath(dirpath, root)
+        dirnames[:] = [
+            d for d in dirnames
+            if not is_excluded(str((Path(rel_dir) / d).as_posix()))
+        ]
+        for filename in filenames:
+            full = Path(dirpath) / filename
+            rel = full.relative_to(root).as_posix()
+            if is_excluded(rel):
+                continue
+            mapping[rel] = full
+    return mapping
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 16), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+class RestoreManager:
+    """SHA-256 baseline compare, safety backup and rollback."""
+
+    # ------------------------------------------------------------ snapshots
+
+    def snapshot_baseline(self, dest: str | Path | None = None) -> int:
+        """Publish a complete working copy of the current tree into the
+        baseline folder (default: current-known-good-copy/). Returns the
+        number of files copied."""
+        target = Path(dest or DEFAULT_BASELINE).resolve()
+        live = file_map(BASE_DIR)
+
+        if target.exists():
+            shutil.rmtree(target)
+        target.mkdir(parents=True, exist_ok=True)
+
+        for rel, source in sorted(live.items()):
+            dest_file = target / rel
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, dest_file)
+
+        manifest = {
+            "created": datetime.now().isoformat(timespec="seconds"),
+            "baseline": str(target),
+            "files": len(live),
+            "excludes": {
+                "top": sorted(_TOP),
+                "files": sorted(_FILES),
+                "suffixes": list(_SUFFIXES),
+            },
+        }
+        (target / MANIFEST_NAME).write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        self._report_manifest(target)
+        return len(live)
+
+    @staticmethod
+    def _report_manifest(baseline: Path) -> None:
+        manifest = baseline / MANIFEST_NAME
+        if not manifest.is_file():
+            return
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        print(
+            f"Baseline: {data.get('baseline', baseline)} "
+            f"({data.get('files', '?')} files, created {data.get('created', '?')})"
+        )
+
+    # ------------------------------------------------------------- restore
+
+    def _resolve_baseline(self, given: str | Path | None) -> Path:
+        if given:
+            path = Path(given).resolve()
+            if not path.is_dir():
+                raise NotADirectoryError(f"baseline folder not found: {path}")
+            return path
+        if DEFAULT_BASELINE.is_dir():
+            return DEFAULT_BASELINE
+        if LEGACY_BASELINE.is_dir():
+            print(
+                f"WARNING: '{DEFAULT_BASELINE.name}' not found - falling back to "
+                f"'{LEGACY_BASELINE.name}' (pre-infection snapshot, may be outdated). "
+                f"Run `python about/set_title.py snapshot` to publish the current tree."
+            )
+            return LEGACY_BASELINE
+        raise NotADirectoryError(
+            "no baseline found - run `python about/set_title.py snapshot` first"
+        )
+
+    @staticmethod
+    def _run_docs_regeneration() -> None:
+        if not DOCS_SCRIPT.is_file():
+            print("SKIP: scripts/update_docs.py not found")
+            return
+        result = subprocess.run(
+            [sys.executable, str(DOCS_SCRIPT)], cwd=str(BASE_DIR)
+        )
+        if result.returncode == 0:
+            print("Docs snapshots regenerated (docs/APP_STRUCTURE.md, docs/APP_CODE_SNAPSHOT.md).")
+        else:
+            print(f"WARNING: docs regeneration exited with code {result.returncode}")
+
+    def diff(self, baseline: str | Path | None = None) -> dict:
+        """Silent SHA-256 comparison against the baseline (no printing).
+
+        Returns { baseline, shared, modified, skipped, untracked } where
+        `modified` lists relative paths present in both trees whose checksum
+        differs (ready to restore/back-up) and skipped/untracked hold the
+        baseline-only / live-only reports."""
+        base = self._resolve_baseline(baseline)
+        base = base.resolve()
+
+        live_map = file_map(BASE_DIR)
+        base_map = file_map(base)
+        shared = sorted(set(live_map) & set(base_map))
+        modified = [rel for rel in shared if _sha256(live_map[rel]) != _sha256(base_map[rel])]
+        skipped = sorted(set(base_map) - set(live_map))
+        untracked = sorted(set(live_map) - set(base_map))
+
+        return {
+            "baseline": str(base),
+            "shared": len(shared),
+            "modified": modified,
+            "skipped": skipped,
+            "untracked": untracked,
+        }
+
+    def restore(self, baseline: str | Path | None = None, dry_run: bool = False) -> dict:
+        """Compare the live tree against the baseline, back up and overwrite
+        modified files (or just report when `dry_run`). Re-runs the docs
+        regeneration after a real restore."""
+        base = self._resolve_baseline(baseline)
+        base = base.resolve()
+        self._report_manifest(base)
+
+        diff = self.diff(base)
+        modified = list(diff["modified"])
+        skipped = list(diff["skipped"])
+        untracked = list(diff["untracked"])
+
+        print(f"Comparing against baseline: {base}")
+        print(f"  shared files: {diff['shared']}")
+        print(f"  modified:     {len(modified)}")
+        print(f"  baseline-only: {len(skipped)} (report only, not copied)")
+        print(f"  live-only:    {len(untracked)} (report only, not touched)")
+
+        for rel in skipped:
+            print(f"    skip:  {rel}")
+        for rel in untracked:
+            print(f"    keep:  {rel}")
+
+        result = {
+            "baseline": str(base),
+            "modified": len(modified),
+            "skipped": len(skipped),
+            "untracked": len(untracked),
+            "backup_dir": None,
+        }
+
+        if not modified:
+            print("Nothing to restore - live tree matches the baseline.")
+            return result
+
+        if dry_run:
+            print("DRY RUN - no changes made. Would restore these files:")
+            for rel in modified:
+                print(f"    restore: {rel}")
+            return result
+
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_dir = BACKUP_ROOT / stamp
+        backup_dir.mkdir(parents=True, exist_ok=True)
+
+        live_map = file_map(BASE_DIR)
+        base_map = file_map(base)
+
+        for rel in modified:
+            target = live_map[rel]
+            backup_file = backup_dir / rel
+            backup_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(target, backup_file)
+            shutil.copy2(base_map[rel], target)
+
+        result["backup_dir"] = str(backup_dir)
+        print(f"Backed up {len(modified)} file(s) -> {backup_dir}")
+        print(f"Restored  {len(modified)} file(s) from {base}")
+        self._run_docs_regeneration()
+        return result
+
+
+_manager: RestoreManager | None = None
+
+
+def get_restore_manager() -> RestoreManager:
+    """Process-wide RestoreManager singleton."""
+    global _manager
+    if _manager is None:
+        _manager = RestoreManager()
+    return _manager
+```
+
+## interface/update_manager.py
+
+```python
+"""interface/update_manager.py
+============================
+
+Dynamic discovery (Option B) of update modules and the external archive.
+
+Update modules are `.py` files under `interface/updates/<domain>/` (domains:
+`engine`, `tools`, `server`). UpdateManager scans those folders, imports every
+module, and keeps the live module objects in `active_modules_catalog` so
+callers can execute them natively:
+
+    from interface.update_manager import UpdateManager
+    mod = UpdateManager().get_active_module("engine", "hello_update")
+    mod.run_example()
+
+Retiring a module physically moves its file out of the repo into
+`data/interface_archive/<domain>/` so the codebase never accumulates old
+experimental logic:
+    UpdateManager().move_module_to_external_archive("engine", "hello_update")
+"""
+
+from __future__ import annotations
+
+import importlib
+import shutil
+import sys
+from pathlib import Path
+from types import ModuleType
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+UPDATES_DIR = BASE_DIR / "interface" / "updates"
+ARCHIVE_DIR = BASE_DIR / "data" / "interface_archive"
+
+DOMAINS = ("engine", "tools", "server")
+
+
+class UpdateManager:
+    """Finds, imports and tracks update modules by domain."""
+
+    def __init__(self) -> None:
+        self.active_modules_catalog: dict[str, dict[str, ModuleType]] = {}
+        self.discover()
+
+    # ------------------------------------------------------------------ scan
+
+    def _candidates(self) -> list[tuple[str, str, Path]]:
+        """(domain, module_name, file_path) for every update module found."""
+        found: list[tuple[str, str, Path]] = []
+        for domain in DOMAINS:
+            domain_dir = UPDATES_DIR / domain
+            if not domain_dir.is_dir():
+                continue
+            for file in sorted(domain_dir.glob("*.py")):
+                if file.name == "__init__.py":
+                    continue
+                found.append((domain, file.stem, file))
+        return found
+
+    def discover(self) -> dict[str, dict[str, ModuleType]]:
+        """(Re)scan the updates folders and (re)import every module found."""
+        for domain, name, _file in self._candidates():
+            module = self._import_module(domain, name)
+            self.active_modules_catalog.setdefault(domain, {})[name] = module
+        return self.active_modules_catalog
+
+    def discover_all_active_modules(self) -> dict[str, dict[str, ModuleType]]:
+        """Clear the catalog and re-import every active update module from disk.
+
+        Alias kept for the docs/02_IMPLEMENTATION_PLAN.md surface; behaves like
+        reload_all() so freshly added or edited modules are picked up.
+        """
+        return self.reload_all()
+
+    def _import_module(self, domain: str, name: str) -> ModuleType:
+        full_name = f"interface.updates.{domain}.{name}"
+        if full_name in sys.modules:
+            return sys.modules[full_name]
+        return importlib.import_module(full_name)
+
+    def reload_all(self) -> dict[str, dict[str, ModuleType]]:
+        """Drop every cached update module and re-import from disk.
+
+        Used by the `apply` CLI trigger to pick up newly added or edited
+        update modules in the current process.
+        """
+        for full_name in list(sys.modules):
+            if full_name == "interface.updates" or full_name.startswith("interface.updates."):
+                del sys.modules[full_name]
+        self.active_modules_catalog = {}
+        return self.discover()
+
+    # --------------------------------------------------------------- Option B
+
+    def get_active_module(self, domain: str, name: str) -> ModuleType:
+        """Return the live module object for direct, native execution."""
+        try:
+            return self.active_modules_catalog[domain][name]
+        except KeyError:
+            known = sorted(self.active_modules_catalog.get(domain, {}))
+            raise KeyError(
+                f"no active module '{name}' in domain '{domain}' "
+                f"(known modules: {known or 'none'})"
+            ) from None
+
+    def list_domain_modules(self, domain: str) -> list[str]:
+        """Sorted names of every loaded module under a domain."""
+        return sorted(self.active_modules_catalog.get(domain, {}))
+
+    # ----------------------------------------------------------------- archive
+
+    def move_module_to_external_archive(self, domain: str, name: str) -> Path:
+        """Move `interface/updates/<domain>/<name>.py` out of the repo into
+        `data/interface_archive/<domain>/` and refresh the catalog."""
+        source = UPDATES_DIR / domain / f"{name}.py"
+        if not source.is_file():
+            raise FileNotFoundError(f"update module not found: {source}")
+        dest_dir = ARCHIVE_DIR / domain
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / source.name
+        if dest.exists():
+            dest.unlink()
+        shutil.move(str(source), str(dest))
+        self.active_modules_catalog.get(domain, {}).pop(name, None)
+        sys.modules.pop(f"interface.updates.{domain}.{name}", None)
+        return dest
+
+    # ----------------------------------------------------------------- summary
+
+    def summary(self) -> str:
+        """Human-readable catalog listing, domain by domain."""
+        lines = [f"Update modules in {UPDATES_DIR}:"]
+        for domain in sorted(self.active_modules_catalog):
+            names = sorted(self.active_modules_catalog[domain])
+            lines.append(f"  {domain}/  ->  {', '.join(names) if names else '(none)'}")
+        total = sum(len(names) for names in self.active_modules_catalog.values())
+        lines.append(f"total: {total} active module(s)")
+        return "\n".join(lines)
+
+
+_manager: UpdateManager | None = None
+
+
+def get_update_manager() -> UpdateManager:
+    """Process-wide UpdateManager singleton."""
+    global _manager
+    if _manager is None:
+        _manager = UpdateManager()
+    return _manager
+```
+
+## interface/updates/__init__.py
+
+```python
+"""Active update modules, grouped by domain (engine / tools / server).
+
+Each `.py` file here is discovered and imported by
+`interface/update_manager.py`; callers run the module's functions directly
+via `get_active_module(domain, name)`.
+"""
+```
+
+## interface/updates/engine/__init__.py
+
+```python
+"""Update modules that extend the agent engine (engine/)."""
+
+__all__ = ["hello_update", "newfunction"]
+```
+
+## interface/updates/engine/hello_update.py
+
+```python
+"""Example update module for the `engine` domain.
+
+Discovered by UpdateManager and executable natively:
+    from interface.update_manager import UpdateManager
+    mod = UpdateManager().get_active_module("engine", "hello_update")
+    print(mod.run_example())
+"""
+
+
+def run_example() -> str:
+    """Return a short self-identification string for the example module."""
+    return "hello from interface/updates/engine/hello_update.py"
+
+
+def double(number: int | float) -> int | float:
+    """Trivial demo transform: return twice `number`."""
+    return number * 2
+```
+
+## interface/updates/engine/newfunction.py
+
+```python
+"""
+LOCATION: interface/updates/engine/newfunction.py
+USAGE (Option B Direct Access):
+    module = update_manager.get_active_module("engine", "newfunction")
+    result = module.execute_new_logic("Input Data")
+"""
+import logging
+
+logger = logging.getLogger("app_change_tracker")
+
+
+def execute_new_logic(data_payload: str):
+    """Example logic function for engine updates."""
+    logger.info(f"[ENGINE: newfunction] Processing payload: {data_payload}")
+    return f"Engine processed payload: {data_payload}"
+
+
+def secondary_engine_action(value: int):
+    """Secondary action inside the same module file."""
+    return value * 10
+```
+
+## interface/updates/engine/project_creator.py
+
+```python
+"""Project creator module.
+
+LOCATION: interface/updates/engine/project_creator.py
+USAGE (Option B Direct Access):
+    mod = update_manager.get_active_module("engine", "project_creator")
+    result = mod.create_project("MyNewProject", "C:\\Projects\\MyNewProject")
+"""
+
+import sys
+import venv
+import subprocess
+from pathlib import Path
+import logging
+
+logger = logging.getLogger("app_change_tracker")
+
+# Standard workspace folder layout
+STANDARD_FOLDERS = [
+    "config",
+    "server",
+    "dashboard",
+    "modules",
+    "project_scope",
+    "to_do",
+    "updates",
+    "data",
+]
+
+DEFAULT_REQUIREMENTS = [
+    "fastapi",
+    "uvicorn",
+    "streamlit",
+]
+
+STARTER_SERVER_CODE = """from fastapi import FastAPI
+
+app = FastAPI(title="Project Server")
+
+@app.get("/")
+def read_root():
+    return {"status": "online", "message": "Project server running"}
+
+@app.get("/api/status")
+def get_status():
+    return {"status": "ready"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8500)
+"""
+
+STARTER_DASHBOARD_CODE = """import streamlit as st
+
+st.set_page_config(page_title="Project Dashboard", layout="wide")
+st.title("Project Dashboard")
+st.write("Welcome to your standalone project workspace!")
+
+st.header("Project Status")
+st.info("Server & Workspace Initialized")
+"""
+
+
+def get_venv_python(project_path: Path) -> Path:
+    """Returns the path to the Python executable in .venv based on OS."""
+    if sys.platform == "win32":
+        return project_path / ".venv" / "Scripts" / "python.exe"
+    return project_path / ".venv" / "bin" / "python"
+
+
+def create_project(project_name: str, target_dir: str, dependencies: list = None) -> dict:
+    """Creates a standalone project environment with standard folders, .venv, server, and dashboard."""
+    project_path = Path(target_dir).resolve()
+    logger.info(f"[PROJECT BUILDER] Creating project '{project_name}' at {project_path}")
+
+    # 1. Generate Standard Workspace Folders
+    project_path.mkdir(parents=True, exist_ok=True)
+    for folder in STANDARD_FOLDERS:
+        (project_path / folder).mkdir(parents=True, exist_ok=True)
+
+    # 2. Build Platform-Specific Virtual Environment
+    venv_dir = project_path / ".venv"
+    if not venv_dir.exists():
+        builder = venv.EnvBuilder(with_pip=True)
+        builder.create(venv_dir)
+
+    # 3. Write requirements.txt and install dependencies
+    req_list = dependencies or DEFAULT_REQUIREMENTS
+    req_file = project_path / "requirements.txt"
+    req_file.write_text("\n".join(req_list) + "\n", encoding="utf-8")
+
+    venv_python = get_venv_python(project_path)
+    subprocess.run(
+        [str(venv_python), "-m", "pip", "install", "-r", str(req_file)],
+        check=True,
+    )
+
+    # 4. Generate Starter Server & Dashboard
+    (project_path / "server" / "server.py").write_text(STARTER_SERVER_CODE, encoding="utf-8")
+    (project_path / "dashboard" / "app.py").write_text(STARTER_DASHBOARD_CODE, encoding="utf-8")
+
+    return {
+        "status": "success",
+        "project_name": project_name,
+        "path": str(project_path),
+        "venv_python": str(venv_python),
+    }
+```
+
+## interface/updates/server/__init__.py
+
+```python
+"""Update modules that extend the server (server/)."""
+
+__all__: list[str] = []
+```
+
+## interface/updates/server/project_routes.py
+
+```python
+"""
+LOCATION: interface/updates/server/project_routes.py
+"""
+import os
+from pathlib import Path
+from pydantic import BaseModel
+from interface.update_manager import UpdateManager
+
+class CreateProjectRequest(BaseModel):
+    project_name: str
+    target_dir: str
+    dependencies: list[str] = None
+
+def register_routes(app):
+    """Registers project manager API endpoints onto the FastAPI app."""
+    
+    @app.post("/api/projects/create")
+    def api_create_project(req: CreateProjectRequest):
+        mgr = UpdateManager()
+        builder = mgr.get_active_module("engine", "project_creator")
+        if not builder:
+            return {"status": "error", "message": "project_creator module not found"}
+        
+        result = builder.create_project(
+            project_name=req.project_name,
+            target_dir=req.target_dir,
+            dependencies=req.dependencies
+        )
+        return result
+
+    @app.get("/api/projects/list")
+    def api_list_projects(base_dir: str = "C:\\Projects"):
+        """Lists created project folders at the target location."""
+        path = Path(base_dir)
+        if not path.exists():
+            return {"projects": []}
+        
+        projects = [
+            d.name for d in path.iterdir() 
+            if d.is_dir() and (d / "requirements.txt").exists()
+        ]
+        return {"base_dir": str(path), "projects": projects}
+
+
+```
+
+## interface/updates/tools/__init__.py
+
+```python
+"""Update modules that extend agent capabilities (tools/)."""
+
+__all__: list[str] = []
+```
+
+## memory/__init__.py
+
+```python
+
+```
+
+## memory/ingest.py
+
+```python
+# ingest.py - Part of the Terminator Stateful Agentic RAG System
+# Slices long chat logs into semantic chunks with a sliding window buffer.
+
+import os
+import re
+from pathlib import Path
+
+def slide_overlap_chunk(text, chunk_size=500, overlap=50):
+    """Slices a text stream into character segments with a sliding overlap.
+    
+    This preserves semantic context across boundaries and prevents sentence-cutting.
+    """
+    chunks = []
+    if not text:
+        return chunks
+    step = chunk_size - overlap
+    if step <= 0:
+        step = chunk_size  # Safety check
+        
+    start = 0
+    while start < len(text):
+        end = start + chunk_size
+        chunk = text[start:end]
+        chunks.append(chunk)
+        if end >= len(text):
+            break
+        start += step
+    return chunks
+
+def parse_chat_log(file_content):
+    """Extracts session metadata and individual speaker turns from a chat log."""
+    header_info = {}
+    lines = file_content.splitlines()
+    
+    # Header keys map to metadata fields
+    header_fields = {
+        "title": [r"^Session:\s*(.+)$", r"^TITLE:\s*(.+)$"],
+        "agent": [r"^Agent:\s*(.+)$", r"^AGENT:\s*(.+)$"],
+        "model": [r"^Model:\s*(.+)$", r"^MODEL:\s*(.+)$"],
+        "date": [r"^Date:\s*(.+)$", r"^STARTED:\s*(.+)$"],
+    }
+    
+    for line in lines:
+        for field, patterns in header_fields.items():
+            if field in header_info:
+                continue
+            for pattern in patterns:
+                match = re.match(pattern, line.strip())
+                if match:
+                    header_info[field] = match.group(1).strip()
+                    break
+
+    turns = []
+    turn_pattern = re.compile(r"^\[([^\]]+)\]\s+(.*)$")
+    
+    current_speaker = None
+    current_date = None
+    current_body_lines = []
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        match = turn_pattern.match(line.strip())
+        if match:
+            # Save preceding turn
+            if current_speaker is not None and current_body_lines:
+                turns.append({
+                    "speaker": current_speaker,
+                    "date": current_date,
+                    "content": "\n".join(current_body_lines).strip()
+                })
+            current_speaker = match.group(1).strip()
+            current_date = match.group(2).strip()
+            current_body_lines = []
+            # Skip separator line
+            if i + 1 < len(lines) and re.match(r"^[-=]+$", lines[i+1].strip()):
+                i += 1
+        else:
+            if current_speaker is not None:
+                # Exclude horizontal rule dividers
+                if not re.match(r"^={10,}$", line.strip()) and not re.match(r"^-{10,}$", line.strip()):
+                    current_body_lines.append(line)
+        i += 1
+        
+    # Append the last turn
+    if current_speaker is not None and current_body_lines:
+        turns.append({
+            "speaker": current_speaker,
+            "date": current_date,
+            "content": "\n".join(current_body_lines).strip()
+        })
+        
+    return header_info, turns
+
+def ingest_file(file_path, chunk_size=500, overlap=50):
+    """Index ONE transcript file into chunked sub-documents (used for
+    per-chat commits and directory ingestion alike)."""
+    txt_file = Path(file_path)
+    if not txt_file.exists() or not txt_file.is_file():
+        print(f"[INGEST] Warning: File {file_path} does not exist.")
+        return []
+
+    chunks_out = []
+    try:
+        content = txt_file.read_text(encoding="utf-8", errors="replace")
+        header, turns = parse_chat_log(content)
+
+        # Default values if not found in header
+        title = header.get("title") or txt_file.stem.replace("-", " ").title()
+        agent = header.get("agent") or "Unknown Agent"
+        model = header.get("model") or "Unknown Model"
+        date = header.get("date") or "Unknown Date"
+
+        for turn_idx, turn in enumerate(turns):
+            speaker = turn["speaker"]
+            turn_date = turn["date"] or date
+            text = turn["content"]
+
+            # Perform sliding overlap chunking on the turn's content
+            chunks = slide_overlap_chunk(text, chunk_size, overlap)
+
+            for chunk_idx, chunk_text in enumerate(chunks):
+                # Combine context so the text chunk carries context
+                source_label = f"[{title} | Turn {turn_idx + 1} | {speaker}]"
+                contextual_text = f"{source_label} {chunk_text}"
+
+                metadata = {
+                    "source_file": txt_file.name,
+                    "session_title": title,
+                    "agent": agent,
+                    "model": model,
+                    "speaker": speaker,
+                    "date": turn_date,
+                    "turn_index": turn_idx,
+                    "chunk_index": chunk_idx,
+                    "raw_chunk": chunk_text  # Added to prevent key errors
+                }
+
+                chunks_out.append({
+                    "text": contextual_text,
+                    "raw_chunk": chunk_text,
+                    "metadata": metadata
+                })
+    except Exception as e:
+        print(f"[INGEST] Error reading {txt_file.name}: {e}")
+    return chunks_out
+
+def ingest_directory(directory_path, chunk_size=500, overlap=50):
+    """Scans directory_path for .txt logs and extracts chunked documents with metadata."""
+    dir_path = Path(directory_path)
+    if not dir_path.exists() or not dir_path.is_dir():
+        print(f"[INGEST] Warning: Directory {directory_path} does not exist.")
+        return []
+
+    all_chunks = []
+    txt_files = list(dir_path.glob("*.txt"))
+    print(f"[INGEST] Found {len(txt_files)} chat transcript(s) in {directory_path}")
+
+    for txt_file in txt_files:
+        all_chunks.extend(ingest_file(txt_file, chunk_size=chunk_size, overlap=overlap))
+
+    print(f"[INGEST] Completed: Chunked chat logs into {len(all_chunks)} sub-documents.")
+    return all_chunks
+
+if __name__ == "__main__":
+    # Test block
+    test_log = """
+================================================================
+Session: Test Session
+Agent:   Dev Assistant
+Model:   gemma4:e2b
+Date:    Sep 04, 2026, 02:35 PM
+Interactions between LLM and user: 1
+================================================================
+
+[You]  Sep 04, 2026, 02:35 PM
+----------------------------------------------------------------
+This is some test text. It should slide overlap nicely. Line 2.
+
+[Dev Assistant]  Sep 04, 2026, 02:36 PM
+----------------------------------------------------------------
+Understood, Jesus. I am checking the RAG prototype integration.
+"""
+    header, turns = parse_chat_log(test_log)
+    print("Parsed Header:", header)
+    print("Parsed Turns:", len(turns))
+    for t in turns:
+        print(f"Turn by {t['speaker']}: {t['content']}")
+        chunks = slide_overlap_chunk(t['content'], chunk_size=30, overlap=10)
+        print("  Chunks:", chunks)
+
+```
+
+## memory/main.py
+
+```python
+# main.py - Part of the Terminator Stateful Agentic RAG System
+# Orchestrates the cognitive Plan-Execute-Evaluate Loop & Self-Correction retrieval loops.
+
+import os
+import re
+import sys
+from pathlib import Path
+
+# Insert current folder on sys.path so modules find each other if dropped in a directory
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from ingest import ingest_directory
+from search import RAGStorage
+
+def build_checklist(query):
+    """Builds a heuristic target checklist of keywords to evaluate search completeness.
+    
+    Removes common stop words and retains semantic core terms.
+    """
+    stop_words = {
+        "what", "is", "your", "who", "the", "user", "list", "all", "california", "about", 
+        "how", "to", "do", "you", "a", "an", "and", "or", "of", "for", "with", "from", 
+        "me", "tell", "show", "give", "explain", "why", "where", "when", "can", "could", 
+        "would", "it", "should", "work", "in", "folder", "name", "where", "are", "path",
+        "they", "will", "detect", "automatically", "please", "not"
+    }
+    # Keep alphanumeric characters
+    words = re.findall(r"\b\w{3,}\b", query.lower())
+    keywords = [w for w in words if w not in stop_words]
+    
+    # Fallback to general words if all filtered out
+    if not keywords:
+        keywords = [w for w in words if len(w) > 2]
+        
+    # Deduplicate and limit to 4 key items
+    return list(dict.fromkeys(keywords))[:4]
+
+def generate_llm_response(prompt, model="gemma4:e2b"):
+    """Queries local Ollama client if active."""
+    import ollama
+    try:
+        resp = ollama.chat(
+            model=model,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return resp["message"]["content"]
+    except Exception:
+        return None
+
+def formulate_grounded_answer(query, results, model="gemma4:e2b"):
+    """Formulates a comprehensive response cited against specific transcripts."""
+    if not results:
+        return "I could not find any matching information in your chat records."
+        
+    context_str = ""
+    citations = []
+    
+    for idx, r in enumerate(results):
+        meta = r["metadata"]
+        cite_num = idx + 1
+        source_info = f"[{meta['session_title']} | Turn {meta['turn_index'] + 1} | {meta['speaker']} | {meta['date']}]"
+        context_str += f"\nCitation [{cite_num}]: {source_info}\nContent: {r['text']}\n"
+        citations.append(f"[{cite_num}] {meta['session_title']} ({meta['speaker']} on {meta['date']})")
+        
+    # Prompt targeting strict source grounding with inline citation numbers
+    ollama_prompt = f"""
+You are an advanced RAG reasoning assistant on the Terminator1 project.
+Use ONLY the following context blocks from Jesus's past chat transcripts to answer his query: '{query}'.
+
+Every factual claim must be directly supported by the context.
+Cite sources inline as [1], [2], etc., matching the context citation numbers.
+
+Context:
+{context_str}
+
+If the context doesn't contain enough information to fully answer, say so honestly. Do not make up facts.
+Formulate a concise, helpful, and 100% grounded answer.
+"""
+    
+    llm_answer = None
+    try:
+        import ollama
+        # Probe if Ollama is responsive
+        ollama.list()
+        llm_answer = generate_llm_response(ollama_prompt, model)
+    except Exception:
+        pass
+        
+    if llm_answer:
+        return llm_answer.strip()
+        
+    # 🛡️ Solid rule-based summary fallback if Ollama is offline or model is missing
+    summary = "Based on your chat transcripts, here are the most relevant findings:\n\n"
+    for idx, r in enumerate(results):
+        meta = r["metadata"]
+        text_content = meta.get("raw_chunk", r["text"])
+        summary += f"• From chat '{meta['session_title']}' ({meta['speaker']} on {meta['date']}):\n"
+        summary += f"  \"{text_content}\" [Citation {idx + 1}]\n\n"
+    
+    summary += "Sources cited:\n"
+    summary += "\n".join(f"  [{i+1}] {cite}" for i, cite in enumerate(citations))
+    return summary
+
+def run_cognitive_state_loop(storage, query, model="gemma4:e2b", debug=True):
+    """Executes the Plan-Execute-Evaluate Loop with dynamic query rewriting.
+    
+    Retries retrieval up to 3 times if checklist coverage score is below 0.75.
+    """
+    checklist = build_checklist(query)
+    current_query = query
+    retrieved_docs = []
+    
+    print(f"\n[COGNITION] Target Checklist: {checklist}")
+    
+    for attempt in range(1, 4):
+        results = storage.query(current_query, n_results=4)
+        retrieved_docs = results
+        
+        # Evaluate checklist completeness
+        covered_items = []
+        for item in checklist:
+            item_covered = False
+            for r in results:
+                if item.lower() in r["text"].lower() or item.lower() in r["metadata"]["session_title"].lower():
+                    item_covered = True
+                    break
+            if item_covered:
+                covered_items.append(item)
+                
+        uncovered_items = [item for item in checklist if item not in covered_items]
+        coverage_score = len(covered_items) / len(checklist) if checklist else 1.0
+        
+        if debug:
+            print(f"[COGNITION] Attempt {attempt}/3:")
+            print(f"            Query: '{current_query}'")
+            print(f"            Coverage: {coverage_score:.2f} ({len(covered_items)}/{len(checklist)} covered)")
+            print(f"            Covered: {covered_items}")
+            if uncovered_items:
+                print(f"            Missing: {uncovered_items}")
+                
+        if coverage_score >= 0.75:
+            print(f"[COGNITION] Success: Coverage {coverage_score:.2f} meets threshold (>= 0.75)!")
+            break
+            
+        if attempt < 3 and uncovered_items:
+            # Dynamically append uncovered aspects to the query to guide vector retrieval
+            missing_terms_str = " ".join(uncovered_items)
+            current_query = f"{query} {missing_terms_str}"
+            print(f"[COGNITION] Coverage is low. Rewriting query to prioritize missing aspects.")
+    else:
+        print("[COGNITION] Max attempts reached. Continuing with best available context.")
+        
+    return formulate_grounded_answer(query, retrieved_docs, model)
+
+def main():
+    print("=================================================================")
+    print("🤖 Terminator1 Stateful Agentic RAG CLI")
+    print("=================================================================")
+
+    # Resolve configured locations when running inside the Terminator1 app;
+    # fall back to cwd-relative defaults when used standalone.
+    try:
+        from server import paths as app_paths
+        default_chat_logs = str(app_paths.CHAT_RECORDS_DIR)
+        default_persist = str(app_paths.RAG_DB_DIR)
+    except Exception:
+        default_chat_logs = "./data/chatlog/agent-text-records"
+        default_persist = "./data/rag_db"
+
+    print("This system searches your local chat records to answer queries.")
+
+    chat_logs_path = input(f"Enter the chat logs folder path [{default_chat_logs}]: ").strip()
+    if not chat_logs_path:
+        chat_logs_path = default_chat_logs
+
+    print(f"\n[SYSTEM] Initializing persistent storage...")
+    storage = RAGStorage(persist_dir=default_persist)
+    
+    print(f"[SYSTEM] Scanning and parsing files in '{chat_logs_path}'...")
+    chunks = ingest_directory(chat_logs_path)
+    
+    if chunks:
+        storage.add_chunks(chunks)
+        print(f"[SYSTEM] Ingested {len(chunks)} chat segments successfully.")
+    else:
+        # If no files found, check if there are already records in the persistent DB
+        num_existing = len(getattr(storage.collection, "documents", [])) if hasattr(storage.collection, "documents") else 0
+        if num_existing > 0:
+            print(f"[SYSTEM] No new text files to ingest. Using {num_existing} cached chat segments.")
+        else:
+            print("[SYSTEM] Warning: No chat transcripts (.txt) were found in that folder, and DB is empty.")
+            print("         Please ensure chat log files are present and try again.")
+            
+    print("\n[SYSTEM] RAG System Ready. Type '/exit' or 'exit' to quit.")
+    print("-" * 65)
+    
+    while True:
+        try:
+            query = input("\nQuery: ").strip()
+            if not query:
+                continue
+            if query.lower() in ("/exit", "exit", "quit"):
+                print("Goodbye!")
+                break
+                
+            response = run_cognitive_state_loop(storage, query)
+            print("\n" + "=" * 65)
+            print("RESPONSE:")
+            print("-" * 65)
+            print(response)
+            print("=" * 65)
+        except KeyboardInterrupt:
+            print("\nGoodbye!")
+            break
+        except Exception as e:
+            print(f"\n[ERROR] An error occurred during reasoning: {e}")
+
+if __name__ == "__main__":
+    main()
+
+```
+
+## memory/rag_commit.py
+
+```python
+"""
+app/rag_commit.py
+=================
+
+Commit ONE finalized chat transcript into the persistent RAG store so the
+RAG assistant / search_chat_logs can recall it.
+
+Called from app/chat_store/store._finalize_locked when a chat is marked to
+be saved to memory (per-chat toggle or the commitOnSave default).
+"""
+
+from pathlib import Path
+
+from server import paths
+from memory.ingest import ingest_file
+
+
+def commit_transcript(transcript: Path) -> str:
+    """Index a single transcript file into the RAG store.
+
+    Returns a short status string for logging / the UI. Uses upsert ids, so
+    re-committing the same chat version simply overwrites its segments.
+    """
+    file_path = Path(transcript)
+    chunks = ingest_file(str(file_path))
+    if not chunks:
+        return f"RAG commit: {file_path.name} had no indexable content."
+
+    from memory.search import RAGStorage
+
+    storage = RAGStorage(persist_dir=str(paths.RAG_DB_DIR))
+    storage.add_chunks(chunks)
+    print(f"[RAG-COMMIT] Indexed {len(chunks)} segment(s) from {file_path.name}")
+    return f"RAG commit: indexed {len(chunks)} segment(s) from {file_path.name}."
+
+
+def purge_store() -> str:
+    """Delete the RAG store so it starts empty (chroma sqlite + fallback)."""
+    import shutil
+
+    store_dir = Path(paths.RAG_DB_DIR)
+    removed = []
+    if store_dir.exists():
+        for child in store_dir.iterdir():
+            if child.name in ("chroma.sqlite3", "fallback_vector_db.json"):
+                if child.is_file():
+                    child.unlink(missing_ok=True)
+                    removed.append(child.name)
+        # Remove empty leftover segment dirs left by chroma.
+        for child in store_dir.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+    if removed:
+        return f"RAG store purged: removed {', '.join(removed)} from {store_dir}. The store is now empty."
+    # If there was no store yet, make sure the folder exists so a fresh
+    # (empty) collection is created on next use.
+    store_dir.mkdir(parents=True, exist_ok=True)
+    return f"RAG store at {store_dir} was already empty."
+
+
+def rebuild_store() -> str:
+    """Re-index every transcript in the chat records folder into the store."""
+    from memory.ingest import ingest_directory
+    from memory.search import RAGStorage
+
+    chunks = ingest_directory(str(paths.CHAT_RECORDS_DIR))
+    if not chunks:
+        return "RAG rebuild: no transcripts found to index."
+
+    storage = RAGStorage(persist_dir=str(paths.RAG_DB_DIR))
+    storage.add_chunks(chunks)
+    print(f"[RAG-REBUILD] Indexed {len(chunks)} segment(s)")
+    return f"RAG rebuild: indexed {len(chunks)} segment(s)."
+
+
+def status() -> dict:
+    """Store path + chunk count (0 when empty)."""
+    count = _chunk_count()
+    return {
+        "path": str(paths.RAG_DB_DIR),
+        "chunks": count,
+        "config": paths.rag_config(),
+        "about": paths.about(),
+    }
+
+
+def _chunk_count() -> int:
+    """Number of stored embeddings, read directly from chroma.sqlite3."""
+    import sqlite3
+
+    db_file = Path(paths.RAG_DB_DIR) / "chroma.sqlite3"
+    if not db_file.exists():
+        return 0
+    try:
+        with sqlite3.connect(str(db_file)) as conn:
+            row = conn.execute("SELECT count(*) FROM embeddings").fetchone()
+            return int(row[0]) if row else 0
+    except sqlite3.Error:
+        fallback = Path(paths.RAG_DB_DIR) / "fallback_vector_db.json"
+        if fallback.exists():
+            import json
+
+            try:
+                return len(json.loads(fallback.read_text(encoding="utf-8")).get("documents", []))
+            except (OSError, json.JSONDecodeError):
+                return 0
+        return 0
+
+```
+
+## memory/search.py
+
+```python
+# search.py - Part of the Terminator Stateful Agentic RAG System
+# Manages persistent Chroma DB database with a pure-Python TF-IDF database safety valve.
+
+import math
+import json
+import re
+from collections import Counter
+from pathlib import Path
+
+# ==============================================================================
+# 🛡️ PURE-PYTHON DATABASE SAFETY VALVE
+# ------------------------------------------------------------------------------
+# Written in pure Python. If SQLite3 compilation binaries or C++ dependencies 
+# are missing or broken, this class acts as a seamless persistent vector store.
+# ==============================================================================
+
+class FallbackVectorDB:
+    """A disk-persistent vector-like store implementing TF-IDF similarity.
+    
+    Provides add() and query() interfaces matching Chroma DB Client Collections.
+    """
+    def __init__(self, persist_dir):
+        self.persist_dir = Path(persist_dir)
+        self.persist_dir.mkdir(parents=True, exist_ok=True)
+        self.db_path = self.persist_dir / "fallback_vector_db.json"
+        
+        self.documents = []
+        self.metadatas = []
+        self.ids = []
+        self.load()
+        
+    def load(self):
+        if self.db_path.exists():
+            try:
+                data = json.loads(self.db_path.read_text(encoding="utf-8"))
+                self.documents = data.get("documents", [])
+                self.metadatas = data.get("metadatas", [])
+                self.ids = data.get("ids", [])
+                print(f"[SAFETY-VALVE] Loaded {len(self.documents)} persistent chat segments.")
+            except Exception as e:
+                print(f"[SAFETY-VALVE] Warning: Failed to load persistent data: {e}")
+                
+    def save(self):
+        try:
+            data = {
+                "documents": self.documents,
+                "metadatas": self.metadatas,
+                "ids": self.ids
+            }
+            self.db_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception as e:
+            print(f"[SAFETY-VALVE] Error writing database to disk: {e}")
+            
+    def add(self, documents, metadatas, ids):
+        """Adds documents to the index and automatically persists them to disk."""
+        for doc, meta, doc_id in zip(documents, metadatas, ids):
+            if doc_id in self.ids:
+                idx = self.ids.index(doc_id)
+                self.documents[idx] = doc
+                self.metadatas[idx] = meta
+            else:
+                self.documents.append(doc)
+                self.metadatas.append(meta)
+                self.ids.append(doc_id)
+        self.save()
+        
+    def _tokenize(self, text):
+        return re.findall(r"\w+", text.lower())
+        
+    def query(self, query_texts, n_results=5):
+        """Finds n_results matches, returning distance as (1 - cosine similarity)."""
+        if not self.documents:
+            return {"documents": [[]], "metadatas": [[]], "ids": [[]], "distances": [[]]}
+            
+        total_docs = len(self.documents)
+        word_doc_counts = Counter()
+        doc_tokens = []
+        for doc in self.documents:
+            tokens = set(self._tokenize(doc))
+            doc_tokens.append(tokens)
+            for token in tokens:
+                word_doc_counts[token] += 1
+                
+        # Calculate Inverse Document Frequency (IDF)
+        idf = {}
+        for word, count in word_doc_counts.items():
+            idf[word] = math.log(1.0 + (total_docs / (1.0 + count)))
+            
+        results_documents = []
+        results_metadatas = []
+        results_ids = []
+        results_distances = []
+        
+        for q_text in query_texts:
+            q_tokens = self._tokenize(q_text)
+            if not q_tokens:
+                # Fallback: return first N elements
+                results_documents.append(self.documents[:n_results])
+                results_metadatas.append(self.metadatas[:n_results])
+                results_ids.append(self.ids[:n_results])
+                results_distances.append([1.0] * min(n_results, len(self.documents)))
+                continue
+                
+            # Query Term Frequency-Inverse Document Frequency (TF-IDF)
+            q_tf = Counter(q_tokens)
+            q_tfidf = {}
+            q_norm_sq = 0.0
+            for word, tf in q_tf.items():
+                if word in idf:
+                    val = tf * idf[word]
+                    q_tfidf[word] = val
+                    q_norm_sq += val * val
+            q_norm = math.sqrt(q_norm_sq)
+            
+            scores = []
+            for doc_idx, doc in enumerate(self.documents):
+                tokens = self._tokenize(doc)
+                doc_tf = Counter(tokens)
+                
+                doc_tfidf = {}
+                doc_norm_sq = 0.0
+                for word, tf in doc_tf.items():
+                    if word in idf:
+                        val = tf * idf[word]
+                        doc_tfidf[word] = val
+                        doc_norm_sq += val * val
+                doc_norm = math.sqrt(doc_norm_sq)
+                
+                if q_norm == 0 or doc_norm == 0:
+                    similarity = 0.0
+                else:
+                    dot_product = sum(q_tfidf[word] * doc_tfidf.get(word, 0.0) for word in q_tfidf)
+                    similarity = dot_product / (q_norm * doc_norm)
+                    
+                scores.append((similarity, doc_idx))
+                
+            # Sort descending by similarity
+            scores.sort(key=lambda x: x[0], reverse=True)
+            top_scores = scores[:n_results]
+            
+            q_docs = []
+            q_metas = []
+            q_ids = []
+            q_dists = []
+            
+            for sim, idx in top_scores:
+                q_docs.append(self.documents[idx])
+                q_metas.append(self.metadatas[idx])
+                q_ids.append(self.ids[idx])
+                q_dists.append(round(1.0 - sim, 4))
+                
+            results_documents.append(q_docs)
+            results_metadatas.append(q_metas)
+            results_ids.append(q_ids)
+            results_distances.append(q_dists)
+            
+        return {
+            "documents": results_documents,
+            "metadatas": results_metadatas,
+            "ids": results_ids,
+            "distances": results_distances
+        }
+
+# ==============================================================================
+# 📂 MAIN RAG STORAGE SYSTEM
+# ==============================================================================
+
+class RAGStorage:
+    """Manages indexing and querying of parsed chunked data."""
+    def __init__(self, persist_dir="./data/rag_db", in_memory=False):
+        self.persist_dir = Path(persist_dir)
+        self.persist_dir.mkdir(parents=True, exist_ok=True)
+        self.in_memory = in_memory
+        self.fallback_mode = False
+        
+        # Try loading native Chroma DB, fallback to Python-TFIDF Safety Valve
+        try:
+            import chromadb
+            
+            # Use native serialization-aware Chroma loader where possible
+            try:
+                from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
+                self.embed_fn = OllamaEmbeddingFunction(
+                    url="http://localhost:11434/api/embeddings",
+                    model_name="nomic-embed-text"
+                )
+            except (ImportError, Exception):
+                # Compliant custom wrapper implementing explicit __init__
+                try:
+                    import ollama
+                    from chromadb import EmbeddingFunction
+                    
+                    class CompliantOllamaEF(EmbeddingFunction):
+                        name = "ollama"
+                        is_legacy = False
+                        
+                        def __init__(self):
+                            super().__init__()
+                            
+                        def __call__(self, input):
+                            embeddings = []
+                            for text in input:
+                                try:
+                                    resp = ollama.embeddings(model="nomic-embed-text", prompt=text)
+                                    embeddings.append(resp["embedding"])
+                                except Exception:
+                                    return None
+                            return embeddings
+                    self.embed_fn = CompliantOllamaEF()
+                except (ImportError, Exception):
+                    self.embed_fn = None
+                
+            if in_memory:
+                print("[RAG-DB] Active: In-Memory (Ephemeral) Chroma DB initialized.")
+                if hasattr(chromadb, "EphemeralClient"):
+                    self.client = chromadb.EphemeralClient()
+                else:
+                    self.client = chromadb.Client()
+            else:
+                print("[RAG-DB] Active: Persistent SQLite3 Chroma DB initialized.")
+                self.client = chromadb.PersistentClient(path=str(self.persist_dir))
+                
+            self.collection = self.client.get_or_create_collection(
+                name="terminator_chat_logs",
+                embedding_function=self.embed_fn
+            )
+            self.fallback_mode = False
+        except (ImportError, Exception) as e:
+            print(f"[RAG-DB] Safety Valve Triggered: Falling back to pure Python TF-IDF database. (Reason: {e})")
+            self.collection = FallbackVectorDB(persist_dir=self.persist_dir)
+            self.fallback_mode = True
+            
+    def add_chunks(self, chunks):
+        """Indexes a list of parsed chunks from ingest.py."""
+        if not chunks:
+            return
+            
+        documents = [c["text"] for c in chunks]
+        metadatas = [c["metadata"] for c in chunks]
+        
+        # Generate stable, unique IDs based on file name and turn-chunk index
+        ids = []
+        for c in chunks:
+            meta = c["metadata"]
+            ids.append(f"{meta['source_file']}_turn{meta['turn_index']}_chunk{meta['chunk_index']}")
+            
+        try:
+            # Upsert so re-committing the same chat version (or re-running a
+            # rebuild) never crashes on duplicate ids - later writes win.
+            if hasattr(self.collection, "upsert"):
+                self.collection.upsert(
+                    documents=documents,
+                    metadatas=metadatas,
+                    ids=ids
+                )
+            else:
+                self.collection.add(
+                    documents=documents,
+                    metadatas=metadatas,
+                    ids=ids
+                )
+            print(f"[RAG-DB] Successfully indexed {len(documents)} text segment(s).")
+        except Exception as e:
+            # Catch runtime issues (such as missing Ollama model 'nomic-embed-text' or offline daemon)
+            if not self.fallback_mode:
+                print(f"\n[RAG-DB] Runtime database error during indexing: {e}")
+                print("[RAG-DB] Safety Valve Activated: Dynamically falling back to pure Python TF-IDF database.")
+                self.collection = FallbackVectorDB(persist_dir=self.persist_dir)
+                self.fallback_mode = True
+                self.collection.add(documents, metadatas, ids)
+                print(f"[RAG-DB] Successfully indexed {len(documents)} text segment(s) in fallback database.")
+            else:
+                raise e
+        
+    def query(self, query_text, n_results=5):
+        """Queries the vector database (or fallback database) for matches."""
+        try:
+            results = self.collection.query(
+                query_texts=[query_text],
+                n_results=n_results
+            )
+        except Exception as e:
+            # Catch query-time exceptions (e.g. model offline or missing)
+            if not self.fallback_mode:
+                print(f"\n[RAG-DB] Runtime database error during query: {e}")
+                print("[RAG-DB] Safety Valve Activated: Dynamically falling back to pure Python TF-IDF database.")
+                self.collection = FallbackVectorDB(persist_dir=self.persist_dir)
+                self.fallback_mode = True
+                results = self.collection.query(
+                    query_texts=[query_text],
+                    n_results=n_results
+                )
+            else:
+                raise e
+        
+        # Format unified response matching list indexing structure
+        formatted_results = []
+        docs = results["documents"][0]
+        metas = results["metadatas"][0]
+        ids = results["ids"][0]
+        dists = results["distances"][0] if "distances" in results else [0.0] * len(docs)
+        
+        for i in range(len(docs)):
+            formatted_results.append({
+                "id": ids[i],
+                "text": docs[i],
+                "metadata": metas[i],
+                "distance": dists[i]
+            })
+            
+        return formatted_results
+
+if __name__ == "__main__":
+    # Test execution
+    db = RAGStorage(persist_dir="/workspace/scratch/rag/test_db")
+    test_chunks = [
+        {
+            "text": "[Session: AI | Turn 1 | You] what is you objective",
+            "metadata": {"source_file": "test_chat.txt", "turn_index": 0, "chunk_index": 0}
+        },
+        {
+            "text": "[Session: AI | Turn 2 | AI] My objective is to help Jesus build AI agents.",
+            "metadata": {"source_file": "test_chat.txt", "turn_index": 1, "chunk_index": 0}
+        }
+    ]
+    db.add_chunks(test_chunks)
+    res = db.query("Jesus objective", n_results=1)
+    print("Query Results:")
+    for r in res:
+        print(f"  ID: {r['id']}")
+        print(f"  Text: {r['text']}")
+        print(f"  Distance: {r['distance']}")
+
+def search_chat_logs(query: str) -> str:
+    """Searches past chat transcripts for keywords and returns matching segments.
+    
+    Args:
+        query (str): The search query keyword or phrase to look up.
+    """
+    # Your search logic here (e.g., calling your custom RAG/TF-IDF lookup)
+    return f"Search results for: {query}"
+
+```
+
+## requirements.txt
+
+```text
+# requirements.txt - Declares dependencies for the Stateful Agentic RAG Module
+# Designed to run locally on your Linux environment
+chromadb>=0.4.0
+docling>=2.59.0
+ollama>=0.3.0
+pydantic>=2.0.0
+
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.14.2
+click==8.4.2
+colorama==0.4.6
+fastapi==0.141.1
+h11==0.16.0
+idna==3.18
+ollama==0.6.2
+pydantic==2.13.4
+pydantic_core==2.46.4
+starlette==1.6.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+uvicorn==0.52.3
+
+```
+
+## scripts/rebuild_rag.py
+
+```python
+"""
+scripts/rebuild_rag.py
+======================
+
+Manage the persistent RAG store (data/rag_db/chroma.sqlite3 by default; the
+actual location + behavior comes from the configured app settings).
+
+Subcommands:
+    build             (default) re-index every transcript in the chat records
+                      folder into the store (idempotent - safe to re-run).
+    purge             delete the RAG store so it starts empty. Transcripts and
+                      chat records are untouched.
+    status            show the store location + how many segments are indexed
+                      (0 means empty).
+
+Usage:
+    python scripts/rebuild_rag.py [build|purge|status]
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from server import paths  # noqa: E402
+from memory.rag_commit import purge_store, rebuild_store, status  # noqa: E402
+
+
+def main() -> int:
+    command = (sys.argv[1] if len(sys.argv) > 1 else "build").lower()
+
+    if command == "build":
+        print(rebuild_store())
+        return 0
+    if command == "purge":
+        print(purge_store())
+        return 0
+    if command == "status":
+        info = status()
+        print(f"RAG store:   {info['path']}")
+        print(f"Chunks:      {info['chunks']}")
+        print(f"Commit on save: {info['config']['commitOnSave']}")
+        print(f"Auto-ingest:    {info['config']['autoIngest']}")
+        print(f"Chat records:   {paths.CHAT_RECORDS_DIR}")
+        return 0
+
+    print(f"Unknown command '{command}'. Use build, purge or status.")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+```
+
+## scripts/update_docs.py
+
+```python
+"""scripts/update_docs.py
+=======================
+
+Regenerate the documentation snapshots:
+
+    docs/APP_STRUCTURE.md      folder-tree snapshot of the codebase
+    docs/APP_CODE_SNAPSHOT.md  one section per code file, with contents
+
+Runtime data and user settings are excluded (data/, venv/, .git/, __pycache__,
+the restore baseline folder, app_settings.json, about.json, *.bak, *.pyc).
+
+Usage:
+    python scripts/update_docs.py                # both documents
+    python scripts/update_docs.py structure      # only APP_STRUCTURE.md
+    python scripts/update_docs.py snapshot       # only APP_CODE_SNAPSHOT.md
+"""
+
+import sys
+from datetime import datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from interface.restore_manager import file_map, is_excluded  # noqa: E402
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+DOCS_DIR = BASE_DIR / "docs"
+STRUCTURE_FILE = DOCS_DIR / "APP_STRUCTURE.md"
+SNAPSHOT_FILE = DOCS_DIR / "APP_CODE_SNAPSHOT.md"
+
+CODE_EXTS = {".py", ".md", ".json", ".html", ".js", ".css", ".txt"}
+_FENCE_LANGUAGE = {
+    ".py": "python",
+    ".md": "markdown",
+    ".json": "json",
+    ".html": "html",
+    ".js": "javascript",
+    ".css": "css",
+    ".txt": "text",
+}
+
+
+def _header(title: str) -> str:
+    return f"# {title}\n\n_Auto-generated on {datetime.now().isoformat(timespec='seconds')} by `scripts/update_docs.py`._\n"
+
+
+# ---------------------------------------------------------------- structure
+
+def _render_tree(node: dict) -> list[str]:
+    """Render a nested {name: node} dict into box-drawing tree lines."""
+    lines: list[str] = []
+    items = sorted(node.items(), key=lambda item: (not isinstance(item[1], dict), item[0]))
+    for index, (name, child) in enumerate(items):
+        is_last = index == len(items) - 1
+        lines.append(("`-- " if is_last else "|-- ") + name)
+        if isinstance(child, dict):
+            pad = "    " if is_last else "|   "
+            for line in _render_tree(child):
+                lines.append(pad + line)
+    return lines
+
+
+def build_structure_markdown() -> str:
+    files = file_map(BASE_DIR)
+    root: dict = {}
+    for rel in sorted(files):
+        parts = rel.split("/")
+        node = root
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = None
+
+    markdown = [_header("Terminator1 — App Structure")]
+    markdown.append(f"\n```\n{Path(BASE_DIR).name}/\n")
+    markdown.extend(_render_tree(root))
+    markdown.append("```")
+    markdown.append(f"\n_{len(files)} tracked source file(s)._\n")
+    return "\n".join(markdown)
+
+
+# ----------------------------------------------------------------- snapshot
+
+def build_snapshot_markdown() -> str:
+    files = file_map(BASE_DIR)
+    snapshot: list[str] = [_header("Terminator1 — App Code Snapshot")]
+    count = 0
+    for rel in sorted(files):
+        path = files[rel]
+        suffix = path.suffix.lower()
+        if suffix not in CODE_EXTS or not path.is_file():
+            continue
+        if path.resolve() == SNAPSHOT_FILE.resolve():
+            continue  # never embed the snapshot inside itself
+        language = _FENCE_LANGUAGE.get(suffix, "")
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            text = f"(unreadable: {path})"
+        snapshot.append(f"\n## {rel}\n")
+        snapshot.append(f"```{language}\n{text}\n```")
+        count += 1
+    snapshot.append(f"\n_{count} code file(s)._")
+    return "\n".join(snapshot)
+
+
+# -------------------------------------------------------------------- main
+
+def main() -> int:
+    only = sys.argv[1].lower() if len(sys.argv) > 1 else ""
+    if only not in ("structure", "snapshot", ""):
+        print(__doc__)
+        return 1
+
+    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    if only in ("", "structure"):
+        STRUCTURE_FILE.write_text(build_structure_markdown(), encoding="utf-8")
+        print(f"Wrote {STRUCTURE_FILE.relative_to(BASE_DIR)}")
+    if only in ("", "snapshot"):
+        SNAPSHOT_FILE.write_text(build_snapshot_markdown(), encoding="utf-8")
+        print(f"Wrote {SNAPSHOT_FILE.relative_to(BASE_DIR)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+## scripts/version_chats.py
+
+```python
+"""
+scripts/version_chats.py
+========================
+
+Small CLI for managing the saved chat transcripts + their versions.
+
+The versioning toggle (disableVersioning in static/config/app_settings.json)
+controls whether a re-saved chat gets a NEW versioned .txt file (<title>-2.txt,
+<title>-3.txt, ...) or simply overwrites <title>.txt. This script can:
+
+    list                          print the chat log (title, file, version, msgs)
+    import                        run the one-time import of existing .txt files
+    versioning on|off             turn automatic version bumping on or off
+    bump <id-or-title> [version]  make a new versioned copy of a chat's file and
+                                  point the log at it (e.g. bump my-chat 1.1)
+
+Examples:
+    python scripts/version_chats.py list
+    python scripts/version_chats.py versioning off
+    python scripts/version_chats.py bump chr-1a2b3c4d5e6f 1.1
+"""
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from server.chat_store import store  # noqa: E402
+
+
+def _load_app_settings():
+    path = store.APP_SETTINGS_FILE
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_app_settings(settings):
+    path = store.APP_SETTINGS_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def cmd_list(_argv):
+    rows = store.list_log(include_active=True)
+    if not rows:
+        print("(no chats in the log yet - run `import` or finish a chat first)")
+        return 0
+    for row in rows:
+        active = " [ACTIVE]" if row.get("status") == "active" else ""
+        print(
+            f"{row.get('id')}  v{row.get('version') or '-'}  "
+            f"{row.get('fileName') or '(in progress)'}{active}  "
+            f"{row.get('messageCount', 0)} msgs  "
+            f"{row.get('endedAt') or row.get('startedAt') or ''}"
+        )
+    return 0
+
+
+def cmd_import(_argv):
+    added = store.import_once()
+    print(f"Imported {added} transcript file(s).")
+    return 0
+
+
+def _find_row(target):
+    rows = store.list_log(include_active=False)
+    for row in rows:
+        if row.get("id") == target or row.get("title", "").lower() == str(target).lower():
+            return row
+    return None
+
+
+def cmd_bump(argv):
+    if not argv:
+        print("usage: bump <id-or-title> [version]")
+        return 1
+    target = argv[0]
+    next_version = argv[1] if len(argv) > 1 else None
+
+    row = _find_row(target)
+    if not row:
+        print(f"chat '{target}' not found - run `list` to see ids/titles")
+        return 1
+
+    if not next_version:
+        current = row.get("version") or "1"
+        next_version = str(int(float(current)) + 1) if "." not in current else f"{float(current) + 0.1:.1f}"
+
+    updated = store.set_chat_version(row["id"], next_version)
+    if not updated:
+        print(f"could not version chat '{target}' - file '{row.get('fileName')}' is missing")
+        return 1
+    print(f"bumped '{row['title']}' -> {updated['fileName']} (v{next_version})")
+    return 0
+
+
+def cmd_versioning(argv):
+    if not argv or argv[0] not in ("on", "off"):
+        print("usage: versioning on|off")
+        return 1
+    settings = _load_app_settings()
+    settings["disableVersioning"] = argv[0] == "off"
+    _save_app_settings(settings)
+    state = "on (re-saving overwrites <title>.txt)" if argv[0] == "off" else "off (saves get versioned copies)"
+    print(f"version bumping: {state}")
+    return 0
+
+
+COMMANDS = {
+    "list": cmd_list,
+    "import": cmd_import,
+    "bump": cmd_bump,
+    "versioning": cmd_versioning,
+}
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
+        print(__doc__)
+        return 1
+    return COMMANDS[sys.argv[1]](sys.argv[2:])
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+```
+
+## server/chat_store/__init__.py
+
+```python
+
+
+```
+
+## server/chat_store/logger.py
+
+```python
+"""
+app/chat_store/logger.py
+========================
+
+The single metadata logger for chats and chat versions
+(data/chatlog/chatRecord.jsonl).
+
+Records every finalized chat / chat version as ONE JSON line. The file is
+JSONL so each line is a self-contained searchable record:
+
+    {"id":"chr-1a2b3c4d5e6f","title":"My Research Chat","version":"2",
+     "fileName":"my-research-chat-2.txt","status":"completed", ...}
+
+One record per VERSION is kept (append-only). The "one row per chat" view
+the frontend needs is derived at read time by app.chat_store.store.list_log()
+(grouping by chat id and keeping the latest record).
+
+The logger is a passive recorder: it never starts chats, calls LLMs, runs
+agents, or decides versions. It only stores the metadata handed to it by
+app.chat_store.store. Versioning logic stays in store.py.
+
+Future-proofing: records are stable dicts iterated with iter_records(),
+so the same metadata can later be pushed into SQLite or indexed with
+Chroma without redesigning this module.
+"""
+
+import json
+import threading
+from pathlib import Path
+
+try:
+    from server import paths as _app_paths
+except Exception:  # pragma: no cover - app.paths is always present in this repo
+    _app_paths = None
+
+# Default home of the JSONL index, next to the existing chat files:
+#   <configured data folder>/chatlog/chatRecord.jsonl, .active-chat.json,
+#   agent-text-records/ - resolved through app/paths so the UI-configured
+#   data folder controls the location.
+DEFAULT_LOG_FILE = (
+    _app_paths.LOG_FILE
+    if _app_paths is not None
+    else (Path(__file__).resolve().parents[2] / "data" / "chatlog" / "chatRecord.jsonl")
+)
+
+# Key order used when writing every record, so the JSONL always looks alike.
+RECORD_KEYS = [
+    "id",
+    "title",
+    "version",
+    "fileName",
+    "status",
+    "messageCount",
+    "interactionCount",
+    "startedAt",
+    "endedAt",
+    "model",
+    "agent",
+    "agentId",
+    "agentName",
+    "tags",
+]
+
+HEADER_SEPARATOR = "-" * 40
+
+
+class ChatLogger:
+    """Append-only JSONL index of chat + version metadata.
+
+    Simple on purpose: a future SQLite or Chroma layer can just read the
+    records returned here without changing who writes them.
+    """
+
+    def __init__(self, log_file=DEFAULT_LOG_FILE):
+        self.log_file = Path(log_file)
+        self._lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    # Low-level file helpers
+    # ------------------------------------------------------------------
+
+    def _read_all(self):
+        """Every record currently in the file ([] when missing/corrupt)."""
+        if not self.log_file.exists():
+            return []
+        records = []
+        for line in self.log_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                # A damaged line must never break the app - skip it.
+                continue
+        return records
+
+    def _write_all(self, records):
+        """Rewrite the whole file. Called under self._lock only."""
+        self.log_file.parent.mkdir(parents=True, exist_ok=True)
+        with self.log_file.open("w", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def _ordered(self, record):
+        """Sort the record into RECORD_KEYS order (unknown keys go last)."""
+        ordered = {}
+        for key in RECORD_KEYS:
+            if key in record:
+                ordered[key] = record[key]
+        for key, value in record.items():
+            if key not in ordered:
+                ordered[key] = value
+        return ordered
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def add(self, chat_data):
+        """Append one record. Call once per finalized chat / new version.
+
+        Returns the record actually written.
+        """
+        with self._lock:
+            records = self._read_all()
+            record = self._ordered(dict(chat_data))
+            records.append(record)
+            self._write_all(records)
+        return record
+
+    def update(self, chat_id, data):
+        """Replace the most recently logged record for chat_id; append when none.
+
+        Used for small corrections (e.g. new tags) - a new chat version
+        should call add() instead so the version history is kept.
+        """
+        with self._lock:
+            records = self._read_all()
+            for index in range(len(records) - 1, -1, -1):
+                if records[index].get("id") == chat_id:
+                    records[index] = self._ordered({**records[index], **data})
+                    break
+            else:
+                records.append(self._ordered(dict(data)))
+            self._write_all(records)
+        return data
+
+    def add_missing(self, records):
+        """Append records whose (id, fileName) pair is not logged yet.
+
+        Makes startup imports idempotent: the same transcripts rescanned on
+        every boot are never duplicated. Returns the records that were added.
+        """
+        with self._lock:
+            existing = self._read_all()
+            known = {
+                (rec.get("id"), rec.get("fileName"))
+                for rec in existing
+                if rec.get("fileName")
+            }
+            added = []
+            for record in records:
+                key = (record.get("id"), record.get("fileName"))
+                if key not in known:
+                    record = self._ordered(dict(record))
+                    existing.append(record)
+                    added.append(record)
+                    known.add(key)
+            if added:
+                self._write_all(existing)
+        return added
+
+    def prune(self, keep):
+        """Drop records that no longer match, keeping the index in sync.
+
+        keep(record) must return True when the record should be KEPT (e.g.
+        "the transcript file still exists"). Returns how many were removed.
+        Used so chats deleted on disk stop being listed/pointed-to.
+        """
+        with self._lock:
+            records = self._read_all()
+            kept = [record for record in records if keep(record)]
+            removed = len(records) - len(kept)
+            if removed:
+                self._write_all(kept)
+        return removed
+
+    def remove(self, chat_id):
+        """Delete EVERY record belonging to chat_id (all its versions).
+
+        Used when a chat is deleted for good. Returns how many were removed.
+        """
+        with self._lock:
+            records = self._read_all()
+            kept = [record for record in records if record.get("id") != chat_id]
+            removed = len(records) - len(kept)
+            if removed:
+                self._write_all(kept)
+        return removed
+
+    def get(self, chat_id):
+        """The most recently logged record for chat_id (or None)."""
+        for record in reversed(self._read_all()):
+            if record.get("id") == chat_id:
+                return record
+        return None
+
+    def list_all(self):
+        """Every record, in the order it was appended."""
+        return self._read_all()
+
+    def iter_records(self):
+        """Generator over every record (future SQLite/Chroma migration seam)."""
+        yield from self._read_all()
+
+
+def record_from_store_row(row, **extra):
+    """Map an app.chat_store log row onto the shared metadata schema.
+
+    'agent' reuses the friendly agentName when available, 'status' is
+    normalized ('done' -> 'completed') to match the transcript header, and
+    'tags' defaults to [] - a free slot for future topic/category tagging.
+    agentName + interactionCount are kept so the original row shape can be
+    rebuilt losslessly by store.list_log()/get_chat().
+    """
+    record = {
+        "id": row.get("id"),
+        "title": row.get("title"),
+        "version": row.get("version", ""),
+        "fileName": row.get("fileName", ""),
+        "status": "completed" if row.get("status") == "done" else (row.get("status") or ""),
+        "messageCount": row.get("messageCount", 0),
+        "interactionCount": row.get("interactionCount", 0),
+        "startedAt": row.get("startedAt", ""),
+        "endedAt": row.get("endedAt", ""),
+        "model": row.get("model", ""),
+        "agent": row.get("agentName") or row.get("agentId", ""),
+        "agentId": row.get("agentId", ""),
+        "agentName": row.get("agentName", ""),
+        "tags": row.get("tags") or [],
+    }
+    record.update(extra)
+    return record
+
+
+def render_header(meta):
+    """Build the optional transcript metadata block ('' when no chat id)."""
+    if not meta.get("id"):
+        return ""
+    pairs = [
+        ("CHAT_ID", "id"),
+        ("TITLE", "title"),
+        ("VERSION", "version"),
+        ("FILE", "fileName"),
+        ("STATUS", "status"),
+        ("MESSAGES", "messageCount"),
+        ("STARTED", "startedAt"),
+        ("ENDED", "endedAt"),
+        ("MODEL", "model"),
+        ("AGENT", "agent"),
+        ("TAGS", "tags"),
+    ]
+    lines = []
+    for label, field in pairs:
+        value = meta.get(field, "")
+        if isinstance(value, (list, tuple)):
+            value = ", ".join(str(item) for item in value)
+        lines.append(f"{label}: {value}")
+    return "\n".join(lines) + "\n" + HEADER_SEPARATOR
+
+
+def add_header_to_transcript(content, meta):
+    """Prefix transcript text with the metadata header (optional feature).
+
+    Returns the content unchanged when there is no chat id.
+    """
+    header = render_header(meta)
+    if not header:
+        return str(content)
+    return header + "\n\n" + str(content)
+
+
+def parse_header(text):
+    """Pull the CAPSKEY: values out of an optional metadata header.
+
+    Keys are lower-cased (CHAT_ID -> chat_id). Returns {} when absent.
+    """
+    values = {}
+    for line in str(text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("-"):
+            continue
+        if ":" in line:
+            key, _, raw = line.partition(":")
+            if key.isupper():
+                values[key.lower()] = raw.strip()
+    return values
+
+
+__all__ = [
+    "ChatLogger",
+    "record_from_store_row",
+    "render_header",
+    "add_header_to_transcript",
+    "parse_header",
+    "DEFAULT_LOG_FILE",
+]
+
+```
+
+## server/chat_store/store.py
+
+```python
+"""
+app/chat_store/store.py
+=======================
+
+Server-side chat organization: exactly ONE active chat session at a time.
+
+Files:
+    data/chatlog/chatRecord.jsonl            -> the LOG: one record per chat VERSION
+    data/chatlog/.active-chat.json           -> the live session currently in progress
+    data/chatlog/agent-text-records/*.txt     -> finalized per-agent chat transcripts
+
+Lifecycle of a chat (its own start -> middle -> end):
+    start  (new chat, or the first message after a restart/finalize)
+    turn   (each /api/chat call appends the user message + assistant reply and
+            persists the session JSON; NO .txt is written per-reply)
+    end    (/api/chats/end, "Save chat", or a new chat starting) writes the
+            single transcript .txt (versioned on name collision) and adds one
+            record (per version) to chatRecord.jsonl.
+
+The browser never owns the transcript anymore: the server tracks each chat, and
+data/chatlog/agent-text-records/*.txt is the source of truth that the records
+point at. The records and the live session stay directly in data/chatlog/.
+
+On startup, import_once() also migrates the old layout (data/chats/*.txt plus
+data/discussions.json) into data/chatlog/ so nothing is lost when upgrading.
+"""
+
+import hashlib
+import json
+import re
+import shutil
+import threading
+import uuid
+from datetime import datetime
+from pathlib import Path
+
+from . import logger as chat_logger
+from server import paths
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+# All folders/files below resolve through app/paths so the UI configuration
+# (dataDir / chatSavePath / ragDbPath in app_settings.json) controls where
+# chats, transcripts, history, exports and the RAG store actually live.
+DATA_DIR = paths.DATA_DIR
+CHATS_DIR = paths.CHATS_DIR
+RECORDS_DIR = paths.RECORDS_DIR
+# The ONE metadata file: a JSONL log of every chat version. chatRecord.jsonl
+# replaced the old log-chats.json (JSON array, one row per chat) - the "one
+# row per chat" view is now derived at read time by list_log(). Old files are
+# migrated into it by import_once() and then deleted.
+LOG_FILE = paths.LOG_FILE
+ACTIVE_SESSION_FILE = paths.ACTIVE_SESSION_FILE
+APP_SETTINGS_FILE = paths.APP_SETTINGS_FILE
+
+_LEGACY_CHATS_DIR = DATA_DIR / "chats"
+_LEGACY_LOG_FILE = DATA_DIR / "discussions.json"
+_OLD_LOGCHATS_FILE = CHATS_DIR / "log-chats.json"   # superseded by chatRecord.jsonl
+_OLD_JSONL_FILE = CHATS_DIR / "chat_log.jsonl"      # superseded by chatRecord.jsonl
+
+_lock = threading.Lock()
+
+# The single JSONL logger behind every read/write of chatRecord.jsonl.
+_metadata_logger = chat_logger.ChatLogger()
+
+DIVIDER = "=" * 64
+THIN = "-" * 64
+
+
+def _resolve_transcript(file_name: str) -> Path:
+    """Where a logged transcript lives: agent-text-records first (the current
+    home of every .txt), falling back to the chatlog root for stragglers."""
+    if not file_name:
+        return Path()
+    candidate = RECORDS_DIR / file_name
+    if candidate.exists():
+        return candidate
+    return CHATS_DIR / file_name
+
+
+# ==========================================================================
+# LOW-LEVEL HELPERS
+# ==========================================================================
+
+def _now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def _new_id(prefix: str = "chr") -> str:
+    """Random id like 'chr-1a2b3c4d5e6f'."""
+    return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+
+def _stable_id(file_name: str) -> str:
+    """Deterministic id for imported files so re-importing never duplicates."""
+    return f"chr-{hashlib.sha1(file_name.encode('utf-8')).hexdigest()[:12]}"
+
+
+def _slugify(value) -> str:
+    """Filesystem-safe name from the chat title ('My Chat! 1' -> 'my-chat-1')."""
+    s = re.sub(r"[^a-z0-9-]+", "-", str(value or "").lower().strip()).strip("-")
+    return s[:60] or "chat"
+
+
+def _load_json(path, default):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
+def _save_json(path, value) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _versioning_disabled() -> bool:
+    """Read the 'disableVersioning' toggle from the app settings file."""
+    try:
+        settings = json.loads(APP_SETTINGS_FILE.read_text(encoding="utf-8"))
+        return bool(settings.get("disableVersioning"))
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def _header_enabled() -> bool:
+    """Read the 'metadataHeader' toggle from the app settings file.
+
+    When on, finalized transcripts get the CHAT_ID:/TITLE:/... block from
+    app.chat_store.logger prepended. Off by default so existing .txt files
+    never change unless explicitly asked for.
+    """
+    try:
+        settings = json.loads(APP_SETTINGS_FILE.read_text(encoding="utf-8"))
+        return bool(settings.get("metadataHeader"))
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+# ==========================================================================
+# TRANSCRIPTS
+# ==========================================================================
+
+def _count_interactions(messages: list) -> int:
+    """Number of user->assistant turn pairs (mirrors frontend chat-formatter)."""
+    pairs = 0
+    for i in range(1, len(messages)):
+        if (
+            messages[i].get("role") == "assistant"
+            and messages[i - 1].get("role") == "user"
+        ):
+            pairs += 1
+    if messages and messages[-1].get("role") == "user":
+        pairs += 1
+    return pairs
+
+
+def _fmt_date(value) -> str:
+    """ISO timestamp -> 'Sep 04, 2026, 02:35 PM' (or now on parse failure)."""
+    try:
+        iso = str(value or "").replace("Z", "+00:00")
+        return datetime.fromisoformat(iso).strftime("%b %d, %Y, %I:%M %p")
+    except (ValueError, TypeError):
+        return datetime.now().strftime("%b %d, %Y, %I:%M %p")
+
+
+def build_transcript(session: dict) -> str:
+    """Render a session dict into the .txt transcript body."""
+    messages = session.get("messages", []) or []
+    lines = [
+        DIVIDER,
+        f"Session: {session.get('title') or 'Untitled chat'}",
+        f"Agent:   {session.get('agentName') or session.get('agentId') or 'default'}",
+        f"Model:   {session.get('model') or '(server default)'}",
+        f"Date:    {_fmt_date(session.get('endedAt') or session.get('updatedAt') or session.get('startedAt'))}",
+        f"Interactions between LLM and user: {_count_interactions(messages)}",
+        DIVIDER,
+        "",
+    ]
+    for message in messages:
+        speaker = message.get("author") or ("You" if message.get("role") == "user" else "AI")
+        lines.append(f"[{speaker}]  {_fmt_date(message.get('timestamp'))}")
+        lines.append(THIN)
+        lines.append((message.get("content") or "") or "")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _parse_transcript_messages(text) -> list:
+    """Turn transcript text back into [{role, author, text}, ...] (best effort)."""
+    messages = []
+    current = None
+    for line in str(text or "").splitlines():
+        match = re.match(r"^\[([^\]]+)\]\s*(.*)$", line)
+        if match:
+            if current and current.get("text"):
+                messages.append(current)
+            current = {
+                "role": "user" if match.group(1).strip() == "You" else "assistant",
+                "author": match.group(1).strip(),
+                "text": "",
+            }
+        elif current is not None:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("-") and not stripped.startswith("="):
+                current["text"] = (
+                    f"{current.get('text')}\n{stripped}" if current.get("text") else stripped
+                )
+    if current and current.get("text"):
+        messages.append(current)
+    return messages
+
+
+def parse_transcript_header(text: str) -> dict:
+    """Pull the 'Session:/Agent:/...' header values out of a transcript.
+
+    Also understands the newer CAPS: metadata block written by
+    app.chat_store.logger (CHAT_ID:/TITLE:/AGENT:/MODEL:/MESSAGES://...),
+    so transcripts with the optional header still import cleanly.
+    """
+    lines = str(text or "").splitlines()
+    values: dict = {}
+
+    def grab(key: str, field: str):
+        for line in lines:
+            if line.startswith(key):
+                values[field] = line[len(key):].strip()
+                return
+
+    grab("Session:", "title")
+    grab("TITLE:", "title")
+    grab("Agent:", "agent_name")
+    grab("AGENT:", "agent_name")
+    grab("Model:", "model")
+    grab("MODEL:", "model")
+    grab("MESSAGES:", "messageCount")
+    grab("STARTED:", "startedAt")
+    grab("ENDED:", "endedAt")
+    grab("TAGS:", "tags")
+    grab("Interactions between LLM and user:", "interactions")
+    values.pop("interactions", None)  # read separately below
+    for line in lines:
+        if line.startswith("Interactions between LLM and user:"):
+            try:
+                values["interactionCount"] = int(line.split(":")[-1].strip())
+            except ValueError:
+                pass
+            break
+    if values.get("messageCount"):
+        try:
+            values["messageCount"] = int(values["messageCount"])
+        except (ValueError, TypeError):
+            pass
+    return values
+
+
+# ==========================================================================
+# ACTIVE SESSION
+# ==========================================================================
+
+def current_session() -> dict | None:
+    """The single in-progress session (None when none exists)."""
+    with _lock:
+        return _load_json(ACTIVE_SESSION_FILE, None)
+
+
+def ensure_session(agent, session_id: str = "", title: str = "", new_chat: bool = False, rag: bool | None = None) -> dict:
+    """Return the active session, finalizing the old one when a new chat starts.
+
+    `rag` controls whether this chat is committed to the RAG store when it is
+    saved. None -> the stored commitOnSave default applies.
+    """
+    with _lock:
+        active = _load_json(ACTIVE_SESSION_FILE, None)
+        wants_new = (
+            new_chat
+            or active is None
+            or (session_id and active.get("id") != session_id)
+            or active.get("agentId") != agent.profile.id
+        )
+        if wants_new:
+            if active is not None and active.get("status") == "finalized":
+                # Re-save only when the chat grew after its last version.
+                if len(active.get("messages", [])) > (active.get("finalizedCount") or 0):
+                    _finalize_locked()
+            elif active is not None:
+                _finalize_locked()
+            return _create_locked(agent, title, rag=rag)
+        return active
+
+
+def _create_locked(agent, title: str = "", rag: bool | None = None) -> dict:
+    now = _now_iso()
+    if rag is None:
+        rag = paths.rag_config()["commitOnSave"]
+    session = {
+        "id": _new_id("chr"),
+        "title": (str(title or "").strip()[:80]) or "New chat",
+        "agentId": agent.profile.id or "",
+        "agentName": agent.profile.name or "",
+        "model": agent.model or "",
+        "startedAt": now,
+        "updatedAt": now,
+        "rag": bool(rag),
+        "messages": [],
+    }
+    _save_json(ACTIVE_SESSION_FILE, session)
+    print(f"[CHATS] started session '{session['id']}' for '{session['agentId']}' (rag={session['rag']})")
+    return session
+
+
+def append_turn(user_text: str, reply_text: str) -> dict | None:
+    """Append the user message + assistant reply to the active session."""
+    with _lock:
+        session = _load_json(ACTIVE_SESSION_FILE, None)
+        if not session:
+            return None
+        now = _now_iso()
+        session.setdefault("messages", []).append(
+            {"role": "user", "author": "You", "content": str(user_text), "timestamp": now}
+        )
+        session.setdefault("messages", []).append(
+            {
+                "role": "assistant",
+                "author": session.get("agentName") or "AI",
+                "content": str(reply_text),
+                "timestamp": now,
+            }
+        )
+        if session.get("title") in ("", "New chat"):
+            session["title"] = _first_words(user_text, 50)
+        session["updatedAt"] = now
+        _save_json(ACTIVE_SESSION_FILE, session)
+        return session
+
+
+def _first_words(text: str, max_chars: int) -> str:
+    text = str(text or "").strip()
+    if not text:
+        return "New chat"
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "..."
+
+
+# ==========================================================================
+# FINALIZE (end of a chat)
+# ==========================================================================
+
+def finalize_session(title: str | None = None, rag: bool | None = None) -> dict | None:
+    """Finalize the active chat: write its .txt (versioned) + log one header row.
+
+    `rag: True` commits the written transcript into the RAG store (save to
+    memory). None -> the session's stored rag flag (set at chat creation from
+    the per-chat toggle / commitOnSave default) applies.
+    """
+    with _lock:
+        return _finalize_locked(title=title, rag=rag)
+
+
+def _finalize_locked(title: str | None = None, rag: bool | None = None) -> dict | None:
+    session = _load_json(ACTIVE_SESSION_FILE, None)
+    if not session:
+        return None
+
+    if title and str(title).strip():
+        session["title"] = str(title).strip()[:80]
+    elif session.get("title") in ("", "New chat"):
+        session["title"] = _first_words(
+            ((session.get("messages") or [{}])[0].get("content") if session.get("messages") else ""),
+            50,
+        )
+
+    session["endedAt"] = _now_iso()
+    session["status"] = "finalized"
+    session["finalizedCount"] = len(session.get("messages", []))
+    content = build_transcript(session)
+
+    base = _slugify(session["title"])
+    target, version = _target_path(base)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    row = {
+        "id": session.get("id") or _stable_id(target.name),
+        "title": session.get("title"),
+        "fileName": target.name,
+        "agentId": session.get("agentId", ""),
+        "agentName": session.get("agentName", ""),
+        "model": session.get("model", ""),
+        "version": str(version),
+        "messageCount": len(session.get("messages", [])),
+        "interactionCount": _count_interactions(session.get("messages", [])),
+        "startedAt": session.get("startedAt"),
+        "endedAt": session.get("endedAt"),
+        "status": "done",
+    }
+
+    if _header_enabled():
+        content = chat_logger.add_header_to_transcript(
+            content, chat_logger.record_from_store_row(row)
+        )
+    target.write_text(content, encoding="utf-8")
+
+    # Record this version in chatRecord.jsonl. A failure here must never
+    # block the chat save, so the existing behavior is preserved.
+    try:
+        _metadata_logger.add(chat_logger.record_from_store_row(row))
+    except OSError:
+        pass
+
+    # Commit to the RAG store when the chat is marked for memory ("save to
+    # memory" toggle, or the commitOnSave default). Never blocks the save.
+    commit = rag if rag is not None else bool(session.get("rag", False))
+    if commit:
+        try:
+            from app.rag_commit import commit_transcript
+
+            commit_transcript(target)
+        except Exception as e:
+            print(f"[CHATS] RAG commit failed (chat still saved): {e}")
+
+    # Keep the live session so continued messages can become the next version.
+    _save_json(ACTIVE_SESSION_FILE, session)
+    print(f"[CHATS] finalized '{session['title']}' -> {target.name} (v{version})")
+    return row
+
+
+def _target_path(base: str) -> tuple:
+    """Pick the file name + version for a finalized chat (inside RECORDS_DIR).
+
+    - Remember the existing version when overwriting is disabled: bump to the
+      next integer suffix (<base>-2.txt, -3.txt, ...) so every chat keeps its
+      own end-to-end transcript.
+    - With disableVersioning on, always overwrite <base>.txt (version 1).
+    """
+    primary = RECORDS_DIR / f"{base}.txt"
+    if _versioning_disabled() or not primary.exists():
+        return primary, "1"
+    n = 2
+    while (RECORDS_DIR / f"{base}-{n}.txt").exists():
+        n += 1
+    return RECORDS_DIR / f"{base}-{n}.txt", str(n)
+
+
+# ==========================================================================
+# CHAT RECORDS (data/chatlog/chatRecord.jsonl) - the single metadata store
+# ==========================================================================
+
+def _transcript_exists(file_name: str) -> bool:
+    """True when the transcript .txt a record points at is still on disk."""
+    return bool(file_name) and _resolve_transcript(file_name).exists()
+
+
+def _record_to_row(record: dict) -> dict:
+    """Rebuild the frontend-facing row shape from a chatRecord.jsonl record."""
+    return {
+        "id": record.get("id"),
+        "title": record.get("title"),
+        "fileName": record.get("fileName", ""),
+        "agentId": record.get("agentId", ""),
+        "agentName": record.get("agentName") or record.get("agent", ""),
+        "model": record.get("model", ""),
+        "version": record.get("version", ""),
+        "messageCount": record.get("messageCount", 0),
+        "interactionCount": record.get("interactionCount", 0),
+        "startedAt": record.get("startedAt", ""),
+        "endedAt": record.get("endedAt", ""),
+        "status": "done",
+    }
+
+
+def latest_per_chat(records: list) -> list:
+    """Collapse per-version records down to the LATEST record per chat id.
+
+    chatRecord.jsonl keeps one line per version; the dropdown only shows one
+    entry per chat. The file is append-only, so walking in reverse and keeping
+    the first sighting of each id yields the newest version of every chat.
+    """
+    latest = {}
+    for record in reversed(records):
+        chat_id = record.get("id")
+        if chat_id is not None and chat_id not in latest:
+            latest[chat_id] = record
+    return list(latest.values())
+
+
+def prune_deleted() -> int:
+    """Remove chatRecord.jsonl records whose transcript .txt is gone.
+
+    Runs lazily on every list_log() so a chat whose transcript is deleted
+    manually disappears from the drop-down immediately - no server restart
+    needed. Records without a fileName are left alone. Returns count removed.
+    """
+    with _lock:
+        try:
+            return _metadata_logger.prune(
+                lambda rec: not rec.get("fileName") or _transcript_exists(rec.get("fileName"))
+            )
+        except OSError:
+            return 0
+
+
+def list_log(include_active=True) -> list:
+    """The log used by the frontend dropdown/sidebar, newest end first.
+
+    Stale records whose transcript .txt no longer exists are pruned first, so
+    chats deleted on disk disappear here and from chatRecord.jsonl on the next
+    refresh rather than lingering until a restart. Returns one row per chat,
+    pointing at its LATEST version.
+    """
+    prune_deleted()
+    rows = [_record_to_row(rec) for rec in latest_per_chat(_metadata_logger.list_all())]
+    if include_active:
+        active = _load_json(ACTIVE_SESSION_FILE, None)
+        if active and active.get("status") != "finalized":
+            rows.append(
+                {
+                    "id": active.get("id"),
+                    "title": active.get("title"),
+                    "fileName": "",
+                    "agentId": active.get("agentId", ""),
+                    "agentName": active.get("agentName", ""),
+                    "model": active.get("model", ""),
+                    "version": "",
+                    "messageCount": len(active.get("messages", [])),
+                    "interactionCount": _count_interactions(active.get("messages", [])),
+                    "startedAt": active.get("startedAt"),
+                    "endedAt": "",
+                    "status": "active",
+                }
+            )
+    rows.sort(
+        key=lambda r: r.get("endedAt") or r.get("savedAt") or r.get("startedAt") or "",
+        reverse=True,
+    )
+    return rows
+
+
+def get_chat(chat_id: str) -> dict | None:
+    """One chat (its record w/ the transcript content/messages) to reopen it."""
+    record = _metadata_logger.get(chat_id)
+    if record:
+        path = _resolve_transcript(record.get("fileName", ""))
+        content = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+        row = _record_to_row(record)
+        return {**row, "content": content, "messages": _parse_transcript_messages(content)}
+    active = _load_json(ACTIVE_SESSION_FILE, None)
+    if active and active.get("id") == chat_id:
+        return {
+            **{
+                "id": active.get("id"),
+                "title": active.get("title"),
+                "fileName": "",
+                "agentId": active.get("agentId", ""),
+                "agentName": active.get("agentName", ""),
+                "model": active.get("model", ""),
+                "version": "",
+                "messageCount": len(active.get("messages", [])),
+                "startedAt": active.get("startedAt"),
+                "endedAt": "",
+                "status": "active",
+            },
+            "content": build_transcript(active),
+            "messages": active.get("messages", []),
+        }
+    return None
+
+
+def _fileName_version(file_name: str) -> str:
+    """'my-chat-2.txt' -> '2'; 'my-chat.txt' -> '1'."""
+    match = re.search(r"-(\d+(?:\.\d+)*)\.txt$", file_name)
+    return match.group(1) if match else "1"
+
+
+def set_chat_version(chat_id: str, version: str) -> dict | None:
+    """Point a chat at a new versioned .txt copy (e.g. '1.1').
+
+    Used by scripts/version_chats.py: assumes the source .txt already exists
+    in data/chatlog/ and just writes the new versioned copy into
+    agent-text-records/ while adding a new (id, version, fileName) record to
+    chatRecord.jsonl. The chat's history line is preserved.
+    """
+    with _lock:
+        record = _metadata_logger.get(chat_id)
+        if not record:
+            return None
+        source = _resolve_transcript(record.get("fileName", ""))
+        if not source.exists():
+            return None
+        stem = re.sub(r"-(\d+(?:\.\d+)*)$", "", source.stem)
+        target = RECORDS_DIR / f"{stem}-{version}.txt"
+        if target.name == source.name:
+            target = RECORDS_DIR / f"{stem}-{version}-2.txt"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+        record["version"] = str(version)
+        record["fileName"] = target.name
+        try:
+            _metadata_logger.add(record)
+        except OSError:
+            pass
+        return {**record}
+
+
+def _rebuild_header(file_name: str) -> dict:
+    """Best-effort header row for an existing .txt file (used by import_once)."""
+    path = _resolve_transcript(file_name)
+    if not path.exists():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        mtime = datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds")
+    except OSError:
+        return None
+
+    header = parse_transcript_header(text)
+    title = header.get("title") or re.sub(r"-(\d+(\.\d+)*)?$", "", path.stem).replace("-", " ").title()
+    messages = _parse_transcript_messages(text)
+    return {
+        "id": _stable_id(file_name),
+        "title": title,
+        "fileName": file_name,
+        "agentId": "",
+        "agentName": header.get("agent_name") or "",
+        "model": "" if header.get("model") in (None, "(server default)") else header.get("model", ""),
+        "version": _fileName_version(file_name),
+        "messageCount": len(messages),
+        "interactionCount": header.get("interactionCount", _count_interactions(messages)),
+        "startedAt": "",
+        "endedAt": mtime,
+        "status": "done",
+    }
+
+
+def _migrate_legacy_layout() -> None:
+    """Move the pre-rename layout (data/chats/* + data/discussions.json)
+    into data/chatlog/, and every .txt into agent-text-records/. Idempotent:
+    each step only runs when the target is missing and the source still
+    exists. Called from import_once() at startup.
+    """
+    # 1. Folder: data/chats -> data/chatlog (all .txt + hidden state files).
+    if _LEGACY_CHATS_DIR.is_dir() and (not CHATS_DIR.exists() or not list(CHATS_DIR.glob("*.txt"))):
+        CHATS_DIR.mkdir(parents=True, exist_ok=True)
+        for legacy in list(_LEGACY_CHATS_DIR.iterdir()):
+            target = CHATS_DIR / legacy.name
+            if not target.exists():
+                shutil.move(str(legacy), str(target))
+        if not list(_LEGACY_CHATS_DIR.iterdir()):
+            _LEGACY_CHATS_DIR.rmdir()
+
+    # 2. Log: data/discussions.json -> data/chatlog/log-chats.json (the old
+    #    store; import_once() absorbs it into chatRecord.jsonl afterwards).
+    if not _OLD_LOGCHATS_FILE.exists() and _LEGACY_LOG_FILE.exists():
+        CHATS_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(_LEGACY_LOG_FILE), str(_OLD_LOGCHATS_FILE))
+
+    # 3. Transcripts: data/chatlog/*.txt -> data/chatlog/agent-text-records/.
+    #    (The log keeps the bare file name, so moving is safe.)
+    RECORDS_DIR.mkdir(parents=True, exist_ok=True)
+    for legacy in list(CHATS_DIR.glob("*.txt")) + list(RECORDS_DIR.glob("*.txt")):
+        target = RECORDS_DIR / legacy.name
+        if target.exists():
+            continue
+        shutil.move(str(legacy), str(target))
+
+
+def import_once() -> int:
+    """One-time boot sync that builds the single store, chatRecord.jsonl.
+
+    - Migrates the pre-chatRecord layout into chatRecord.jsonl:
+        * data/discussions.json  (legacy message arrays) -> .txt transcripts,
+        * data/chatlog/log-chats.json (old one-row-per-chat store),
+        * data/chatlog/chat_log.jsonl (old per-version records).
+    - Scans data/chatlog/agent-text-records/*.txt and records any file not
+      yet logged.
+    - Drops records whose transcript disappeared since the last boot.
+    - Deletes the old store files once their content is in chatRecord.jsonl.
+
+    Idempotent: the merge key is (id, fileName), so a restart never
+    duplicates. Runs once at server startup.
+    """
+    with _lock:
+        _migrate_legacy_layout()
+        migrated = 0
+        added = 0
+
+        # --- 1. Read the old stores BEFORE they are deleted ---
+        old_rows = _load_json(_OLD_LOGCHATS_FILE, []) if _OLD_LOGCHATS_FILE.exists() else []
+        old_records = chat_logger.ChatLogger(log_file=_OLD_JSONL_FILE).list_all()
+
+        # --- 2. Legacy discussion rows (no fileName, whole 'messages' arrays)
+        #         become versioned .txt transcripts, exactly as before. ---
+        new_rows = []
+        for entry in old_rows:
+            if entry.get("fileName"):
+                new_rows.append(entry)
+                continue
+            legacy_id = entry.get("id") or _new_id("chr")
+            if not entry.get("messages"):
+                continue
+            session = {
+                "id": legacy_id,
+                "title": entry.get("title") or "Legacy import",
+                "agentId": entry.get("agentId", ""),
+                "agentName": entry.get("agentName", ""),
+                "model": entry.get("model", ""),
+                "startedAt": entry.get("createdAt") or entry.get("updatedAt") or _now_iso(),
+                "updatedAt": entry.get("updatedAt") or _now_iso(),
+                "endedAt": entry.get("updatedAt") or _now_iso(),
+                "messages": [
+                    {
+                        "role": (m.get("role") or "user"),  # assistant->assistant
+                        "author": m.get("author") or ("You" if m.get("role") == "user" else "AI"),
+                        "content": (m.get("text") or m.get("content") or ""),
+                        "timestamp": m.get("timestamp", _now_iso()),
+                    }
+                    for m in (entry.get("messages") or [])
+                    if (m.get("text") or m.get("content") or "")
+                ],
+            }
+            base = _slugify(session["title"])
+            target, version = _target_path(base)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(build_transcript(session), encoding="utf-8")
+            new_rows.append(
+                {
+                    "id": legacy_id,
+                    "title": session["title"],
+                    "fileName": target.name,
+                    "agentId": session["agentId"],
+                    "agentName": session["agentName"],
+                    "model": session["model"],
+                    "version": str(version),
+                    "messageCount": len(session["messages"]),
+                    "interactionCount": _count_interactions(session["messages"]),
+                    "startedAt": session["startedAt"],
+                    "endedAt": session["endedAt"],
+                    "status": "done",
+                }
+            )
+            migrated += 1
+
+        # --- 3. Merge chatRecord.jsonl + both old files by (id, fileName) ---
+        merged = {(rec.get("id"), rec.get("fileName")): rec
+                  for rec in _metadata_logger.list_all()}
+        for record in old_records:
+            key = (record.get("id"), record.get("fileName"))
+            if key not in merged:
+                merged[key] = record
+                migrated += 1
+        for row in new_rows:
+            key = (row.get("id"), row.get("fileName"))
+            if key not in merged:
+                merged[key] = chat_logger.record_from_store_row(row)
+                migrated += 1
+
+        # --- 4. Import on-disk .txt transcripts not logged yet ---
+        known = set(merged)
+        known_names = {k[1] for k in known}
+        # Scan agent-text-records/ first, then anything left in the chatlog root.
+        for scan_dir in (RECORDS_DIR, CHATS_DIR):
+            if not scan_dir.exists():
+                continue
+            for path in sorted(scan_dir.glob("*.txt")):
+                name = path.name
+                if name in known_names:
+                    continue
+                row = _rebuild_header(name)
+                if row:
+                    key = (_stable_id(name), name)
+                    merged[key] = chat_logger.record_from_store_row(row)
+                    known_names.add(name)
+                    added += 1
+
+        # --- 5. Drop records whose transcript disappeared, then write once ---
+        records = [merged[k] for k in merged if _transcript_exists(merged[k].get("fileName", ""))]
+        write_ok = True
+        try:
+            _metadata_logger.add_missing(records)
+            _metadata_logger.prune(
+                lambda rec: not rec.get("fileName") or _transcript_exists(rec.get("fileName"))
+            )
+        except OSError:
+            write_ok = False
+
+        # --- 6. The old stores are absorbed - delete them only on success ---
+        if write_ok:
+            for legacy in (_OLD_LOGCHATS_FILE, _OLD_JSONL_FILE):
+                if legacy.exists():
+                    try:
+                        legacy.unlink()
+                    except OSError:
+                        pass
+
+        total = migrated + added
+        if total:
+            print(f"[CHATS] migrated {migrated} legacy record(s) and imported {added} transcript(s)")
+        return total
+
+
+def save_discussion(discussion: dict) -> bool:
+    """Legacy /api/discussions POST: upsert one record into chatRecord.jsonl.
+
+    The server stamps updatedAt. The payload is merged into the chat's most
+    recent record (or appended when the id is new). Returns True when saved.
+    """
+    discussion_id = discussion.get("id")
+    if not discussion_id:
+        return False
+    discussion["updatedAt"] = _now_iso()
+    try:
+        _metadata_logger.update(discussion_id, discussion)
+    except OSError:
+        return False
+    return True
+
+
+def delete_discussion(discussion_id: str) -> bool:
+    """Legacy /api/discussions DELETE: remove EVERY record for a chat id.
+
+    Returns True when at least one record was removed.
+    """
+    try:
+        return _metadata_logger.remove(discussion_id) > 0
+    except OSError:
+        return False
+
+
+def delete_chat(chat_id: str) -> dict:
+    """Erase a chat completely: its log records, EVERY versioned .txt transcript,
+    and the live active session when it is the one being deleted.
+
+    The records alone are not enough - import_once() rescans the transcript
+    folder on boot, so the .txt files must be unlinked too or the chat would
+    come back. Returns a summary dict, or an all-zero dict when the id is
+    unknown (callers decide whether that is an error).
+    """
+    with _lock:
+        records = _metadata_logger.list_all()
+        mine = [record for record in records if record.get("id") == chat_id]
+
+        files_removed = []
+        for record in mine:
+            file_name = record.get("fileName", "")
+            if not file_name:
+                continue
+            path = _resolve_transcript(file_name)
+            try:
+                if path.exists():
+                    path.unlink()
+                    files_removed.append(file_name)
+            except OSError:
+                continue
+
+        records_removed = _metadata_logger.remove(chat_id)
+
+        was_active = False
+        active = _load_json(ACTIVE_SESSION_FILE, None)
+        if active and active.get("id") == chat_id:
+            was_active = True
+            try:
+                ACTIVE_SESSION_FILE.unlink()
+            except OSError:
+                pass
+
+        if records_removed or files_removed or was_active:
+            print(
+                f"[CHATS] deleted '{chat_id}' "
+                f"({len(files_removed)} file(s), {records_removed} record(s), active={was_active})"
+            )
+        return {
+            "recordsRemoved": records_removed,
+            "filesRemoved": files_removed,
+            "wasActive": was_active,
+        }
+
+
+__all__ = [
+    "current_session",
+    "ensure_session",
+    "append_turn",
+    "finalize_session",
+    "list_log",
+    "get_chat",
+    "import_once",
+    "set_chat_version",
+    "save_discussion",
+    "delete_discussion",
+    "delete_chat",
+    "build_transcript",
+    "CHATS_DIR",
+    "RECORDS_DIR",
+    "LOG_FILE",
+]
+
+```
+
+## server/paths.py
+
+```python
+r"""
+app/paths.py
+============
+
+Single source of truth for every runtime folder/file the app reads or
+writes. Paths are configured from the dashboard's consolidated settings
+page (config.html), stored in dashboard/config/app_settings.json via
+/api/settings:
+
+    app_settings.json keys:
+        dataDir        base data folder (default "data").
+                       Relative -> project root; absolute -> used as-is.
+        chatSavePath   where saved chat transcripts (.txt) are written.
+                       Empty -> <dataDir>/chatlog/agent-text-records
+        ragDbPath      where the RAG store (chroma.sqlite3) lives.
+                       Empty -> <dataDir>/rag_db
+        rag            { commitOnSave: bool, autoIngest: bool }
+
+    Per-OS keys (one settings file works on Windows, Linux and macOS):
+        <key>Windows / <key>Linux / <key>Mac    e.g. dataDirLinux,
+                       chatSavePathWindows, ragDbPathMac. The key matching
+                       the CURRENT machine wins over the plain key below it;
+                       keys for OSes you do not use are simply left alone.
+                       A plain key that is a Windows drive path (D:\... /
+                       D:/...) is ignored on non-Windows hosts unless a
+                       per-OS key for that host is set - the app falls back
+                       to a project default instead of creating a literal
+                       folder.
+
+    Environment variables (highest precedence - handy on a Chromebook or a
+    second machine, no file edits needed):
+        GENESSIS_DATA_DIR        -> dataDir
+        GENESSIS_CHAT_SAVE_PATH  -> chatSavePath
+        GENESSIS_RAG_DB_PATH     -> ragDbPath
+
+Everything else is derived from these so changing "data folder" moves the
+chatlog, transcripts, history, exports and RAG store together.
+
+Per-agent settings (agent.json metadata + tests, agent.md behavior) are the
+agent's own files under engine/agent_library/ - edited from the same
+config.html page, one agent card per agent.
+
+Path config is resolved at import time - save settings in the UI, then
+restart the server for dataDir/ragDbPath/chatSavePath changes to apply.
+`restart_needed()` tells callers when a restart is required.
+"""
+
+import json
+import os
+import re
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+APP_SETTINGS_FILE = BASE_DIR / "dashboard" / "config" / "app_settings.json"
+
+_EMPTY = (None, "", "")
+
+_IS_WINDOWS = os.name == "nt"
+# Absolute Windows path: drive letter (D:\... / D:/...) or UNC (\\server\...).
+_WIN_PATH_RE = re.compile(r"^(?:[A-Za-z]:[\\/]|[\\/]{2})")
+
+# Settings key -> environment variable override.
+_ENV_KEYS = {
+    "dataDir": "GENESSIS_DATA_DIR",
+    "chatSavePath": "GENESSIS_CHAT_SAVE_PATH",
+    "ragDbPath": "GENESSIS_RAG_DB_PATH",
+}
+
+# Current platform -> per-OS settings-key suffix.
+_OS_SUFFIX = {"win": "Windows", "linux": "Linux", "mac": "Mac"}
+
+
+def _get_text(value):
+    """Normalize a config value to str; '' for empty/missing."""
+    if value in _EMPTY:
+        return ""
+    return str(value).strip()
+
+
+def _bool(value):
+    return bool(value)
+
+
+def platform() -> str:
+    """'win' on Windows, 'linux' on Linux, 'mac' on macOS - used by the
+    dashboard to highlight the path fields for the current machine."""
+    if _IS_WINDOWS:
+        return "win"
+    if os.environ.get("GENESSIS_PLATFORM"):
+        normalized = os.environ["GENESSIS_PLATFORM"].strip().lower()
+        if normalized in _OS_SUFFIX:
+            return normalized
+    return "linux" if os.path.exists("/etc/os-release") else (
+        "mac" if os.path.exists("/System/Library/CoreServices") else "linux")
+
+
+def os_text(value):
+    r"""Public: normalize a raw path string for the current OS.
+
+    Returns '' when a Windows-only path (E:\\... / E:/... / \\\\UNC) is being
+    resolved on a non-Windows host, so it can never be turned into a literal
+    folder on Linux/macOS. On Windows the value is returned verbatim.
+    """
+    text = _get_text(value)
+    if not _IS_WINDOWS and text and _WIN_PATH_RE.match(text):
+        return ""
+    return text
+
+
+def _env_override(key):
+    """Expanded env-var override for `key`, or None when not set."""
+    env_name = _ENV_KEYS.get(key)
+    if not env_name:
+        return None
+    value = os.environ.get(env_name)
+    if value is None or not value.strip():
+        return None
+    return os.path.expanduser(os.path.expandvars(value.strip()))
+
+
+def _os_value(cfg, key):
+    """Platform-aware value for one path setting.
+
+    Precedence: environment variable > the per-OS key for THIS machine
+    (<key>Windows / <key>Linux / <key>Mac) > the plain `key`. Windows drive
+    paths in the plain key are ignored on non-Windows hosts so the app falls
+    back to a project default instead of creating a literal folder.
+    """
+    env_value = _env_override(key)
+    if env_value is not None:
+        return _get_text(env_value)
+    suffix = _OS_SUFFIX.get(platform(), "")
+    os_key = f"{key}{suffix}" if suffix else key
+    return os_text(cfg.get(os_key) or cfg.get(key))
+
+
+def _load_app_settings() -> dict:
+    try:
+        return json.loads(APP_SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def resolve_path(raw, *fallback_parts) -> Path:
+    """Base folder for a configured location.
+
+    `raw` is a folder path and is used verbatim when present (absolute paths
+    are used as-is so the data/RAG store can live outside the project;
+    relative paths resolve against the project root). When `raw` is empty,
+    fall back to BASE_DIR/<fallback_parts>.
+    """
+    text = os_text(raw)
+    if not text:
+        return BASE_DIR.joinpath(*fallback_parts).resolve()
+    path = Path(os.path.expandvars(text)).expanduser()
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path.resolve()
+
+
+def _rooted(raw, default: Path) -> Path:
+    """Like resolve_path, but the fallback is an already-resolved Path."""
+    text = os_text(raw)
+    if not text:
+        return default
+    path = Path(os.path.expandvars(text)).expanduser()
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path.resolve()
+
+
+# --------------------------------------------------------------------------
+# Runtime values (resolved once at import - restart server after editing).
+# --------------------------------------------------------------------------
+
+_cfg = _load_app_settings()
+
+# Snapshot of the stored *path* settings at import. The UI can compare
+# against the live file to tell the user a restart is required.
+_PATH_KEYS = ("dataDir", "chatSavePath", "ragDbPath")
+_path_keys_at_import = {key: _os_value(_cfg, key) for key in _PATH_KEYS}
+
+# Base data folder (dataDir / dataDirLinux / ... overrides the default "data").
+DATA_DIR = resolve_path(_os_value(_cfg, "dataDir"), "data")
+
+# Chat log folder + transcripts (chatSavePath overrides the sub-folder).
+CHATS_DIR = DATA_DIR / "chatlog"
+CHAT_SAVE_PATH = _os_value(_cfg, "chatSavePath")
+RECORDS_DIR = _rooted(CHAT_SAVE_PATH, DATA_DIR / "chatlog" / "agent-text-records")
+CHAT_RECORDS_DIR = RECORDS_DIR  # alias used by the RAG search tool
+
+# RAG store (ragDbPath overrides <dataDir>/rag_db).
+RAG_DB_DIR = _rooted(_os_value(_cfg, "ragDbPath"), DATA_DIR / "rag_db")
+
+# Chat log metadata + active session.
+LOG_FILE = CHATS_DIR / "chatRecord.jsonl"
+ACTIVE_SESSION_FILE = CHATS_DIR / ".active-chat.json"
+
+# History + exports (server.py).
+HISTORY_FILE = DATA_DIR / "history.json"
+EXPORTS_DIR = DATA_DIR / "exports"
+
+
+# --------------------------------------------------------------------------
+# RAG behavior switches (read live, so the UI changes apply immediately).
+# --------------------------------------------------------------------------
+
+def rag_config(default_commit: bool | None = None) -> dict:
+    """The current RAG behavior settings: commitOnSave + autoIngest.
+
+    `default_commit`: when supplied, an explicit per-chat flag overrides it;
+    otherwise the stored commitOnSave value is returned.
+    """
+    rag = _cfg.get("rag") or {}
+    commit = _bool(rag.get("commitOnSave", False))
+    if default_commit is not None:
+        commit = bool(default_commit)
+    return {
+        "commitOnSave": commit,
+        "autoIngest": _bool(rag.get("autoIngest", True)),
+    }
+
+
+def restart_needed() -> bool:
+    """True when stored path settings changed since import - the running
+    server is still using the old resolved locations until a restart."""
+    current = _load_app_settings()
+    for key in _PATH_KEYS:
+        if _os_value(current, key) != _path_keys_at_import.get(key):
+            return True
+    return False
+
+
+def about() -> dict:
+    """Human-readable summary of the resolved locations (for the config UI
+    and the /api/rag/status endpoint)."""
+    def _source(key):
+        if _env_override(key):
+            return _ENV_KEYS[key]
+        suffix = _OS_SUFFIX.get(platform(), "")
+        os_key = f"{key}{suffix}" if suffix else key
+        value = _cfg.get(os_key)
+        if value not in _EMPTY:
+            return os_key
+        if _cfg.get(key) not in _EMPTY:
+            if not _IS_WINDOWS and _WIN_PATH_RE.match(_get_text(_cfg.get(key))):
+                return f"{key} (ignored Windows path on this OS)"
+            return key
+        return f"{key} (default)"
+    return {
+        "platform": platform(),
+        "data_dir": str(DATA_DIR),
+        "chat_records_dir": str(RECORDS_DIR),
+        "chat_log_file": str(LOG_FILE),
+        "active_session_file": str(ACTIVE_SESSION_FILE),
+        "history_file": str(HISTORY_FILE),
+        "exports_dir": str(EXPORTS_DIR),
+        "rag_db_dir": str(RAG_DB_DIR),
+        "sources": {
+            "dataDir": _source("dataDir"),
+            "chatSavePath": _source("chatSavePath"),
+            "ragDbPath": _source("ragDbPath"),
+        },
+        "rag": rag_config(),
+    }
+```
+
+## server/server.py
+
+```python
+import sys
+import os
+import subprocess
+
+# Make `python server.py` work from anywhere (server/, root, ...):
+#   1. put the project root on sys.path so `engine.*` imports resolve;
+#   2. drop this script's own folder from sys.path so our `server.py`
+#      does not shadow the `server/` package (`from server import paths`,
+#      `from server.chat_store import store`).
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
+sys.path[:] = [p for p in sys.path if os.path.abspath(p) != _SCRIPT_DIR]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import List
+from datetime import datetime
+import json
+import os
+
+# App modules:
+#   app.core.llm.refresh_models     -> scans installed Ollama models into config/models.json
+#   app.agents.registry.list_agents -> scans agent_library/ for available agents
+#   app.agents.factory.build_agent  -> builds a fresh Agent from
+#                                      agent_library/{agent_id}/agent.md + agent.json,
+#                                      replays chat history, and returns the LLM reply
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from engine.core.llm import refresh_models
+from engine.agents.registry import list_agents
+from engine.agents.factory import build_agent, replay_history, AgentNotFoundError
+from server.chat_store import store as chat_store
+from server import paths
+
+# Modular interface layer (docs/01_IDEA_AND_ARCHITECTURE.md): update modules
+# under interface/updates/<domain>/ are discovered and executed natively.
+from interface.update_manager import (UpdateManager, get_update_manager,
+                                      UPDATES_DIR, ARCHIVE_DIR)
+from interface.interface_dispatcher import (InterfaceDispatcher,
+                                            get_dispatcher, TRACE_LOG_FILE)
+from interface.restore_manager import (RestoreManager, get_restore_manager,
+                                       DEFAULT_BASELINE, MANIFEST_NAME)
+
+# Runs once at startup; scans data/chatlog/agent-text-records/*.txt and records
+# their header info in data/chatlog/chatRecord.jsonl so past chats appear in
+# the drop-down immediately.
+
+# server.py now lives in server/, so the project root is one level up.
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "dashboard"
+MODELS_FILE = BASE_DIR / "config" / "models.json"
+SETTINGS_FILE = BASE_DIR / "config" / "settings.json"
+
+# Frontend-owned data (written by the /api/history, /api/settings and
+# /api/exports endpoints below). Folder locations resolve through app.paths
+# so the UI configuration can relocate the data folder.
+DATA_DIR = paths.DATA_DIR
+HISTORY_FILE = paths.HISTORY_FILE
+EXPORTS_DIR = paths.EXPORTS_DIR
+APP_SETTINGS_FILE = paths.APP_SETTINGS_FILE
+
+# The chat log lives in data/chatlog/chatRecord.jsonl, owned by
+# app.chat_store (import_once / list_log / save_discussion / delete_discussion).
+# The legacy /api/discussions endpoints below are thin wrappers over it.
+
+
+def _load_json(path, default):
+    """Read a JSON file; return `default` when missing or unreadable."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
+def _save_json(path, value) -> None:
+    """Pretty-write a JSON file, creating parent folders when needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(value, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def _default_agent() -> str:
+    """The agent used when a chat request carries no agent_id.
+
+    Comes from config/settings.json ("default_agent"); falls back to
+    "basic_chat" when the file is missing or unreadable.
+    """
+    try:
+        settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        return settings.get("default_agent") or "basic_chat"
+    except (OSError, json.JSONDecodeError):
+        return "basic_chat"
+
+
+# Startup hook: scan Ollama models BEFORE any request is served, and import
+# any existing data/chatlog/agent-text-records/*.txt transcripts into the log
+# (data/chatlog/chatRecord.jsonl) so old chats show up in the frontend
+# drop-down without manual work.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    refresh_models()           # ollama -> config/models.json
+    chat_store.import_once()   # agent-text-records/*.txt -> data/chatlog/chatRecord.jsonl
+
+    # Resolved storage locations at boot (cross-platform - data/chat/rag can
+    # live anywhere via app_settings.json or GENESSIS_* env overrides).
+    _boot_paths = paths.about()
+    print("[paths] data      -> " + _boot_paths["data_dir"])
+    print("[paths] records   -> " + _boot_paths["chat_records_dir"])
+    print("[paths] rag db    -> " + _boot_paths["rag_db_dir"])
+    for key, source in _boot_paths.get("sources", {}).items():
+        if source != key:
+            print(f"[paths] {key} overridden by {source}")
+
+    # Modular interface: discover update modules + traced dispatcher once at
+    # startup (exposed on app.state so request handlers can reach them).
+    try:
+        interface_manager = UpdateManager()
+        interface_manager.discover_all_active_modules()
+        print("[interface] active update modules: "
+              + ", ".join(f"{d}/{', '.join(n) if n else ''}"
+                          for d, n in sorted(interface_manager.active_modules_catalog.items())))
+        app.state.update_manager = interface_manager
+        app.state.interface_dispatcher = InterfaceDispatcher(interface_manager)
+    except Exception as exc:   # a broken update module must never block boot
+        print(f"[interface] WARNING: update discovery failed: {exc}")
+        app.state.update_manager = None
+        app.state.interface_dispatcher = None
+
+    yield                      # serve requests; code after this runs on shutdown
+
+app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class ChatRequest(BaseModel):
+    message: str
+    model: str = ""
+    agent_id: str = ""
+    history: List[dict] = []  # Prior turns from the frontend: [{role, content}, ...]
+    # --- server-side chat session fields ---
+    session_id: str = ""      # "" on the first message of a new chat
+    title: str = ""           # optional user-chosen title for the chat
+    new_chat: bool = False    # start a fresh chat (finalizes the previous one)
+    rag: bool = False         # commit this chat to the RAG memory store on save
+
+# --- UI SOURCE OF TRUTH ---
+
+"""
+GET /api/models
+---------------
+What this request is:
+    The front-end calls this endpoint on page load to populate the model
+    dropdown (#model-select). It is a simple GET request with no body.
+
+What it needs:
+    1. A file named "models.json" located in the config folder of the project
+       (config/models.json, relative to server.py), written by refresh_models().
+    2. The file must contain a "models" key: a list of objects shaped like
+       {"id": str, "name": str}.
+
+Behaviour:
+    - If models.json exists and has models, the list is returned.
+    - If the file is missing, unreadable, or contains no models, the
+      endpoint returns an empty list: {"models": []}.
+"""
+
+@app.get("/api/models")
+async def get_models():
+    if not MODELS_FILE.exists():
+        print("[MODELS] models.json not found - returning empty list")
+        return {"models": []}
+
+    try:
+        data = json.loads(MODELS_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        print("[MODELS] models.json unreadable - returning empty list")
+        return {"models": []}
+
+    models = data.get("models", [])
+
+    if not models:
+        print("[MODELS] models.json has no models - returning empty list")
+        return {"models": []}
+
+    print("json file sent: models")
+    return {"models": models}
+
+
+@app.get("/api/agents")
+async def get_agents():
+    """Return every discovered agent from agent_library/.
+
+    Each entry carries {id, name, description, mode}. Adding a new folder
+    under agent_library/ (with agent.md + agent.json) automatically makes
+    it show up here and in the frontend selector after a restart.
+    """
+    agents = list_agents()
+    print(f"[AGENTS] {len(agents)} agent(s) discovered")
+    return {"agents": agents}
+
+
+@app.get("/api/tools")
+async def get_tools():
+    """Every tool id an agent can pick in its config (feeds the checkboxes)."""
+    from tools.registry import list_tools
+
+    return {"tools": list_tools()}
+
+
+# --- AGENT CONFIG (the dashboard's per-agent settings editor) ---
+
+def _agent_tests(meta: dict) -> list:
+    """The agent's own tests stored in its agent.json (default [])."""
+    tests = meta.get("tests") or []
+    return tests if isinstance(tests, list) else []
+
+
+def _shared_tests() -> list:
+    """Tests that run for EVERY agent (kept in the app settings)."""
+    stored = _load_json(APP_SETTINGS_FILE, {})
+    tests = ((stored.get("chatTests") or {}).get("tests")) or []
+    return [t for t in tests if isinstance(t, dict) and not t.get("agentId")]
+
+
+@app.get("/api/agents/{agent_id}/config")
+async def get_agent_config(agent_id: str):
+    """One agent's consolidated config: agent.json (meta+tests), agent.md raw
+    text + parsed sections, and the shared tests that also run for it."""
+    from engine.agents.loader import agent_dir, load_definition, AgentNotFoundError
+
+    try:
+        definition = load_definition(agent_id)
+    except AgentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    meta = definition["meta"]
+    md_file = agent_dir(agent_id) / "agent.md"
+
+    return {
+        "agent": {
+            "id": meta.get("id") or agent_id,
+            "name": meta.get("name") or agent_id,
+            "description": meta.get("description", ""),
+            "mode": meta.get("mode", "chat"),
+        },
+        "meta": meta,
+        "markdown": md_file.exists() and md_file.read_text(encoding="utf-8") or "",
+        "tests": _agent_tests(meta),
+        "sharedTests": _shared_tests(),
+    }
+
+
+@app.put("/api/agents/{agent_id}/config")
+async def save_agent_config(agent_id: str, payload: dict):
+    """Partial update of one agent's config.
+
+    Accepts any of {meta, markdown, tests} (each optional):
+      - meta:     merged into agent.json (top-level fields only)
+      - markdown: written verbatim to agent.md
+      - tests:    replaces agent.json#tests (scoped to this agent)
+    Always returns the fresh consolidated config.
+    """
+    from engine.agents.loader import (
+        agent_dir,
+        load_definition,
+        save_markdown,
+        save_meta,
+        save_tests,
+        AgentNotFoundError,
+    )
+
+    try:
+        load_definition(agent_id)  # 404 when the agent is unknown
+    except AgentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    meta_update = payload.get("meta")
+    if isinstance(meta_update, dict):
+        normalized = dict(meta_update)
+        for key in ("name", "description"):
+            if key in normalized and not isinstance(normalized[key], str):
+                normalized[key] = ""
+        if "mode" in normalized and str(normalized["mode"]).lower() not in ("chat", "agent"):
+            normalized["mode"] = "chat"
+        if "model" in normalized and not normalized["model"]:
+            normalized["model"] = None
+        if "tools" in normalized and (normalized["tools"] is None or not isinstance(normalized["tools"], list)):
+            normalized["tools"] = []
+        save_meta(agent_id, normalized)
+
+    markdown_update = payload.get("markdown")
+    if isinstance(markdown_update, str):
+        save_markdown(agent_id, markdown_update)
+
+    tests_update = payload.get("tests")
+    if isinstance(tests_update, list):
+        save_tests(agent_id, tests_update)
+
+    definition = load_definition(agent_id)
+    meta = definition["meta"]
+    md_file = agent_dir(agent_id) / "agent.md"
+    return {
+        "agent": {
+            "id": meta.get("id") or agent_id,
+            "name": meta.get("name") or agent_id,
+            "description": meta.get("description", ""),
+            "mode": meta.get("mode", "chat"),
+        },
+        "meta": meta,
+        "markdown": md_file.exists() and md_file.read_text(encoding="utf-8") or "",
+        "tests": _agent_tests(meta),
+        "sharedTests": _shared_tests(),
+    }
+
+# --- I/O ROUTES ---
+
+@app.post("/api/chat")
+def chat(data: ChatRequest):
+    """Handle a chat message from the frontend.
+
+    The backend now tracks chat sessions itself (ONE active session at a
+    time). Each chat has its own start -> middle -> end:
+      - the first message ({new_chat: true}, or no active session) finalizes
+        any previous chat and starts a new one;
+      - every message appends the user turn + assistant reply to the active
+        session (persisted in data/chatlog/.active-chat.json);
+      - when a chat ends (new chat, "Save chat" or /api/chats/end), the
+        transcript is written once to data/chatlog/agent-text-records/<title>[-v].txt
+        and logged in data/chatlog/chatRecord.jsonl.
+
+    The agent is still built FRESH per request and the browser may keep its
+    own copy of history, but the server is now the source of truth for the
+    conversation so a refresh never loses it.
+
+    This stays a SYNC endpoint on purpose: the blocking LLM call runs in
+    FastAPI's threadpool, so the event loop stays free.
+    """
+    agent_id = data.agent_id or _default_agent()
+    print(f"[SERVER] Message for '{agent_id}': {data.message}")
+    print(f"[SERVER] history turns received: {len(data.history)}")
+
+    try:
+        agent = build_agent(agent_id, model=data.model or None)
+    except AgentNotFoundError as exc:
+        print(f"[SERVER] {exc}")
+        return {"reply": f"(unknown agent '{agent_id}' - is the folder present in agent_library/?)"}
+
+    # One session at a time: start one when asked, otherwise continue it.
+    session = chat_store.ensure_session(
+        agent,
+        session_id=data.session_id,
+        title=data.title,
+        new_chat=data.new_chat,
+        rag=data.rag,
+    )
+
+    # Seed the fresh agent with the server's copy of the conversation so the
+    # LLM always sees the full chat (browser history is ignored when a session
+    # already exists server-side).
+    for turn in session.get("messages", []):
+        agent.messages.append({"role": turn.get("role"), "content": turn.get("content", "")})
+
+    reply = agent.think(data.message)
+    session = chat_store.append_turn(data.message, reply) or session
+    print(f"[SERVER] Reply via {agent.model}: {reply[:120]}...")
+
+    return {"reply": reply, "session_id": session["id"], "title": session.get("title", "")}
+
+
+# --- CHAT SESSIONS (server-side organization) ---
+
+@app.get("/api/chats")
+async def list_chats():
+    """The chat log (data/chatlog/chatRecord.jsonl): header rows for every
+    transcript + the currently active session. Feeds the frontend chats
+    drop-down."""
+    return {"chats": chat_store.list_log()}
+
+
+@app.get("/api/chats/{chat_id}")
+async def get_chat(chat_id: str):
+    """One chat: its log row + the .txt content + parsed messages."""
+    chat = chat_store.get_chat(chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail=f"Chat '{chat_id}' not found")
+    return chat
+
+
+@app.post("/api/chats/end")
+async def end_chat(payload: dict = None):
+    """Finalize the active chat: writes its .txt (versioned on name collision)
+    and adds a header row to the log. Safe to call repeatedly.
+
+    payload.rag: optional bool override for committing this chat to the RAG
+    memory store (falls back to the chat's stored flag / commitOnSave default).
+    """
+    payload = payload or {}
+    rag = payload.get("rag")
+    row = chat_store.finalize_session(
+        title=payload.get("title") or payload.get("chatTitle"),
+        rag=rag if isinstance(rag, bool) else None,
+    )
+    if not row:
+        return {"finalized": False, "saved": False, "error": "No active chat to finalize."}
+    return {"finalized": True, "saved": True, "file": row["fileName"], "id": row["id"], "version": row["version"]}
+
+
+# --- RAG MEMORY STORE ---
+
+@app.get("/api/rag/status")
+async def rag_status():
+    """Store location + how many segments are indexed (0 = empty)."""
+    from memory.rag_commit import status
+
+    return {"status": status()}
+
+
+@app.post("/api/rag/rebuild")
+async def rag_rebuild():
+    """Re-index every saved transcript into the RAG store (idempotent)."""
+    from memory.rag_commit import rebuild_store
+
+    return {"message": rebuild_store()}
+
+
+@app.post("/api/rag/reset")
+async def rag_reset():
+    """Delete the RAG store so it starts empty (records + transcripts keep)."""
+    from memory.rag_commit import purge_store
+
+    return {"message": purge_store()}
+
+
+@app.delete("/api/chats/{chat_id}")
+async def delete_chat(chat_id: str):
+    """Permanently erase a chat: its .txt transcript(s) + log records (+ the
+    active session when that is the chat being deleted)."""
+    result = chat_store.delete_chat(chat_id)
+    if not result["recordsRemoved"] and not result["filesRemoved"] and not result["wasActive"]:
+        raise HTTPException(status_code=404, detail=f"Chat '{chat_id}' not found")
+    return {"deleted": True, "id": chat_id, **result}
+
+
+# --- DISCUSSIONS (data/chatlog/chatRecord.jsonl - the chat log) ---
+
+@app.get("/api/discussions")
+async def list_discussions():
+    """Every stored chat header row, newest first (the log)."""
+    return {"discussions": chat_store.list_log()}
+
+
+@app.post("/api/discussions")
+async def save_discussion(discussion: dict):
+    """Create or update one discussion (upsert by its `id`).
+
+    The server stamps `updatedAt` itself - the frontend never has to.
+    Delegated to chat_store, which writes data/chatlog/chatRecord.jsonl.
+    """
+    discussion_id = discussion.get("id")
+    if not discussion_id:
+        return {"saved": False, "error": "A discussion needs an 'id' to be saved."}
+
+    discussion["updatedAt"] = datetime.now().isoformat(timespec="seconds")
+    saved = chat_store.save_discussion(discussion)
+    if saved:
+        print(f"[DISCUSSIONS] saved '{discussion_id}'")
+    return {"saved": saved}
+
+
+@app.delete("/api/discussions/{discussion_id}")
+async def delete_discussion(discussion_id: str):
+    """Permanently remove one discussion by id (404 when unknown)."""
+    deleted = chat_store.delete_discussion(discussion_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Discussion '{discussion_id}' not found")
+    print(f"[DISCUSSIONS] deleted '{discussion_id}'")
+    return {"deleted": True, "id": discussion_id}
+
+
+# --- HISTORY (data/history.json) ---
+
+@app.get("/api/history")
+async def list_history():
+    """Every saved message snapshot ("Save" button copies)."""
+    return {"history": _load_json(HISTORY_FILE, [])}
+
+
+@app.post("/api/history")
+async def save_history(message: dict):
+    """Store one message snapshot (upsert by its `id`)."""
+    message_id = message.get("id") or os.urandom(8).hex()
+    message["id"] = message_id
+
+    history = _load_json(HISTORY_FILE, [])
+    replaced = False
+    for index, existing in enumerate(history):
+        if existing.get("id") == message_id:
+            history[index] = message
+            replaced = True
+            break
+
+    if not replaced:
+        history.append(message)
+
+    _save_json(HISTORY_FILE, history)
+    print(f"[HISTORY] saved '{message_id}' ({'updated' if replaced else 'new'})")
+    return {"saved": True}
+
+
+@app.delete("/api/history/{message_id}")
+async def delete_history(message_id: str):
+    """Remove one saved message by id (404 when unknown)."""
+    history = _load_json(HISTORY_FILE, [])
+    remaining = [m for m in history if m.get("id") != message_id]
+
+    if len(remaining) == len(history):
+        raise HTTPException(status_code=404, detail=f"History item '{message_id}' not found")
+
+    _save_json(HISTORY_FILE, remaining)
+    print(f"[HISTORY] deleted '{message_id}'")
+    return {"deleted": True, "id": message_id}
+
+
+# --- APP SETTINGS (static/config/app_settings.json) ---
+
+@app.get("/api/about")
+async def get_about():
+    """Site identity read from about/about.json (the H1 + tagline on
+    index.html). Changed by: `python about/set_title.py`. Read per request,
+    so edits apply on the next page load without a server restart.
+    """
+    about_file = BASE_DIR / "about" / "about.json"
+    defaults = {
+        "title": "Terminator 2",
+        "subtitle": "Pick an agent below to chat with it in the floating chat, or use the chat button in the corner.",
+    }
+    try:
+        data = json.loads(about_file.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+    return {
+        "title": str(data.get("title") or defaults["title"]).strip(),
+        "subtitle": str(data.get("subtitle") or defaults["subtitle"]).strip(),
+    }
+
+
+@app.get("/api/settings")
+async def get_app_settings():
+    """The stored browser defaults; {} when nothing was saved yet.
+
+    `restartNeeded` is true when the stored path settings (dataDir,
+    chatSavePath, ragDbPath) changed since the server started - the running
+    process is still using the old resolved folders until a restart.
+    """
+    payload = _load_json(APP_SETTINGS_FILE, {})
+    return {
+        "settings": payload,
+        "restartNeeded": paths.restart_needed(),
+        "platform": paths.platform(),
+    }
+
+
+@app.post("/api/settings")
+async def save_app_settings(partial_settings: dict):
+    """Merge a partial settings object into what is already stored.
+
+    Path values are stored verbatim - each OS picks its own per-OS key
+    (dataDirWindows / dataDirLinux / dataDirMac, ...) or falls back to the
+    plain key, and the running server keeps its already-resolved folders
+    until a restart (`restartNeeded`)."""
+    stored = _load_json(APP_SETTINGS_FILE, {})
+    stored.update(partial_settings)
+
+    _save_json(APP_SETTINGS_FILE, stored)
+    print(f"[SETTINGS] updated keys: {', '.join(partial_settings.keys()) or '(none)'}")
+    return {
+        "settings": stored,
+        "restartNeeded": paths.restart_needed(),
+        "platform": paths.platform(),
+    }
+
+
+# --- CHAT SAVE (write chat transcripts as .txt files) ---
+
+def _sanitize_file_name(raw: str) -> str:
+    """Keep only filesystem-friendly characters; fall back to 'chat'."""
+    cleaned = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in str(raw).strip())
+    cleaned = cleaned.strip("_.") or "chat"
+    return cleaned[:120]
+
+
+def _resolve_chat_dir(raw_path: str) -> Path:
+    """Resolve the configured output folder, always anchored inside BASE_DIR.
+
+    - Empty path -> BASE_DIR / "data" / "chatlog" / "agent-text-records"
+    - Relative path -> BASE_DIR / <path>
+    - Absolute path -> kept only if it stays inside BASE_DIR; otherwise
+      an absolute path is re-rooted under BASE_DIR (so a crafted value
+      can never escape the project).
+
+    A Windows-style drive path (E:\\... ) has no meaning on Linux and is
+    treated as empty there (same rule as server/paths.py).
+    """
+    raw_path = paths.os_text(raw_path)
+    candidate = Path(raw_path or "")
+
+    if not candidate.is_absolute():
+        resolved = (BASE_DIR / candidate).resolve()
+    else:
+        resolved = candidate.resolve()
+
+    # Prevent escaping BASE_DIR (sandbox the save location).
+    try:
+        resolved.relative_to(BASE_DIR.resolve())
+    except ValueError:
+        resolved = (BASE_DIR / "data" / "chatlog" / "agent-text-records").resolve()
+
+    return resolved
+
+
+@app.post("/api/chat-save")
+async def save_chat_session(payload: dict):
+    """Finalize the ACTIVE chat: name the .txt from the chat title, bump the
+    version on a name collision (unless disableVersioning is on), and log it.
+
+    The transcript is built server-side from the active session, so the
+    frontend no longer sends raw 'content' per reply. If no active session
+    exists, it falls back to writing the legacy payload the old way.
+    """
+    row = chat_store.finalize_session(title=payload.get("title"))
+    if row:
+        print(f"[CHAT-SAVE] finalized '{row['title']}' -> {row['fileName']} (v{row['version']})")
+        return {"saved": True, "file": str(chat_store.RECORDS_DIR / row["fileName"]), "id": row["id"]}
+
+    content = payload.get("content")
+    if content is None:
+        return {"saved": False, "error": "No active chat to finalize, and no 'content' supplied."}
+
+    # Legacy fallback: write the raw blob (used by older clients).
+    raw_name = str(payload.get("fileName") or "").strip() or "chat"
+    safe_name = _sanitize_file_name(raw_name)
+    if not safe_name.lower().endswith(".txt"):
+        safe_name = f"{safe_name}.txt"
+
+    out_dir = _resolve_chat_dir(str(payload.get("path") or ""))
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = out_dir / safe_name
+    file_path.write_text(str(content), encoding="utf-8")
+
+    print(f"[CHAT-SAVE] wrote {file_path}")
+    return {"saved": True, "file": str(file_path)}
+
+
+# --- WIZARD EXPORTS (data/exports/) ---
+
+def _safe_export_name(raw: str) -> str:
+    """Keep only filesystem-friendly characters; fall back to 'export'."""
+    cleaned = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in raw.strip())
+    cleaned = cleaned.strip("_") or "export"
+    return cleaned[:80]
+
+
+@app.post("/api/exports")
+async def save_export(payload: dict):
+    """Save one wizard prompt as TWO files: {name}.md + {name}.json.
+
+    The frontend slugifies `name` already; we sanitize it again so a
+    crafted name can never escape data/exports/.
+    """
+    name_raw = str(payload.get("name") or "")
+    markdown = payload.get("markdown")
+    export_data = payload.get("data")
+
+    if not name_raw or markdown is None or export_data is None:
+        return {"saved": False, "error": "An export needs 'name', 'markdown' and 'data'."}
+
+    safe_name = _safe_export_name(name_raw)
+    EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    md_path = EXPORTS_DIR / f"{safe_name}.md"
+    json_path = EXPORTS_DIR / f"{safe_name}.json"
+    md_path.write_text(str(markdown), encoding="utf-8")
+    json_path.write_text(json.dumps(export_data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    print(f"[EXPORTS] wrote {md_path.name} + {json_path.name}")
+    return {"saved": True, "files": [md_path.name, json_path.name]}
+
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+@app.get("/")
+async def home():
+    return FileResponse(STATIC_DIR / "index.html")
+
+# --- MODULAR INTERFACE / UPDATE SYSTEM (docs/01_IDEA_AND_ARCHITECTURE.md) ---
+
+# Master switch for /api/interface/run (executes update-module functions with
+# arbitrary arguments - the user opted in for this local app). Starts OFF so a
+# fresh boot is never armed; /api/interface/toggle-run flips it for the
+# current process.
+INTERFACE_RUN_ENABLED = False
+
+
+def _update_manager():
+    """The lifespan-created manager, or the process-world singleton when the
+    startup discovery failed (so the endpoints never crash)."""
+    manager = getattr(app.state, "update_manager", None)
+    return manager if manager is not None else get_update_manager()
+
+
+def _dispatcher():
+    dispatcher = getattr(app.state, "interface_dispatcher", None)
+    return dispatcher if dispatcher is not None else get_dispatcher()
+
+
+def _restore_manager():
+    manager = getattr(app.state, "restore_manager", None)
+    return manager if manager is not None else get_restore_manager()
+
+
+def _json_safe(value):
+    """Best-effort JSON serialization for /api/interface/run results."""
+    if isinstance(value, (dict, list, str, int, float, bool)) or value is None:
+        return value
+    try:
+        return json.loads(json.dumps(value, default=str))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+class InterfaceRunRequest(BaseModel):
+    domain: str
+    module: str
+    function: str
+    args: list = []
+    kwargs: dict = {}
+
+
+class InterfaceToggleRequest(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/interface/status")
+def interface_status():
+    """Everything the Settings 'Updates / Interface' card needs: the active
+    module catalog, the external archive, the trace-log tail and the
+    baseline (current-known-good-copy/) freshness + live drift."""
+    try:
+        manager = _update_manager()
+        catalog = {
+            domain: sorted(names)
+            for domain, names in sorted(manager.active_modules_catalog.items())
+        }
+    except Exception:
+        catalog = {}
+
+    archived: dict[str, list[str]] = {}
+    if ARCHIVE_DIR.is_dir():
+        for domain_dir in sorted(ARCHIVE_DIR.iterdir()):
+            if domain_dir.is_dir():
+                archived[domain_dir.name] = sorted(
+                    p.name for p in domain_dir.glob("*.py")
+                )
+
+    trace_tail: list[str] = []
+    if TRACE_LOG_FILE.is_file():
+        trace_tail = TRACE_LOG_FILE.read_text(
+            encoding="utf-8", errors="replace"
+        ).splitlines()[-20:]
+
+    baseline = {
+        "folder": str(DEFAULT_BASELINE),
+        "exists": DEFAULT_BASELINE.is_dir(),
+        "manifest": None,
+        "drift": None,
+        "error": None,
+    }
+    try:
+        diff = _restore_manager().diff()
+        baseline.update({
+            "folder": diff["baseline"],
+            "exists": Path(diff["baseline"]).is_dir(),
+            "drift": {
+                "modified": len(diff["modified"]),
+                "modified_files": diff["modified"][:50],
+                "shared": diff["shared"],
+                "skipped": len(diff["skipped"]),
+                "untracked": len(diff["untracked"]),
+            },
+        })
+    except Exception as exc:
+        baseline["error"] = str(exc)
+
+    manifest_path = Path(baseline["folder"]) / MANIFEST_NAME
+    if manifest_path.is_file():
+        baseline["manifest"] = _load_json(manifest_path, None)
+
+    return {
+        "ok": True,
+        "run_enabled": INTERFACE_RUN_ENABLED,
+        "updates_dir": str(UPDATES_DIR),
+        "archive_dir": str(ARCHIVE_DIR),
+        "trace_log": str(TRACE_LOG_FILE),
+        "catalog": catalog,
+        "archived": archived,
+        "trace_tail": trace_tail,
+        "baseline": baseline,
+    }
+
+
+@app.post("/api/interface/apply")
+def interface_apply():
+    """Reload every update module from disk, then regenerate the docs
+    snapshots (docs/APP_STRUCTURE.md + docs/APP_CODE_SNAPSHOT.md)."""
+    try:
+        manager = _update_manager()
+        catalog = manager.reload_all()
+        print("[interface] apply: reloaded modules per domain:"
+              + ", ".join(f"{d}={len([n for n in ns])}"
+                          for d, ns in sorted(catalog.items())))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"module reload failed: {exc}")
+
+    docs_script = BASE_DIR / "scripts" / "update_docs.py"
+    docs_ok = True
+    if docs_script.is_file():
+        result = subprocess.run(
+            [sys.executable, str(docs_script)], cwd=str(BASE_DIR)
+        )
+        docs_ok = result.returncode == 0
+    else:
+        docs_ok = False
+
+    return {
+        "ok": True,
+        "catalog": {
+            d: sorted(names)
+            for d, names in sorted(_update_manager().active_modules_catalog.items())
+        },
+        "docs_regenerated": docs_ok,
+    }
+
+
+@app.post("/api/interface/snapshot")
+def interface_snapshot():
+    """Publish the current live tree as the new baseline (rebaseline)."""
+    try:
+        count = _restore_manager().snapshot_baseline()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"snapshot failed: {exc}")
+    return {"ok": True, "files": count, "baseline": str(DEFAULT_BASELINE)}
+
+
+@app.post("/api/interface/restore")
+def interface_restore(payload: dict = None):
+    """Roll the live tree back to the baseline. DRY-RUN by default - the
+    browser must send {"apply": true} (or {"dryRun": false}) to actually
+    restore. A real restore backs everything up first into
+    data/snapshots/pre_restore_backup/."""
+    payload = payload or {}
+    baseline = payload.get("baseline")
+    requested = payload.get("apply", False)
+    dry_run = requested is not True
+    if payload.get("dryRun") is False:
+        dry_run = False
+    if dry_run:
+        result = _restore_manager().restore(baseline=baseline, dry_run=True)
+        return {"ok": True, "dry_run": True, **result}
+    try:
+        result = _restore_manager().restore(baseline=baseline, dry_run=False)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"restore failed: {exc}")
+    return {"ok": True, "dry_run": False, **result}
+
+
+@app.post("/api/interface/run")
+def interface_run(data: InterfaceRunRequest):
+    """Execute an update-module function by (domain, module, function) names.
+    Arbitrary code execution - gated by INTERFACE_RUN_ENABLED, which the
+    Settings card arms explicitly via /api/interface/toggle-run."""
+    if not INTERFACE_RUN_ENABLED:
+        raise HTTPException(
+            status_code=403,
+            detail="Module execution is disabled. Enable it in Settings -> "
+                   "Updates / Interface first.",
+        )
+    try:
+        result = _dispatcher().execute_action(
+            data.domain, data.module, data.function,
+            *data.args, **data.kwargs,
+        )
+    except ModuleNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+    return {"ok": True, "domain": data.domain, "module": data.module,
+            "function": data.function, "result": _json_safe(result)}
+
+
+@app.post("/api/interface/toggle-run")
+def interface_toggle_run(data: InterfaceToggleRequest):
+    """Arm/disarm /api/interface/run for this process. The flip is logged to
+    data/interface_trace.log so a change of state is never silent."""
+    global INTERFACE_RUN_ENABLED
+    INTERFACE_RUN_ENABLED = data.enabled
+    entry = f"[RUN TOGGLE] module execution {'ENABLED' if data.enabled else 'DISABLED'}"
+    print(entry)
+    try:
+        from interface.interface_dispatcher import logger as _trace_logger
+        _trace_logger.info(entry)
+    except Exception:
+        pass
+    return {"ok": True, "run_enabled": INTERFACE_RUN_ENABLED}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run(app, host=host, port=port)
+
+```
+
+## tools/__init__.py
+
+```python
+
+```
+
+## tools/registry.py
+
+```python
+"""
+app/tools/registry.py
+=====================
+
+Central tool registry. Maps tool IDs (strings used in agent.json) to Python
+callables. Agents declare which tools they need by ID; the factory resolves
+those IDs here into actual functions.
+
+All tool implementations live in app/tools/tools.py; their docstrings are
+the schema the LLM sees. This module only wires them to their public IDs.
+
+Adding a new tool:
+    1. Write the function in app/tools/tools.py (with a clear docstring)
+    2. Import it below and add it to _TOOL_REGISTRY with its string ID
+"""
+
+from typing import Callable
+
+from tools.tools import (
+    map_files,
+    read_file,
+    write_text_file,
+    delete_files,
+    get_current_date,
+    tell_me_the_date_and_time,
+    search_chat_logs,
+)
+from tools.state import FileSession
+
+# ---------------------------------------------------------------------------
+# Canonical registry  –  tool_id -> callable
+# ---------------------------------------------------------------------------
+_TOOL_REGISTRY: dict[str, Callable] = {
+    # File management
+    "map_files": map_files,
+    "read_file": read_file,
+    "write_text_file": write_text_file,
+    "delete_files": delete_files,
+
+    # Date/time
+    "get_current_date": get_current_date,
+    "tell_me_the_date_and_time": tell_me_the_date_and_time,
+
+    # RAG / search
+    "search_chat_logs": search_chat_logs,
+}
+
+# Shared session instance (created once, shared across agents in a process)
+_session = FileSession()
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def get(tool_name: str) -> Callable | None:
+    """Retrieve an executable tool by its registered name."""
+    return _TOOL_REGISTRY.get(tool_name)
+
+
+def list_tools() -> list[str]:
+    """Returns a list of all registered tool names."""
+    return list(_TOOL_REGISTRY.keys())
+
+
+def available_tool_ids() -> list[str]:
+    """Backward-compatible alias for list_tools()."""
+    return list_tools()
+
+
+def resolve_tools(tool_ids: list[str]) -> list[Callable]:
+    """Map a list of tool ID strings to their callable functions.
+
+    Unknown IDs are silently skipped (with a warning) so that agent
+    definitions can reference tools that may not be installed.
+    """
+    resolved = []
+    for tid in tool_ids:
+        fn = _TOOL_REGISTRY.get(tid)
+        if fn is not None:
+            resolved.append(fn)
+        else:
+            print(f"[registry] WARNING: tool '{tid}' not found – skipped.")
+    return resolved
+
+
+def get_session() -> FileSession:
+    """Return the shared FileSession instance."""
+    return _session
+
+```
+
+## tools/state.py
+
+```python
+"""
+app/tools/state.py
+==================
+
+Shared working state for the file-management tools.
+
+The FileSession is the single in-memory record of everything a file-aware
+agent has discovered, read, written, or proposed for deletion during the
+current process. It lets later tool calls (and the model itself) build on
+previous results instead of re-scanning the filesystem each turn.
+
+The session is process-wide: one instance is created lazily and shared by
+every agent that is built in this process.
+
+It is injected into the conversation by Agent._inject_session_context and
+hydrated from tool results by the _record_result wrapper in app/agents/factory.py.
+"""
+
+
+class FileSession:
+    """Manages file-management working state for AI agents dynamically.
+
+    Tracks, across tool calls in one process:
+
+        discovered_files   - paths surfaced by map_files / other listing tools
+        selected_files     - paths the agent has explicitly chosen to work on
+        read_files         - paths whose contents have already been read
+        working_content    - path -> last extracted text content (read_file)
+        output_files       - paths the agent has written (write_text_file)
+        pending_deletion   - paths proposed for deletion but not yet approved
+    """
+
+    def __init__(self):
+        self.discovered_files = []
+        self.selected_files = []
+        self.read_files = []
+        self.working_content = {}
+        self.output_files = []
+        self.pending_deletion = []
+
+    def add_discovered(self, paths: list):
+        """Record files/directories surfaced by map_files (deduplicated)."""
+        self.discovered_files = list(set(self.discovered_files + paths))
+
+    def select_files(self, paths: list):
+        """Mark paths as the agent's active working set (deduplicated)."""
+        self.selected_files = list(set(self.selected_files + paths))
+
+    def record_read(self, path: str, content: str):
+        """Remember that a path was read and cache its extracted content."""
+        if path not in self.read_files:
+            self.read_files.append(path)
+        self.working_content[path] = content
+
+    def add_output(self, path: str):
+        """Remember a path produced by the write tool (deduplicated)."""
+        if path not in self.output_files:
+            self.output_files.append(path)
+
+    def mark_for_deletion(self, paths: list):
+        """Propose paths for deletion (deduplicated; approval happens later)."""
+        self.pending_deletion = list(set(self.pending_deletion + paths))
+
+    def get_state(self) -> dict:
+        """Snapshot the current session state for injection into the prompt."""
+        return {
+            "discovered_files": self.discovered_files,
+            "selected_files": self.selected_files,
+            "read_files": self.read_files,
+            "output_files": self.output_files,
+            "pending_deletion": self.pending_deletion
+        }
+
+```
+
+## tools/tools.py
+
+```python
+"""
+app/tools/tools.py
+==================
+
+Every executable tool in the application, consolidated into one module.
+
+One function per tool; each function's docstring is what the LLM "sees":
+PromptManager turns the first line into the system prompt's AVAILABLE TOOLS
+section, and Ollama derives the JSON tool schema from the function name,
+signature, types, and docstring. Keep them precise and self-describing.
+
+Registered tools (IDs in agent.json):
+    map_files, read_file, write_text_file, delete_files,
+    get_current_date, tell_me_the_date_and_time, search_chat_logs
+
+The shared FileSession lives in app/tools/state.py.
+"""
+
+import os
+import sys
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# READ - Docling-powered document reader (IBM Docling)
+# ---------------------------------------------------------------------------
+
+# Plain-text formats are read straight off disk (fast path). Everything else
+# (PDF/DOCX/PPTX/XLSX/HTML/images/...) goes through IBM Docling's pipeline,
+# which returns clean, structurally-formatted markdown.
+_PLAIN_TEXT_EXTENSIONS = {
+    ".txt", ".md", ".markdown", ".log", ".text",
+    ".csv", ".tsv",
+    ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf",
+    ".py", ".pyw", ".js", ".mjs", ".cjs", ".ts", ".jsx", ".tsx",
+    ".css", ".scss", ".sass", ".xml", ".tex", ".rst",
+}
+
+
+def _is_plain_text(path: Path) -> bool:
+    """True for files whose raw text is already the well-formatted content."""
+    return path.suffix.lower() in _PLAIN_TEXT_EXTENSIONS
+
+
+_DOCLING_CONVERTERS = {}
+
+
+def _docling_converter(ocr: bool):
+    """Return a cached, lazily-created Docling DocumentConverter.
+
+    The converter is created once per ocr setting and reused across calls so
+    the (expensive) pipeline + model artifacts are initialized only once.
+    First-ever conversion downloads the layout/OCR models from HuggingFace.
+    """
+    if ocr not in _DOCLING_CONVERTERS:
+        try:
+            from docling.datamodel.base_models import InputFormat
+            from docling.datamodel.pipeline_options import PdfPipelineOptions
+            from docling.document_converter import DocumentConverter, PdfFormatOption
+        except ImportError:
+            _DOCLING_CONVERTERS[ocr] = None
+            return None
+
+        if ocr:
+            options = PdfPipelineOptions(do_ocr=True)
+            converter = DocumentConverter(
+                format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
+            )
+        else:
+            converter = DocumentConverter()
+
+        _DOCLING_CONVERTERS[ocr] = converter
+    return _DOCLING_CONVERTERS[ocr]
+
+
+def read_file(path: str, ocr: bool = True) -> dict:
+    """Reads a file and returns its content as well-formatted text (markdown).
+
+    Use this tool whenever you need the contents of a document, source file,
+    or any file on disk. It returns the extracted content ready to use.
+
+    Plain text and code files (.txt, .md, .log, .json, source code, ...) are
+    read directly off disk. All other formats - PDF, DOCX, PPTX, XLSX, HTML,
+    images, and more - are converted by IBM Docling into clean, structured
+    markdown that preserves headings, tables, and layout. OCR is enabled by
+    default so scanned PDFs are handled too.
+
+    Args:
+        path (str): Absolute path to the file to read.
+        ocr (bool): When True (default), optical character recognition is
+            enabled for PDFs so scanned/rotated pages can be read.
+
+    Returns:
+        dict: {"success": bool, "tool": "read_file", "data": {...}, "error": str|None}
+            data keys: path, filename, file_type, extracted_content, status
+    """
+    p = Path(path)
+    if not p.exists() or not p.is_file():
+        return {
+            "success": False,
+            "tool": "read_file",
+            "data": {},
+            "error": f"File '{path}' not found."
+        }
+
+    try:
+        if _is_plain_text(p):
+            content = p.read_text(encoding="utf-8", errors="replace")
+            status = "success"
+        else:
+            converter = _docling_converter(ocr)
+            if converter is None:
+                return {
+                    "success": False,
+                    "tool": "read_file",
+                    "data": {},
+                    "error": "Docling is not installed. Install it with `pip install docling` "
+                             "to read PDF/DOCX/PPTX/XLSX/HTML/image files.",
+                }
+
+            from docling.datamodel.base_models import ConversionStatus
+
+            result = converter.convert(str(p), max_num_pages=400)
+            if result.status is ConversionStatus.FAILURE:
+                errors = "; ".join(e.error_message for e in getattr(result, "errors", []))
+                return {
+                    "success": False,
+                    "tool": "read_file",
+                    "data": {"path": str(p), "filename": p.name, "file_type": p.suffix.lower()},
+                    "error": errors or "Docling could not convert the document.",
+                }
+
+            content = result.document.export_to_markdown()
+            status = "success" if result.status is ConversionStatus.SUCCESS else "partial_success"
+
+        return {
+            "success": True,
+            "tool": "read_file",
+            "data": {
+                "path": str(p),
+                "filename": p.name,
+                "file_type": p.suffix.lower(),
+                "extracted_content": content,
+                "status": status,
+            },
+            "error": None,
+        }
+    except Exception as e:
+        return {"success": False, "tool": "read_file", "data": {}, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# MAP - directory inspection
+# ---------------------------------------------------------------------------
+
+DEFAULT_IGNORE_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".idea", ".vscode"}
+
+
+def map_files(path: str, max_depth: int = 8, max_entries: int = 5000) -> dict:
+    """Inspects a directory and returns a structured list of its files and folders.
+
+    Use this tool to see what exists on disk before reading, writing, or
+    deleting anything. Returns every file and subfolder under the given
+    directory (to max_depth), excluding ordinary noise like .git, .venv, and
+    __pycache__. Folders are listed with their subpaths so you know exactly
+    where a file lives before you touch it.
+
+    Args:
+        path (str): The directory to inspect.
+        max_depth (int): Maximum subdirectory depth to descend into (default 8).
+        max_entries (int): Maximum number of entries to return (default 5000).
+
+    Returns:
+        dict: {"success": bool, "tool": "map_files", "data": {...}, "error": str|None}
+            data keys: files (list of {name, path, extension, type, parent, level}),
+                        truncated (bool), max_entries (int)
+    """
+    root = Path(path)
+    if not root.exists() or not root.is_dir():
+        return {
+            "success": False,
+            "tool": "map_files",
+            "data": {},
+            "error": f"Path '{path}' is not a valid directory."
+        }
+
+    files_data = []
+    for current_dir, dirs, files in os.walk(root, topdown=True):
+        depth = len(Path(current_dir).relative_to(root).parts)
+        if depth >= max_depth:
+            dirs[:] = []
+        else:
+            dirs[:] = [d for d in dirs if d not in DEFAULT_IGNORE_DIRS]
+
+        for d in dirs:
+            if len(files_data) >= max_entries:
+                break
+            full = Path(current_dir) / d
+            files_data.append({
+                "name": d,
+                "path": str(full),
+                "extension": "",
+                "type": "directory",
+                "parent": Path(current_dir).name if Path(current_dir) != root else "",
+                "level": depth + 1,
+            })
+
+        for f in files:
+            if len(files_data) >= max_entries:
+                break
+            full = Path(current_dir) / f
+            files_data.append({
+                "name": f,
+                "path": str(full),
+                "extension": Path(f).suffix,
+                "type": "file",
+                "parent": Path(current_dir).name if Path(current_dir) != root else "",
+                "level": depth + 1,
+            })
+
+        if len(files_data) >= max_entries:
+            break
+
+    truncated = len(files_data) >= max_entries
+    return {
+        "success": True,
+        "tool": "map_files",
+        "data": {
+            "files": files_data,
+            "truncated": truncated,
+            "max_entries": max_entries,
+        },
+        "error": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# WRITE - file creation
+# ---------------------------------------------------------------------------
+
+def write_text_file(name: str, content: str, output_path: str, overwrite: bool = False) -> dict:
+    """Creates a text file containing the given content.
+
+    Use this tool to save any text or code you have produced to disk. The
+    parent directory is created automatically, so you do not need a separate
+    "create folder" step. By default an existing file with the same name is
+    NOT overwritten - pass overwrite=True when you intentionally want to.
+
+    Args:
+        name (str): File name to write, e.g. "summary.txt".
+        content (str): Full text content to write into the file.
+        output_path (str): Directory in which to create the file.
+        overwrite (bool): Whether to overwrite the file if it already exists
+            (default False).
+
+    Returns:
+        dict: {"success": bool, "tool": "write_text_file", "data": {...}, "error": str|None}
+            data keys: filename, path, type, size, status (built on success)
+    """
+    if not name or content is None or not output_path:
+        return {
+            "success": False,
+            "tool": "write_text_file",
+            "data": {},
+            "error": "Missing required arguments. Need name (file name), content (text), and output_path (folder)."
+        }
+
+    try:
+        out_dir = Path(output_path)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        file_path = out_dir / name
+
+        if file_path.exists() and not overwrite:
+            return {
+                "success": False,
+                "tool": "write_text_file",
+                "data": {},
+                "error": f"File '{file_path}' already exists and overwrite is set to False."
+            }
+
+        file_path.write_text(content, encoding="utf-8")
+        return {
+            "success": True,
+            "tool": "write_text_file",
+            "data": {
+                "filename": name,
+                "path": str(file_path),
+                "type": "text/plain",
+                "size": file_path.stat().st_size,
+                "status": "written",
+            },
+            "error": None,
+        }
+    except Exception as e:
+        return {"success": False, "tool": "write_text_file", "data": {}, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# DELETE - two-step approval-safe deletion
+# ---------------------------------------------------------------------------
+
+def delete_files(file_list: list, approved: bool = False) -> dict:
+    """Deletes files ONLY after explicit approval has been given.
+
+    Deleting is permanent. Calling this tool with approved=False (the safe
+    default) only PREPARES the deletion. Call it a second time with
+    approved=True to actually remove the files; the runtime additionally
+    blocks any path that was never proposed in the first (approved=False) call.
+
+    Args:
+        file_list (list): List of file paths to delete.
+        approved (bool): Must be True to actually delete. False only records
+            the pending request (two-step confirmation).
+
+    Returns:
+        dict: {"success": bool, "tool": "delete_files", "data": {...}, "error": str|None}
+            data keys: results (path -> "deleted"/"file_not_found"/"error: ..."),
+                        or pending_files (list) when approval is still required
+    """
+    if not file_list:
+        return {
+            "success": False,
+            "tool": "delete_files",
+            "data": {},
+            "error": "No files provided for deletion."
+        }
+
+    if not approved:
+        return {
+            "success": False,
+            "tool": "delete_files",
+            "data": {"pending_files": file_list},
+            "error": "Deletion requires explicit approval. Set approved=True to finalize."
+        }
+
+    results = {}
+    for f_path in file_list:
+        p = Path(f_path)
+        if p.exists() and p.is_file():
+            try:
+                p.unlink()
+                results[f_path] = "deleted" if not p.exists() else "failed_to_verify"
+            except Exception as e:
+                results[f_path] = f"error: {str(e)}"
+        else:
+            results[f_path] = "file_not_found"
+
+    all_success = all(v == "deleted" for v in results.values())
+    return {
+        "success": all_success,
+        "tool": "delete_files",
+        "data": {"results": results},
+        "error": None if all_success else "One or more files failed to delete.",
+    }
+
+
+# ---------------------------------------------------------------------------
+# DATE / TIME
+# ---------------------------------------------------------------------------
+
+def get_current_date() -> str:
+    """Returns the real current calendar date (e.g. 'Monday, January 05, 2026').
+
+    Use this tool when you need to know today's date - for example when a
+    user asks "what day is it", when dating a response, or when reasoning
+    about relative dates. No arguments.
+    """
+    from datetime import datetime
+    return datetime.now().strftime("%A, %B %d, %Y")
+
+
+def tell_me_the_date_and_time() -> str:
+    """Returns the current date and time down to the second.
+
+    Use this tool for anything needing the moment now (date + time), like
+    timestamps, "what time is it", or checking elapsed time. No arguments.
+    """
+    from datetime import datetime
+    now = datetime.now()
+    return f"The current date and time is {now.strftime('%Y-%m-%d %H:%M:%S')}"
+
+
+# ---------------------------------------------------------------------------
+# SEARCH - chat transcript / RAG memory recall
+# ---------------------------------------------------------------------------
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from server import paths  # noqa: E402
+
+RAG_DB_DIR = paths.RAG_DB_DIR
+CHAT_RECORDS_DIR = paths.CHAT_RECORDS_DIR
+
+_rag_ingested = False
+
+
+def _auto_ingest_enabled() -> bool:
+    """The `rag.autoIngest` toggle: None of the UI config can bulk-ingest ALL
+    transcripts when the store is empty. Off -> only explicit commits (per-chat
+    "save to memory") or a rebuild populate the store."""
+    return bool(paths.rag_config()["autoIngest"])
+
+
+def _ensure_rag_ingested(storage) -> bool:
+    """Index the chat transcripts into the persistent store once, when the
+    store is empty AND auto-ingest is enabled.
+
+    Returns True when this process has already ingested (or just successfully
+    ingested) the transcripts; False when there was nothing to ingest or the
+    feature is disabled.
+    """
+    global _rag_ingested
+    if _rag_ingested:
+        return True
+    if not _auto_ingest_enabled():
+        return False
+
+    from memory.ingest import ingest_directory
+
+    chunks = ingest_directory(str(CHAT_RECORDS_DIR))
+    if chunks:
+        storage.add_chunks(chunks)
+        print(f"[RAG] Auto-ingested {len(chunks)} segment(s) from {CHAT_RECORDS_DIR}")
+    _rag_ingested = True
+    return bool(chunks)
+
+
+def search_chat_logs(query: str) -> str:
+    """Searches past chat transcripts for a keyword and returns the matching segments.
+
+    Use this tool to recall what was discussed in earlier conversations: this
+    is the agent's long-term memory. It searches the saved chat records and
+    returns the most relevant segments with their session title, speaker,
+    date, and content.
+
+    Args:
+        query (str): The search keyword, term, or phrase to look up.
+
+    Returns:
+        str: Formatted search results ('' when nothing matches).
+    """
+    try:
+        from memory.search import RAGStorage
+
+        storage = RAGStorage(persist_dir=str(RAG_DB_DIR))
+
+        results = storage.query(query, n_results=3)
+
+        if not results:
+            if _ensure_rag_ingested(storage):
+                results = storage.query(query, n_results=3)
+
+        if not results:
+            return f"No matches found in your chat transcripts for the query: '{query}'."
+
+        formatted_results = [f"--- RAG SEARCH RESULTS FOR: '{query}' ---"]
+        for idx, r in enumerate(results):
+            meta = r["metadata"]
+            session_title = meta.get("session_title") or meta.get("source_file", "Untitled Chat")
+            speaker = meta.get("speaker", "Unknown")
+            date = meta.get("date", "Unknown Date")
+
+            formatted_results.append(
+                f"Result [{idx + 1}]:\n"
+                f"  Session: {session_title}\n"
+                f"  Speaker: {speaker} | Date: {date}\n"
+                f"  Content: {r['text']}\n"
+                f"----------------------------------------"
+            )
+
+        return "\n\n".join(formatted_results)
+
+    except ImportError:
+        return "Error: RAG engine modules not found. Ensure the 'rag/' folder is present in your project root."
+    except Exception as e:
+        return f"Error executing chat log search: {e}"
+
+```
+
+_74 code file(s)._

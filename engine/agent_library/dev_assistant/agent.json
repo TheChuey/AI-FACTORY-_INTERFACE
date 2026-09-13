@@ -1,0 +1,45 @@
+{
+  "id": "dev_assistant",
+  "name": "Dev Assistant",
+  "description": "AI agent development teacher with full file tools.",
+  "mode": "agent",
+  "model": "gemma4:e2b",
+  "tools": [
+    "read_file",
+    "write_text_file",
+    "map_files",
+    "delete_files",
+    "get_current_date",
+    "tell_me_the_date_and_time",
+    "search_chat_logs"
+  ],
+  "tests": [
+    {
+      "id": "custom-mtnwyh6t-krgy",
+      "name": "what is you objective",
+      "steps": [
+        "what is you objective",
+        "who is the user",
+        "list all the cities in california"
+      ],
+      "expectedResult": {
+        "mode": "type",
+        "value": "nonEmpty"
+      },
+      "enabled": true
+    },
+    {
+      "id": "custom-mty2mshm-d756",
+      "name": "who is your user?",
+      "steps": [
+        "who is your user?",
+        "what are your tools?"
+      ],
+      "expectedResult": {
+        "mode": "type",
+        "value": "nonEmpty"
+      },
+      "enabled": true
+    }
+  ]
+}

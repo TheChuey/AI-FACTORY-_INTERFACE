@@ -1,0 +1,36 @@
+{
+  "defaultAgentId": "dev_assistant",
+  "defaultModel": "",
+  "activeDiscussionId": "disc-mthko2ytzf9exz",
+  "disableVersioning": false,
+  "behavior": {
+    "autoHi": true
+  },
+  "appearance": {
+    "theme": "light",
+    "fontFamily": "",
+    "fontSize": 14
+  },
+  "chatTests": {
+    "enabled": true,
+    "tests": []
+  },
+  "dataDir": "data",
+  "dataDirLinux": "/home/goofy/data",
+  "ragDbPath": "",
+  "ragDbPathLinux": "/home/goofy/data/db",
+  "rag": {
+    "commitOnSave": false,
+    "autoIngest": true
+  },
+  "chatSavePath": "",
+  "chatSavePathLinux": "/home/goofy/data/chat_log",
+  "observe": {
+    "terminal": true,
+    "tools": false,
+    "messages": false,
+    "maxLines": 800
+  },
+  "dataDirWindows": "",
+  "defaultProjectsPath": "E:\\projects"
+}
