@@ -3,6 +3,95 @@
 All notable changes to this project. Format based on Keep a Changelog
 (https://keepachangelog.com/), grouped by date.
 
+## 2026-09-13 — Phase 1/2/3: drop-in custom modules (Dynamic External Module Loader)
+
+Installed the three-phase "drop a `.py` file in and it just works" extension
+system, following `phase-1-2-3-update/INSTRUCTIONS.md`. You can now drop a
+standalone `.py` module into **Custom Modules Path** (default
+`data/custom_modules/`) and — after a restart, or a live apply — it gets a
+header button on the dashboard plus its own FastAPI routes, with **no manual
+editing** of `index.html`, `header-nav.js`, or `server.py`.
+
+This is a **second, independent** loader from the existing
+`interface/update_manager.py` domain system (`interface/updates/<domain>/`).
+The two managers never talk to each other, so nothing already built was
+touched or can break.
+
+### Added — new file
+
+- `interface/custom_module_manager.py` — `CustomModuleManager` scans the flat
+  `CUSTOM_MODULES_DIR` folder for `*.py` files (skipping `_`/`.`-prefixed
+  helpers), imports each standalone file with `importlib.util` (they are not a
+  Python package), and exposes `active_modules_catalog`, `reload_all()`,
+  `get_active_module(name)`, `list_modules()` and `ui_manifests()`. A module
+  with a broken import is logged and skipped — one bad drop-in file never
+  blocks boot. Also provides the process-wide `get_custom_module_manager()`
+  singleton.
+
+### Added — `server/paths.py`
+
+- `customModulesPath` setting key (Settings → App defaults → **Custom Modules
+  Path**), with `GENESSIS_CUSTOM_MODULES_PATH` env-var override, resolved the
+  same way `dataDir` / `ragDbPath` already are (relative → project root,
+  absolute → used as-is, blank → `<dataDir>/custom_modules`). Exposed as
+  `CUSTOM_MODULES_PATH` / `CUSTOM_MODULES_DIR`; `about()` now reports
+  `custom_modules_dir` and its `sources` map. `data/custom_modules/` is
+  created automatically on first boot.
+
+### Added — `server/server.py`
+
+- `lifespan()` creates a `CustomModuleManager`, prints the active catalog, and
+  calls each active module's `register_routes(app)`; a broken module can never
+  block boot (warns and sets `app.state.custom_module_manager = None`).
+- `_register_custom_routes(manager)` + the `_CUSTOM_ROUTES_REGISTERED` set —
+  routes are registered at most once per process, so
+  `POST /api/interface/apply` can pick up brand-new modules **live** without
+  double-registering old ones (edits to an already-loaded module's route logic
+  still need a real restart).
+- `GET /api/interface/status` now also returns `custom_modules` (resolved
+  folder + active names) and `ui_manifests` (every active module's
+  `UI_MANIFEST`, used by the frontend to render header buttons).
+
+### Added — CLI (`about/set_title.py`)
+
+- `python about/set_title.py create-module <name>` — scaffolds a drop-in
+  module pre-wired with a `UI_MANIFEST` and `register_routes(app)` (writes to
+  Custom Modules Path, default `data/custom_modules/<name>.py`). Validates the
+  name (letters / numbers / `-` / `_`), refuses to overwrite existing files,
+  and prints activate instructions.
+- `apply` now prints a `CustomModuleManager.summary()` catalog line (new
+  modules go live via `apply`, edits to loaded ones need a restart).
+
+### Added — frontend (`dashboard/`)
+
+- `js/ui/header-nav.js` — new export `renderDynamicHeaderButtons(container,
+  onClick)`: fetches `/api/interface/status`, reads `ui_manifests`, and appends
+  one button per manifest entry (id-deduplicated). Fail-soft — renders nothing
+  on a server with no custom modules.
+- `js/app.js` — calls `renderDynamicHeaderButtons` right after mounting the
+  normal nav row; a click follows the `action: "prompt_input"` contract
+  (prompt via `prompt_message`, POST to `api_endpoint`, alert the response).
+- `js/ui/config-form.js` — "Custom Modules Path" text field on the Settings
+  page, persisted through the existing generic `saveAppSettings()` merge; path
+  changes apply after a restart (the existing "restart needed" banner).
+
+### Using it
+
+```bash
+python about/set_title.py create-module analytics_builder   # scaffold one
+python server.py                                            # restart to activate
+# or, without restarting: python about/set_title.py apply
+```
+
+Reload the dashboard — the "＋ Analytics Builder" button appears in the header
+automatically and POSTs to the module's endpoint on click.
+
+### Verified
+
+- `python -m py_compile` clean on the 4 changed/new Python files; `node
+  --check` clean on the 3 changed JS files.
+- `CustomModuleManager` imports cleanly (empty folder → zero active modules).
+
 ## 2026-09-12 — Cross-platform paths (Windows/Linux/macOS) + save feedback
 
 The app now runs from the same checkout on Windows, Linux, macOS and the
@@ -152,8 +241,9 @@ browser tab on every page.
 
 ## 2026-09-12 — 02 implementation plan folded in; server startup wiring
 
-Follow-up to the Modular Interface build, based on `docs/02_IMPLEMENTATION_PLAN.md`
-(dropped into `docs/`). The plan's missing pieces were folded into the existing
+Follow-up to the Modular Interface build, based on the 02 implementation plan
+(`docs/02_IMPLEMENTATION_PLAN.md`, later folded in and removed). The plan's
+missing pieces were folded into the existing
 implementation instead of a verbatim overwrite, preserving the earlier choices
 (`current-known-good-copy/` baseline, `--dry-run`, `snapshot` command, safer
 exclusions). The plan's Linux path (`venv/bin/python`) is `venv\Scripts\python.exe`
@@ -185,7 +275,9 @@ on this Windows project.
 ## 2026-09-12 — Modular Interface & System Update Architecture
 
 Introduced a pluggable update/restore layer so new features never touch core
-modules again. Design reference: `docs/01_IDEA_AND_ARCHITECTURE.md`.
+modules again. Design reference: see **`README.md`** ("Modular interface") and
+this changelog — the original design doc
+(`docs/01_IDEA_AND_ARCHITECTURE.md`) was folded in and removed.
 
 ### Added — `interface/` package
 

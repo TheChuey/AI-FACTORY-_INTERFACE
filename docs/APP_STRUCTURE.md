@@ -1,6 +1,6 @@
 # Terminator1 — App Structure
 
-_Auto-generated on 2026-09-13T12:57:57 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-14T11:35:34 by `scripts/update_docs.py`._
 
 
 ```
@@ -37,12 +37,25 @@ genV2_Interface_projectManager/
 |   |-- config.html
 |   `-- index.html
 |-- docs
-|   |-- 01_IDEA_AND_ARCHITECTURE.md
-|   |-- 02_IMPLEMENTATION_PLAN.md
+|   |-- phase-1-2-3-update
+|   |   |-- about
+|   |   |   `-- set_title.py
+|   |   |-- dashboard
+|   |   |   `-- js
+|   |   |       |-- ui
+|   |   |       |   |-- config-form.js
+|   |   |       |   `-- header-nav.js
+|   |   |       `-- app.js
+|   |   |-- interface
+|   |   |   `-- custom_module_manager.py
+|   |   |-- server
+|   |   |   |-- paths.py
+|   |   |   `-- server.py
+|   |   `-- INSTRUCTIONS.md
 |   |-- APP_CODE_SNAPSHOT.md
 |   |-- APP_STRUCTURE.md
 |   |-- CHANGELOG.md
-|   `-- RESTRUCTURE_README.md
+|   `-- HOW_TO_USE.md
 |-- engine
 |   |-- agent_library
 |   |   |-- basic_chat
@@ -71,17 +84,17 @@ genV2_Interface_projectManager/
 |-- interface
 |   |-- updates
 |   |   |-- engine
-|   |   |   |-- __init__.py
-|   |   |   |-- hello_update.py
-|   |   |   |-- newfunction.py
-|   |   |   `-- project_creator.py
+|   |   |   `-- __init__.py
 |   |   |-- server
-|   |   |   |-- __init__.py
-|   |   |   `-- project_routes.py
+|   |   |   `-- __init__.py
 |   |   |-- tools
 |   |   |   `-- __init__.py
 |   |   `-- __init__.py
+|   |-- wiring
+|   |   |-- __init__.py
+|   |   `-- bridges.py
 |   |-- __init__.py
+|   |-- custom_module_manager.py
 |   |-- interface_dispatcher.py
 |   |-- restore_manager.py
 |   `-- update_manager.py
@@ -112,4 +125,4 @@ genV2_Interface_projectManager/
 `-- requirements.txt
 ```
 
-_76 tracked source file(s)._
+_81 tracked source file(s)._

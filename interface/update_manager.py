@@ -125,13 +125,20 @@ class UpdateManager:
 
     # ----------------------------------------------------------------- summary
 
-    def summary(self) -> str:
-        """Human-readable catalog listing, domain by domain."""
+    def summary(self, exclude: str | None = None) -> str:
+        """Human-readable catalog listing, domain by domain.
+
+        `exclude` (e.g. the wiring bridge domain `"custom"`) is skipped so a
+        virtual injection never shows up as a physical update folder.
+        """
         lines = [f"Update modules in {UPDATES_DIR}:"]
-        for domain in sorted(self.active_modules_catalog):
-            names = sorted(self.active_modules_catalog[domain])
-            lines.append(f"  {domain}/  ->  {', '.join(names) if names else '(none)'}")
-        total = sum(len(names) for names in self.active_modules_catalog.values())
+        total = 0
+        for domain, names in sorted(self.active_modules_catalog.items()):
+            if domain == exclude:
+                continue
+            sorted_names = sorted(names)
+            lines.append(f"  {domain}/  ->  {', '.join(sorted_names) if sorted_names else '(none)'}")
+            total += len(sorted_names)
         lines.append(f"total: {total} active module(s)")
         return "\n".join(lines)
 

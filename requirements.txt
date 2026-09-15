@@ -1,5 +1,5 @@
 # requirements.txt - Declares dependencies for the Stateful Agentic RAG Module
-# Designed to run locally on your Linux environment
+# Cross-platform: runs on Windows, Linux, macOS and ChromeOS (Linux container)
 chromadb>=0.4.0
 docling>=2.59.0
 ollama>=0.3.0

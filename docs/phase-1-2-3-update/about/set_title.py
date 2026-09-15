@@ -35,19 +35,23 @@ def _load_about() -> dict:
 
 
 def cmd_apply(argv):
-    """Reload update + custom modules through the wiring layer and regenerate
-    the docs snapshots. New custom modules register their routes via
-    POST /api/interface/apply (or a server restart); edits to an already
-    loaded module's route logic still need a restart."""
-    from interface.wiring import WiringManager
+    """Reload all active update modules and regenerate the docs snapshots."""
+    from interface.update_manager import UpdateManager
+    from interface.restore_manager import RestoreManager
+
+    manager = UpdateManager()
+    manager.reload_all()
+    print(manager.summary())
 
     try:
-        wiring = WiringManager()
-        wiring.rewire()
-        print(wiring.summary())
+        from interface.custom_module_manager import CustomModuleManager
+        custom_manager = CustomModuleManager()
+        print(custom_manager.summary())
+        print("Note: NEW custom modules register their routes live via "
+              "POST /api/interface/apply (or restart the server). Edits to "
+              "an already-loaded module's route logic still need a restart.")
     except Exception as exc:
-        print(f"WARNING: module reload failed: {exc}")
-        return 1
+        print(f"WARNING: custom module discovery failed: {exc}")
 
     script = _PROJECT_ROOT / "scripts" / "update_docs.py"
     result = subprocess.run([sys.executable, str(script)], cwd=str(_PROJECT_ROOT))
@@ -61,7 +65,6 @@ def cmd_apply(argv):
         # snapshots (documents the ordering bug fix - previously the baseline
         # was published with pre-regen docs, making restore --dry-run report
         # the two doc files as modified).
-        from interface.restore_manager import RestoreManager
         count = RestoreManager().snapshot_baseline()
         print(f"Baseline refreshed: {count} file(s) -> current-known-good-copy/")
 

@@ -1,12 +1,12 @@
 # Terminator1 — App Code Snapshot
 
-_Auto-generated on 2026-09-13T12:57:57 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-14T11:35:34 by `scripts/update_docs.py`._
 
 
 ## README.md
 
 ```markdown
-﻿# Terminator1 (Genessis)
+# Terminator1 (Genessis)
 
 A local lab for building and testing AI agents: **FastAPI** backend + vanilla JS
 frontend + **Ollama** local LLMs.
@@ -31,16 +31,16 @@ a new agent is just a folder with `agent.md` + `agent.json` (+ tool IDs).
 Open **/static/config.html** (the "Settings" button on the dashboard and in the
 chat header) for EVERY configuration in one screen:
 
-- **App defaults** â€” default agent (with a jump-link to that agent's card),
+- **App defaults** — default agent (with a jump-link to that agent's card),
   default model, chat save path, data folder, RAG database path, chat
   versioning, and the RAG memory defaults. Stored in
   `dashboard/config/app_settings.json`.
-- **Appearance** â€” one theme + font set for all pages.
-- **Agents** â€” one card per agent, consolidating its whole config in one place:
+- **Appearance** — one theme + font set for all pages.
+- **Agents** — one card per agent, consolidating its whole config in one place:
   metadata + model + tools (its `agent.json`), its behavior prose (editable
   `agent.md`), and that agent's chat tests + an inline runner.
-- **Shared tests** â€” tests with no agent that run for every agent.
-- **Models** â€” read-only snapshot of the installed Ollama models.
+- **Shared tests** — tests with no agent that run for every agent.
+- **Models** — read-only snapshot of the installed Ollama models.
 
 Per-agent data lives with the agent (`engine/agent_library/<id>/agent.json` now
 holds `tests`; `agent.md` is the behavior). The default agent for `/api/chat`
@@ -64,7 +64,7 @@ python -m pip install -r requirements.txt
 python server.py
 ```
 
-`python server.py` can be run from ANY directory â€” the project root or
+`python server.py` can be run from ANY directory — the project root or
 `server/` both work (the file bootstraps `sys.path` itself). Override the port
 with `$env:PORT=9000` (PowerShell) or `PORT=9000 python server.py` (Linux).
 The equivalent uvicorn launch (from the project root):
@@ -145,97 +145,106 @@ default `data/` folder travels with the project) or pin them via the
 
 ```
 terminator1/
-â”œâ”€â”€ server/                   # Thin glue: FastAPI app + chat log + path config
-â”‚   â”œâ”€â”€ server.py             # HTTP endpoints, static mount, lifespan. The ONLY
-â”‚   â”‚                         # thing the browser talks to. `python server.py`
-â”‚   â”‚                         # runs from any directory.
-â”‚   â”œâ”€â”€ paths.py              # Config-driven runtime path authority: dataDir /
-â”‚   â”‚                         # chatSavePath / ragDbPath (incl. per-OS
-â”‚   â”‚                         # *Linux overrides) / RAG switches.
-â”‚   â””â”€â”€ chat_store/           # Server-side chat session + chat log
-â”‚       â”œâ”€â”€ store.py          # ensure_session / append_turn / finalize_session,
-â”‚       â”‚                     # the one-active-chat state, .txt transcripts,
-â”‚       â”‚                     # chatRecord.jsonl (create/read/delete).
-â”‚       â””â”€â”€ logger.py         # Small helpers the store uses to log rows.
-â”‚
-â”œâ”€â”€ engine/                   # The agent engine
-â”‚   â”œâ”€â”€ core/
-â”‚   â”‚   â”œâ”€â”€ agent.py          # AgentProfile + the reusable Agent: think/act/observe
-â”‚   â”‚   â”œâ”€â”€ llm.py            # ask_llm(), model resolution (fallback to a
-â”‚   â”‚   â”‚                     # detected model), context window, Ollama scan
-â”‚   â”‚   â””â”€â”€ prompt.py         # PromptManager: agent.md sections + tools -> system prompt
-â”‚   â”œâ”€â”€ agents/
-â”‚   â”‚   â”œâ”€â”€ loader.py         # Read/parse engine/agent_library/{id}/agent.md + agent.json,
-â”‚   â”‚   â”‚                     # save_markdown / save_meta / save_tests (Settings page).
-â”‚   â”‚   â”œâ”€â”€ registry.py       # Scans engine/agent_library/ -> available agents.
-â”‚   â”‚   â””â”€â”€ factory.py        # build_agent(agent_id, model) -> ready-to-use Agent.
-â”‚   â””â”€â”€ agent_library/        # THE AGENTS - filesystem is the source of truth
-â”‚       â”œâ”€â”€ basic_chat/       # agent.md + agent.json  (mode: chat, no tools)
-â”‚       â”œâ”€â”€ dev_assistant/    # agent.md + agent.json  (mode: agent, tools)
-â”‚       â”œâ”€â”€ problem_discovery_agent/  # agent.md + agent.json (mode: agent)
-â”‚       â””â”€â”€ rag_assistant/    # agent.md + agent.json  (mode: agent, chat-memory search)
-â”‚
-â”œâ”€â”€ tools/                    # Capabilities available to agents (per-agent IDs)
-â”‚   â”œâ”€â”€ registry.py           # TOOL_REGISTRY: tool ID -> Python function; resolve_tools/get_session
-â”‚   â”œâ”€â”€ state.py              # FileSession: shared/persisted file-working state
-â”‚   â””â”€â”€ tools.py              # map_files, read_file, write_text_file, delete_files,
-â”‚                             # get_current_date, tell_me_the_date_and_time, search_chat_logs
-â”‚
-â”œâ”€â”€ memory/                   # RAG memory store
-â”‚   â”œâ”€â”€ ingest.py             # Transcript chunking (ingest_file / ingest_directory)
-â”‚   â”œâ”€â”€ search.py             # RAGStorage: Chroma store + fallback vector DB
-â”‚   â”œâ”€â”€ main.py               # Standalone RAG CLI / cognitive loop experiment
-â”‚   â””â”€â”€ rag_commit.py         # status / rebuild_store / purge_store for the store
-â”‚
-â”œâ”€â”€ dashboard/                # Frontend (was "static/")
-â”‚   â”œâ”€â”€ index.html            # UI shell: agent cards + floating chat widget
-â”‚   â”œâ”€â”€ chat.html             # Standalone self-contained chat page
-â”‚   â”œâ”€â”€ config.html           # THE consolidated settings page (see above)
-â”‚   â”œâ”€â”€ config/               # app_settings.json (frontend-owned settings storage)
-â”‚   â”œâ”€â”€ css/styles.css
-â”‚   â””â”€â”€ js/
-â”‚       â”œâ”€â”€ app.js            # index.html boot module (widget, sessions, agents)
-â”‚       â”œâ”€â”€ config-page.js    # config.html boot module (all settings sections)
-â”‚       â”œâ”€â”€ api/api.js        # All HTTP calls (chats, settings, agents, RAG, ...)
-â”‚       â”œâ”€â”€ classes/          # chat-window.js (widget UI), ChatSession.js (state)
-â”‚       â”œâ”€â”€ logic/            # models.js (model dropdown), chat-formatter.js
-â”‚       â””â”€â”€ ui/               # markdown.js, appearance.js, config-form.js,
-â”‚                             # agents.js, agent-editor.js, header-nav.js,
-â”‚                             # interface-indicator.js, interface-manager.js
-â”‚
-â”œâ”€â”€ scripts/                  # CLI utilities
-â”‚   â”œâ”€â”€ rebuild_rag.py        # python scripts/rebuild_rag.py [build|purge|status]
-â”‚   â”œâ”€â”€ version_chats.py      # list | import | bump | versioning on|off
-â”‚   â””â”€â”€ update_docs.py        # Regenerates APP_STRUCTURE.md + APP_CODE_SNAPSHOT.md
-â”‚
-â”œâ”€â”€ interface/                # Modular update & restore layer (no core edits needed)
-â”‚   â”œâ”€â”€ update_manager.py     # Discover/import interface/updates/<domain>/*.py
-â”‚   â”‚                         # get_active_module() + move_module_to_external_archive()
-â”‚   â”œâ”€â”€ interface_dispatcher.py  # trace_and_execute(): logs caller file+line
-â”‚   â”œâ”€â”€ restore_manager.py    # Baseline compare/restore + snapshot_baseline()
-â”‚   â””â”€â”€ updates/              # Active update modules, grouped by domain
-â”‚       â”œâ”€â”€ engine/           # e.g. hello_update.py, newfunction.py (examples)
-â”‚       â”œâ”€â”€ tools/
-â”‚       â””â”€â”€ server/
-â”‚
-â”œâ”€â”€ about/                    # Site identity
-â”‚   â”œâ”€â”€ about.json            # title + subtitle served by GET /api/about
-â”‚   â””â”€â”€ set_title.py          # Edits about.json + 'apply'/'snapshot'/'restore' triggers
-â”‚
-â”œâ”€â”€ config/
-â”‚   â””â”€â”€ models.json           # AUTO-GENERATED at startup from installed Ollama models
-â”œâ”€â”€ docs/
-â”‚   â”œâ”€â”€ CHANGELOG.md          # Every recent change
-â”‚   â”œâ”€â”€ RESTRUCTURE_README.md # History of the current package layout
-â”‚   â”œâ”€â”€ 01_IDEA_AND_ARCHITECTURE.md       # Modular Interface architecture design
-â”‚   â”œâ”€â”€ APP_STRUCTURE.md      # AUTO-GENERATED folder-tree snapshot
-â”‚   â””â”€â”€ APP_CODE_SNAPSHOT.md  # AUTO-GENERATED per-file source snapshot
-â”œâ”€â”€ current-known-good-copy/  # GENERATED restore baseline: complete copy of the
-â”‚                             # last good source (python about/set_title.py snapshot)
-â”œâ”€â”€ data/                     # RUNTIME data (gitignored): chatlog, RAG store,
-â”‚                             # interface_archive/, snapshots/pre_restore_backup/
-â”œâ”€â”€ requirements.txt
-â””â”€â”€ README.md
+├── server/                   # Thin glue: FastAPI app + chat log + path config
+│   ├── server.py             # HTTP endpoints, static mount, lifespan. The ONLY
+│   │                         # thing the browser talks to. `python server.py`
+│   │                         # runs from any directory.
+│   ├── paths.py              # Config-driven runtime path authority: dataDir /
+│   │                         # chatSavePath / ragDbPath / customModulesPath
+│   │                         # (incl. per-OS *Linux overrides) / RAG switches.
+│   └── chat_store/           # Server-side chat session + chat log
+│       ├── store.py          # ensure_session / append_turn / finalize_session,
+│       │                     # the one-active-chat state, .txt transcripts,
+│       │                     # chatRecord.jsonl (create/read/delete).
+│       └── logger.py         # Small helpers the store uses to log rows.
+│
+├── engine/                   # The agent engine
+│   ├── core/
+│   │   ├── agent.py          # AgentProfile + the reusable Agent: think/act/observe
+│   │   ├── llm.py            # ask_llm(), model resolution (fallback to a
+│   │   │                     # detected model), context window, Ollama scan
+│   │   └── prompt.py         # PromptManager: agent.md sections + tools -> system prompt
+│   ├── agents/
+│   │   ├── loader.py         # Read/parse engine/agent_library/{id}/agent.md + agent.json,
+│   │   │                     # save_markdown / save_meta / save_tests (Settings page).
+│   │   ├── registry.py       # Scans engine/agent_library/ -> available agents.
+│   │   └── factory.py        # build_agent(agent_id, model) -> ready-to-use Agent.
+│   └── agent_library/        # THE AGENTS - filesystem is the source of truth
+│       ├── basic_chat/       # agent.md + agent.json  (mode: chat, no tools)
+│       ├── dev_assistant/    # agent.md + agent.json  (mode: agent, tools)
+│       ├── problem_discovery_agent/  # agent.md + agent.json (mode: agent)
+│       └── rag_assistant/    # agent.md + agent.json  (mode: agent, chat-memory search)
+│
+├── tools/                    # Capabilities available to agents (per-agent IDs)
+│   ├── registry.py           # TOOL_REGISTRY: tool ID -> Python function; resolve_tools/get_session
+│   ├── state.py              # FileSession: shared/persisted file-working state
+│   └── tools.py              # map_files, read_file, write_text_file, delete_files,
+│                             # get_current_date, tell_me_the_date_and_time, search_chat_logs
+│
+├── memory/                   # RAG memory store
+│   ├── ingest.py             # Transcript chunking (ingest_file / ingest_directory)
+│   ├── search.py             # RAGStorage: Chroma store + fallback vector DB
+│   ├── main.py               # Standalone RAG CLI / cognitive loop experiment
+│   └── rag_commit.py         # status / rebuild_store / purge_store for the store
+│
+├── dashboard/                # Frontend (was "static/")
+│   ├── index.html            # UI shell: agent cards + floating chat widget
+│   ├── chat.html             # Standalone self-contained chat page
+│   ├── config.html           # THE consolidated settings page (see above)
+│   ├── config/               # app_settings.json (frontend-owned settings storage)
+│   ├── css/styles.css
+│   └── js/
+│       ├── app.js            # index.html boot module (widget, sessions, agents)
+│       ├── config-page.js    # config.html boot module (all settings sections)
+│       ├── api/api.js        # All HTTP calls (chats, settings, agents, RAG, ...)
+│       ├── classes/          # chat-window.js (widget UI), ChatSession.js (state)
+│       ├── logic/            # models.js (model dropdown), chat-formatter.js
+│       └── ui/               # markdown.js, appearance.js, config-form.js,
+│                             # agents.js, agent-editor.js, header-nav.js
+│                             # (+ renderDynamicHeaderButtons for custom modules),
+│                             # interface-indicator.js, interface-manager.js
+│
+├── scripts/                  # CLI utilities
+│   ├── rebuild_rag.py        # python scripts/rebuild_rag.py [build|purge|status]
+│   ├── version_chats.py      # list | import | bump | versioning on|off
+│   └── update_docs.py        # Regenerates APP_STRUCTURE.md + APP_CODE_SNAPSHOT.md
+│
+├── interface/                # Modular update & restore layer (no core edits needed)
+│   ├── update_manager.py     # Discover/import interface/updates/<domain>/*.py
+│   │                         # get_active_module() + move_module_to_external_archive()
+│   ├── interface_dispatcher.py  # trace_and_execute(): logs caller file+line
+│   ├── restore_manager.py    # Baseline compare/restore + snapshot_baseline()
+│   ├── custom_module_manager.py  # Drop-in .py loader for data/custom_modules/
+│   │                         # (default Custom Modules Path)
+│   ├── wiring/               # The connection layer: registers custom-module
+│   │   │                     # routes + bridges custom modules into the update
+│   │   │                     # catalog under the virtual 'custom' domain, so
+│   │   │                     # core code can call them via execute_action()
+│   │   └── bridges.py
+│   └── updates/              # Active update modules, grouped by domain
+│       ├── engine/
+│       ├── tools/
+│       └── server/
+│
+├── about/                    # Site identity
+│   ├── about.json            # title + subtitle served by GET /api/about
+│   └── set_title.py          # Edits about.json + 'apply'/'snapshot'/'restore' triggers
+│
+├── config/
+│   └── models.json           # AUTO-GENERATED at startup from installed Ollama models
+├── docs/
+│   ├── CHANGELOG.md          # Every recent change
+│   ├── HOW_TO_USE.md         # Day-to-day custom modules guide
+│   ├── phase-1-2-3-update/   # Drop-in custom modules install kit (was applied)
+│   ├── APP_STRUCTURE.md      # AUTO-GENERATED folder-tree snapshot
+│   └── APP_CODE_SNAPSHOT.md  # AUTO-GENERATED per-file source snapshot
+├── current-known-good-copy/  # GENERATED restore baseline: complete copy of the
+│                             # last good source (python about/set_title.py snapshot)
+├── data/                     # RUNTIME data (gitignored): chatlog, RAG store,
+│                             # interface_archive/, snapshots/pre_restore_backup/,
+│                             # custom_modules/ (drop-in .py modules)
+├── requirements.txt
+└── README.md
 ```
 
 > **Keep the docs fresh:** `docs/APP_STRUCTURE.md` and `docs/APP_CODE_SNAPSHOT.md`
@@ -246,20 +255,20 @@ terminator1/
 
 ```
 Browser
-  â†“ POST /api/chat {message, model, agent_id, history, session_id, title, new_chat, rag}
+  ↓ POST /api/chat {message, model, agent_id, history, session_id, title, new_chat, rag}
 server.py
-  â†“ chat_store.ensure_session()          server/chat_store/store.py (ONE active chat)
-  â†“ build_agent(agent_id)                engine/agents/factory.py
+  ↓ chat_store.ensure_session()          server/chat_store/store.py (ONE active chat)
+  ↓ build_agent(agent_id)                engine/agents/factory.py
 loader: agent.md + agent.json            engine/agents/loader.py
 tools:  IDs -> functions                 tools/registry.py
 prompt: sections + tool docs -> system msg   engine/core/prompt.py
-  â†“
+  ↓
 Agent.think()                            engine/core/agent.py
-  â†“ ask_llm()                            engine/core/llm.py
+  ↓ ask_llm()                            engine/core/llm.py
 Ollama
-  â†“
+  ↓
 server.py appends the turn to the active chat and returns {reply, session_id, title}
-  â†“ (on "Save chat" / new chat)
+  ↓ (on "Save chat" / new chat)
 chat_store.finalize_session() writes data/chatlog/agent-text-records/<title>[-v].txt
 + logs it in data/chatlog/chatRecord.jsonl
 ```
@@ -267,7 +276,7 @@ chat_store.finalize_session() writes data/chatlog/agent-text-records/<title>[-v]
 ### Model selection
 
 - `config/models.json` is **auto-scanned at startup** (`refresh_models()`) from
-  THIS machine's Ollama â€” it always mirrors what is installed, and the model
+  THIS machine's Ollama — it always mirrors what is installed, and the model
   dropdown only lists detected models.
 - A requested model that is **not installed** (for example a per-agent pin or
   default written on another OS) is never used blindly: the server logs an
@@ -277,7 +286,7 @@ chat_store.finalize_session() writes data/chatlog/agent-text-records/<title>[-v]
 - Agents that use tools get a model Ollama reports as **`tools`-capable** when
   possible (confirmed no-tools models are skipped). Only if no tool-capable
   model exists does the agent answer without tool use.
-- Empty `defaultModel` (`""`) means "resolve to the first detected model" â€”
+- Empty `defaultModel` (`""`) means "resolve to the first detected model" —
   changes to your defaults apply after a server restart.
 
 ## Chats: one server-side session at a time
@@ -292,12 +301,12 @@ and end):
   turn).
 - Ending a chat (`POST /api/chats/end`, the "Save chat" button, or starting a
   new chat) writes ONE transcript per chat to
-  `data/chatlog/agent-text-records/<title>.txt` â€” and on a name collision the
+  `data/chatlog/agent-text-records/<title>.txt` — and on a name collision the
   NEXT version (`<title>-2.txt`, ...). Re-saving a chat you kept typing in
   produces the next version; old versions stay on disk.
 - `data/chatlog/chatRecord.jsonl` is the LOG of those transcripts (title, agent,
   model, version, message/interaction counts, timestamps) used by the frontend
-  drop-down â€” one line per chat VERSION; the drop-down shows the newest version
+  drop-down — one line per chat VERSION; the drop-down shows the newest version
   of each chat. Existing `.txt` files are imported into the log once at startup.
 
 Version helpers: `python scripts/version_chats.py list | import | bump
@@ -305,8 +314,8 @@ Version helpers: `python scripts/version_chats.py list | import | bump
 
 Agent modes:
 
-- `chat`  â€” User â†’ LLM â†’ Response. The factory attaches no tools, so no tool loop can happen.
-- `agent` â€” User â†’ Agent â†’ LLM â†’ Tool? â†’ Observation â†’ LLM â†’ Response. Same `Agent` class; only its configuration differs.
+- `chat`  — User → LLM → Response. The factory attaches no tools, so no tool loop can happen.
+- `agent` — User → Agent → LLM → Tool? → Observation → LLM → Response. Same `Agent` class; only its configuration differs.
 
 ## API
 
@@ -318,13 +327,13 @@ Agent modes:
 | `GET /api/agents/{id}/config` | One agent's consolidated config (meta + `agent.md` + tests + shared tests) |
 | `PUT /api/agents/{id}/config` | Partial update of one agent's config (`meta` / `markdown` / `tests`) |
 | `GET /api/about` | Site identity (title + tagline from `about/about.json`) |
-| `GET /api/interface/status` | Interface status: module catalog, archive, trace-log tail, baseline + drift |
+| `GET /api/interface/status` | Interface status: module catalog, custom modules (folder + `ui_manifests`), archive, trace-log tail, baseline + drift |
 | `POST /api/interface/apply` | Reload update modules from disk + regenerate the docs snapshots |
 | `POST /api/interface/snapshot` | Publish the current tree as the new known-good baseline |
-| `POST /api/interface/restore` | `{baseline?, apply?, dryRun?}` â€” roll back (dry-run by default) |
+| `POST /api/interface/restore` | `{baseline?, apply?, dryRun?}` — roll back (dry-run by default) |
 | `POST /api/interface/run` | Execute an update-module function (`{domain, module, function, args?, kwargs?}`) |
-| `POST /api/interface/toggle-run` | `{enabled}` â€” arm/disarm module execution for the process |
-| `POST /api/chat` | `{message, model, agent_id, history, session_id?, title?, new_chat?, rag?}` â†’ `{reply, session_id, title}` |
+| `POST /api/interface/toggle-run` | `{enabled}` — arm/disarm module execution for the process |
+| `POST /api/chat` | `{message, model, agent_id, history, session_id?, title?, new_chat?, rag?}` → `{reply, session_id, title}` |
 | `GET /api/chats` | Chat log + the active chat (feeds the chats drop-down) |
 | `GET /api/chats/{id}` | One chat: log row + `.txt` content + parsed messages |
 | `POST /api/chats/end` | Finalize the active chat into a versioned `.txt` + log it (`rag` bool overrides committing it to memory) |
@@ -338,7 +347,7 @@ Agent modes:
 | `GET/POST /api/settings` | The stored browser defaults (`dashboard/config/app_settings.json`) |
 | `POST /api/exports` | Save one wizard prompt as `{name}.md` + `{name}.json` (data/exports) |
 
-There is no `/api/activity` endpoint anymore â€” the Agent Monitor feature was
+There is no `/api/activity` endpoint anymore — the Agent Monitor feature was
 removed (see `docs/CHANGELOG.md`). Anything polling it will get a 404.
 
 ### RAG memory store
@@ -350,20 +359,20 @@ Saved chats can be committed to a persistent RAG store so agents using the
   sending/saving (both the index.html flyout and the standalone `chat.html`
   page have it).
 - **Default:** the "Commit saved chats to memory by default" toggle in
-  Configuration â†’ RAG memory (`rag.commitOnSave`).
+  Configuration → RAG memory (`rag.commitOnSave`).
 - **Auto-loading:** when the store is empty, the first search ingests every
   transcript automatically unless "Auto-load transcripts..." is off
   (`rag.autoIngest`).
-- **Paths:** Configuration â†’ Data folder / RAG database path / Chat save path,
+- **Paths:** Configuration → Data folder / RAG database path / Chat save path,
   stored in `dashboard/config/app_settings.json` and resolved by
   `server/paths.py` (absolute paths are used verbatim; relative paths resolve
-  against the project root). Path changes apply after a server restart â€” the
+  against the project root). Path changes apply after a server restart — the
   configuration page shows a "restart the server" banner until you do.
   Transcripts follow **Chat save path**, not the Data folder; blank means
   `<dataDir>/chatlog/agent-text-records`.
 - **Cross-platform paths:** the same settings file works on Windows *and*
   Linux. Add `dataDirLinux`, `chatSavePathLinux` and `ragDbPathLinux` (set
-  from Configuration â†’ "Linux paths" on a non-Windows machine) to point the
+  from Configuration → "Linux paths" on a non-Windows machine) to point the
   app at a second, Linux-specific layout; each override falls back to a
   project default when blank. A Windows-only drive path (`E:\data\...`) left
   without a Linux override is ignored on Linux rather than becoming a literal
@@ -371,7 +380,7 @@ Saved chats can be committed to a persistent RAG store so agents using the
   report the detected `platform` (`"win"` / `"nix"`).
 - **Manual maintenance:** `python scripts/rebuild_rag.py [build|purge|status]`,
   the "Rebuild memory"/"Forget everything" buttons in Configuration, or the
-  "Clear Memory" button in the chat header (`chat.html`) â€” clear resets the
+  "Clear Memory" button in the chat header (`chat.html`) — clear resets the
   store to zero entries.
 
 The store lives at `data/rag_db/chroma.sqlite3` by default. The store keeps
@@ -382,17 +391,16 @@ working until you wipe it.
 
 No Python required: create a folder under `engine/agent_library/` containing
 `agent.json` (configuration) + `agent.md` (behavior), pick tool IDs, and
-refresh â€” the agent appears automatically in `GET /api/agents` and the frontend
+refresh — the agent appears automatically in `GET /api/agents` and the frontend
 selector.
 
 Full field reference, tool catalog, copy-paste example, and troubleshooting:
-see **`docs/CHANGELOG.md`** and `docs/01_IDEA_AND_ARCHITECTURE.md` for the
-project history and architecture (the older `docs/documentation_CREATING_AGENTS.md`
-guide was removed).
+see **`docs/CHANGELOG.md`** for the project history and architecture (the older
+`docs/documentation_CREATING_AGENTS.md` guide was removed).
 
 ## Adding a new tool
 
-1. Write the function in `tools/tools.py` with a clear docstring â€” Ollama turns
+1. Write the function in `tools/tools.py` with a clear docstring — Ollama turns
    docstrings into the tool schema the LLM sees.
 2. Add one line to `TOOL_REGISTRY` in `tools/registry.py`.
 3. Reference the ID in any agent's `agent.json`.
@@ -404,7 +412,7 @@ New or experimental logic can live outside the core modules under
 in the core app is edited.
 
 - **Add a feature**: drop a `.py` file in `interface/updates/<domain>/`, then
-  `python about/set_title.py apply` â€” it is discovered, imported, and the
+  `python about/set_title.py apply` — it is discovered, imported, and the
   docs snapshots are regenerated. `apply --snapshot` also refreshes the
   baseline.
 - **Use it natively (Option B)**:
@@ -435,7 +443,64 @@ in the core app is edited.
   `venv/`, `.git/`, `dashboard/config/app_settings.json`, `about/about.json`)
   is never touched, and the docs snapshots are regenerated afterwards.
 
-Design reference: `docs/01_IDEA_AND_ARCHITECTURE.md`.
+### Drop-in custom modules (the flat `data/custom_modules/` loader)
+
+> **Step-by-step guide:** see **[docs/HOW_TO_USE.md](docs/HOW_TO_USE.md)** for
+> the day-to-day "generate → edit → activate → click" loop, the full anatomy
+> of a module file, and how to disable or inspect modules.
+
+A **second** extension channel from the `interface/updates/` domain system —
+its own manager, `interface/custom_module_manager.py`, scans a single flat
+folder (**Custom Modules Path**, default `data/custom_modules/`; set it in
+Settings → App defaults) for standalone `.py` files and imports each with
+`importlib.util`. The two loaders stay separate and idle modules never touch
+each other, but `interface/wiring/` connects them: a loaded custom module is
+**bridged** into the update catalog under the virtual `custom` domain, so core
+code can ALSO call its functions through the traced dispatcher — see below.
+
+A custom module is just a `.py` file declaring a `UI_MANIFEST` and a
+`register_routes(app)` function:
+
+- **Generate one:** `python about/set_title.py create-module analytics_builder`
+  writes `data/custom_modules/analytics_builder.py` pre-wired with a
+  "＋ Analytics Builder" header button (`UI_MANIFEST`) and a
+  `POST /api/analytics_builder/execute` endpoint (`register_routes(app)`).
+- **Activate:** restart the server (`python server.py`) — simplest — or, for a
+  brand-new module only, `python about/set_title.py apply` (also reachable via
+  Settings → Updates/Interface → Apply). Already-loaded modules pick up edits
+  on a restart.
+- **See it:** reload the dashboard. Each active module's `UI_MANIFEST` button
+  appears in the header automatically (via `renderDynamicHeaderButtons` in
+  `dashboard/js/ui/header-nav.js`) — no `index.html`, `header-nav.js` or
+  `server.py` edits. Clicking prompts for input and POSTs to the module's
+  endpoint.
+- **Where files live:** blank path = `<dataDir>/custom_modules`; relative
+  paths resolve from the project root; absolute paths are used as-is;
+  `GENESSIS_CUSTOM_MODULES_PATH` overrides everything. Path changes apply after
+  a restart. The folder is created automatically on first boot.
+- `GET /api/interface/status` returns `custom_modules` (folder + active names),
+  `ui_manifests` so the frontend knows what to render, and `bridge` — the names
+  also reachable from core code (see below).
+
+#### The wiring bridge: calling a custom module from core code
+
+`interface/wiring/` is the connection layer. When modules load, it registers
+each custom module's FastAPI routes (once per process) and mirrors the module
+into the update manager's catalog under the virtual domain **`custom`**. Once
+loaded, any public function in a drop-in module is callable from anywhere in
+the app through the same traced dispatcher used for update modules — logged to
+`data/interface_trace.log`:
+
+```python
+from interface.interface_dispatcher import InterfaceDispatcher
+
+InterfaceDispatcher().execute_action("custom", "analytics_builder",
+                                     "execute_logic", "some input")
+```
+
+So a feature is exposed to BOTH the browser (header button → route) and the
+Python core (traced function call) from one file. `apply`/restart re-asserts
+the bridge after every reload.
 
 ### In the browser
 
@@ -448,24 +513,27 @@ when the baseline has drifted) and links back to that card.
 Module execution from the UI is **disabled by default**: the card's
 "Enable module execution" toggle arms `/api/interface/run` (backed server-side
 by `INTERFACE_RUN_ENABLED`, flipped via `/api/interface/toggle-run`). On by
-your own risk â€” it runs arbitrary functions from `interface/updates/`.
+your own risk — it runs arbitrary functions from `interface/updates/`.
 
 ## Recent changes
 
 See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for the full history. The most
-recent entry covers the cross-platform path system â€” per-OS path keys for
-Windows/Linux/macOS plus `GENESSIS_*` environment overrides (each machine picks
-its own folder, so one settings file travels between OSes), the "Settings saved"
-response window, resilient model selection, and the Modular Interface wiring
-(`/api/interface/*` + the Settings card). Earlier entries cover the Agent Monitor
-removal, and the recovery of `engine/core/agent.py` + `server/server.py` to their
-working originals.
+recent entry covers the **drop-in custom modules** system (Phase 1/2/3): drop a
+`.py` file with a `UI_MANIFEST` + `register_routes(app)` into **Custom Modules
+Path** (default `data/custom_modules/`) and its header button + FastAPI routes
+go live automatically — scaffold one with `python about/set_title.py
+create-module <name>`. Earlier entries cover the cross-platform path system
+(per-OS keys + `GENESSIS_*` overrides), the "Settings saved" response window,
+resilient model selection, and the Modular Interface wiring
+(`/api/interface/*` + the Settings card). Older entries cover the Agent Monitor
+removal, and the recovery of `engine/core/agent.py` + `server/server.py` to
+their working originals.
 
 Recovery artifacts to be aware of:
 
-- `current-known-good-copy/` â€” the generated restore baseline (see the Modular
+- `current-known-good-copy/` — the generated restore baseline (see the Modular
   Interface section above). Not part of the running app.
-- `server/server.py.infected.bak` and `engine/core/agent.py.infected.bak` â€”
+- `server/server.py.infected.bak` and `engine/core/agent.py.infected.bak` —
   copies of the pre-rollback monitor-era files, kept in case you need to
   diff/inspect them.
 
@@ -479,7 +547,7 @@ Recovery artifacts to be aware of:
   `data/chatlog/chatRecord.jsonl` is the header log that points at them.
 - **`ModuleNotFoundError: No module named 'fastapi'`** when starting the
   server means the shell is not using the project venv. Linux has no bare
-  `python` â€” activate it (`source venv/bin/activate`) or launch directly
+  `python` — activate it (`source venv/bin/activate`) or launch directly
   (`venv/bin/python server/server.py`).
 
 ```
@@ -496,6 +564,8 @@ Usage:
     python about/set_title.py apply [--snapshot]   reload update modules + regen docs
     python about/set_title.py snapshot [folder]    publish current tree as baseline
     python about/set_title.py restore [baseline] [--dry-run]   roll back modified files
+    python about/set_title.py create-module <name>  scaffold a new drop-in module
+                                                      (Phase 3 - CLI Module Generator)
 
 about.json is read by the server on every request, so a title change shows
 after a refresh.
@@ -522,13 +592,19 @@ def _load_about() -> dict:
 
 
 def cmd_apply(argv):
-    """Reload all active update modules and regenerate the docs snapshots."""
-    from interface.update_manager import UpdateManager
-    from interface.restore_manager import RestoreManager
+    """Reload update + custom modules through the wiring layer and regenerate
+    the docs snapshots. New custom modules register their routes via
+    POST /api/interface/apply (or a server restart); edits to an already
+    loaded module's route logic still need a restart."""
+    from interface.wiring import WiringManager
 
-    manager = UpdateManager()
-    manager.reload_all()
-    print(manager.summary())
+    try:
+        wiring = WiringManager()
+        wiring.rewire()
+        print(wiring.summary())
+    except Exception as exc:
+        print(f"WARNING: module reload failed: {exc}")
+        return 1
 
     script = _PROJECT_ROOT / "scripts" / "update_docs.py"
     result = subprocess.run([sys.executable, str(script)], cwd=str(_PROJECT_ROOT))
@@ -542,6 +618,7 @@ def cmd_apply(argv):
         # snapshots (documents the ordering bug fix - previously the baseline
         # was published with pre-regen docs, making restore --dry-run report
         # the two doc files as modified).
+        from interface.restore_manager import RestoreManager
         count = RestoreManager().snapshot_baseline()
         print(f"Baseline refreshed: {count} file(s) -> current-known-good-copy/")
 
@@ -581,6 +658,94 @@ def cmd_restore(argv):
     return 0
 
 
+# --------------------------------------------------------------------------
+# Phase 3 - CLI Module Generator
+# --------------------------------------------------------------------------
+# Scaffolds a new drop-in .py module inside the configured custom modules
+# folder (server.paths.CUSTOM_MODULES_DIR - default data/custom_modules/,
+# or wherever "Custom Modules Path" in Settings points). The generated file
+# already has a valid UI_MANIFEST (Phase 2 - a header button that appears
+# automatically) and register_routes(app) (Phase 1 - an auto-registered
+# FastAPI endpoint) - drop it in, apply/restart, and it's live.
+
+MODULE_TEMPLATE = '''"""
+Drop-in Update Module: {module_name}.py
+Automatically loaded by CustomModuleManager from {custom_dir}
+"""
+
+# ----------------------------------------------------------------
+# 1. UI MANIFEST (Exposed via GET /api/interface/status -> ui_manifests)
+# ----------------------------------------------------------------
+UI_MANIFEST = {{
+    "module_id": "{module_name}",
+    "buttons": [
+        {{
+            "id": "btn-{module_name}",
+            "label": "\uff0b {label}",
+            "target": "header",
+            "action": "prompt_input",
+            "prompt_message": "Enter name/parameter for {label}:",
+            "api_endpoint": "/api/{module_name}/execute",
+            "title": "Trigger {label} action"
+        }}
+    ]
+}}
+
+
+# ----------------------------------------------------------------
+# 2. AUTO-ROUTE REGISTRATION (Hooked by server/server.py's lifespan +
+#    POST /api/interface/apply for newly-added modules)
+# ----------------------------------------------------------------
+def register_routes(app):
+    """Registers FastAPI endpoints automatically at server startup."""
+
+    @app.post("/api/{module_name}/execute")
+    def execute_module_action(payload: dict):
+        user_input = payload.get("project_name") or payload.get("input", "Default")
+        # Add your feature logic here.
+        return {{
+            "status": "success",
+            "message": f"[{module_name}] Successfully processed input: {{user_input}}",
+        }}
+'''
+
+
+def cmd_create_module(argv):
+    """Generate a new boilerplate drop-in module template in the custom
+    modules folder."""
+    if not argv:
+        print("Usage: python about/set_title.py create-module <module_name>")
+        return 1
+
+    from server.paths import CUSTOM_MODULES_DIR
+
+    module_name = argv[0].lower().replace("-", "_").replace(".py", "")
+    if not module_name or not module_name.replace("_", "").isalnum():
+        print(f"Error: '{argv[0]}' is not a valid module name (letters, numbers, - and _ only).")
+        return 1
+
+    target_dir = CUSTOM_MODULES_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = target_dir / f"{module_name}.py"
+    if file_path.exists():
+        print(f"Error: Module '{file_path.name}' already exists in {target_dir}")
+        return 1
+
+    label = module_name.replace("_", " ").title()
+    content = MODULE_TEMPLATE.format(
+        module_name=module_name,
+        label=label,
+        custom_dir=target_dir,
+    )
+    file_path.write_text(content, encoding="utf-8")
+
+    print(f"\u2713 Created new drop-in module: {file_path}")
+    print("\u27a4 Restart your server, or POST /api/interface/apply "
+          "(python about/set_title.py apply), to activate it.")
+    return 0
+
+
 def cmd_title(argv) -> int:
     """Original behavior: edit about.json interactively or positionally."""
     data = _load_about()
@@ -606,6 +771,7 @@ COMMANDS = {
     "apply": cmd_apply,
     "snapshot": cmd_snapshot,
     "restore": cmd_restore,
+    "create-module": cmd_create_module,  # <-- Phase 3
 }
 
 
@@ -618,6 +784,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
 ```
 
 ## config/models.json
@@ -626,10 +793,10 @@ if __name__ == "__main__":
 {
   "models": [
     {
-      "id": "llama3:latest",
-      "name": "llama3:latest",
+      "id": "llama3.1:8b",
+      "name": "llama3.1:8b",
       "source": "ollama",
-      "size": 4661224676
+      "size": 4920753328
     },
     {
       "id": "nomic-embed-text:latest",
@@ -638,22 +805,16 @@ if __name__ == "__main__":
       "size": 274302450
     },
     {
-      "id": "llama3.2:1b",
-      "name": "llama3.2:1b",
-      "source": "ollama",
-      "size": 1321098329
-    },
-    {
       "id": "qwen2.5-coder:latest",
       "name": "qwen2.5-coder:latest",
       "source": "ollama",
       "size": 4683087561
     },
     {
-      "id": "gemma4:e4b",
-      "name": "gemma4:e4b",
+      "id": "gemma4:e2b",
+      "name": "gemma4:e2b",
       "source": "ollama",
-      "size": 9608350718
+      "size": 7162405886
     }
   ]
 }
@@ -7697,7 +7858,7 @@ export async function saveChatSession({
 
 import { renderAgents } from "./ui/agents.js";
 import { applyAppearance } from "./ui/appearance.js";
-import { renderHeaderNav } from "./ui/header-nav.js";
+import { renderHeaderNav, renderDynamicHeaderButtons } from "./ui/header-nav.js";
 import { ChatSession } from "./classes/ChatSession.js";
 import { ChatFactory } from "./classes/chat-window.js";
 import { renderMarkdown } from "./ui/markdown.js";
@@ -7735,6 +7896,28 @@ async function boot() {
     const navSlot = document.getElementById("app-nav");
     if (navSlot) {
         navSlot.replaceChildren(renderHeaderNav("dashboard"));
+
+        // Phase 2 - Dynamic UI Manifests: mount any header buttons declared
+        // by drop-in custom modules (interface/custom_module_manager.py).
+        // Fail-soft; adds nothing on a server with no custom modules loaded.
+        renderDynamicHeaderButtons(navSlot, async (btnConfig) => {
+            if (btnConfig.action === "prompt_input") {
+                const userInput = window.prompt(btnConfig.prompt_message || "Enter value:");
+                if (userInput && userInput.trim()) {
+                    try {
+                        const response = await fetch(btnConfig.api_endpoint, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ project_name: userInput.trim() }),
+                        });
+                        const resData = await response.json();
+                        alert(resData.message || "Action completed!");
+                    } catch (error) {
+                        alert(`Action failed: ${error.message}`);
+                    }
+                }
+            }
+        });
     }
     try {
         const about = await api.getAbout();
@@ -11423,6 +11606,14 @@ export function buildConfigForm({ agents = [], models = [], settings = {}, platf
         settings.ragDbPath || ""
     ));
 
+    // ---- Custom modules path (Phase 1 - Dynamic External Module Loader) ----
+    root.appendChild(fieldTextInput(
+        "custom-modules-path",
+        "Custom Modules Path",
+        "External directory on disk containing drop-in .py modules (e.g., C:\\MyCustomModules, or a project-relative folder). Blank = data/custom_modules. Generate a starter module with \"python about/set_title.py create-module <name>\". Path changes apply after a server restart.",
+        settings.customModulesPath || ""
+    ));
+
     // ---- Per-OS paths (three choices: Windows / Linux / macOS) ----
     // One settings file can carry a separate folder layout for Windows,
     // Linux and macOS. The row for the machine you're on now is highlighted;
@@ -11529,6 +11720,7 @@ export function buildConfigForm({ agents = [], models = [], settings = {}, platf
                 chatSavePath: byId("chat-save-path").value.trim(),
                 dataDir: byId("data-dir-path").value.trim(),
                 ragDbPath: byId("rag-db-path").value.trim(),
+                customModulesPath: byId("custom-modules-path").value.trim(),
                 disableVersioning: byId("disable-versioning").checked,
                 rag: {
                     commitOnSave: byId("rag-commit-save").checked,
@@ -11691,7 +11883,15 @@ function byId(id) {
 //   index.html  -> renderHeaderNav("dashboard")  (via js/app.js)
 //   config.html -> renderHeaderNav("config")     (via js/config-page.js)
 //   chat.html   -> renderHeaderNav("chat")       (static anchors in markup)
+//
+// renderDynamicHeaderButtons (Phase 2 - Dynamic UI Manifests) mounts extra
+// buttons declared by drop-in custom modules (interface/custom_module_manager.py)
+// via GET /api/interface/status -> ui_manifests. Adding a new .py module with
+// a UI_MANIFEST (see about/set_title.py's `create-module` generator) is
+// enough to get a new header button - no edits to this file or index.html.
 // ============================================================
+
+import { getInterfaceStatus } from "../api/api.js";
 
 const PAGES = [
     { id: "dashboard", label: "Dashboard", href: "/static/index.html" },
@@ -11718,6 +11918,53 @@ export function renderHeaderNav(currentId = "") {
 
     return nav;
 }
+
+/**
+ * Fetch /api/interface/status and mount every registered custom module's
+ * UI_MANIFEST buttons into `container` (Phase 2 - Dynamic UI Manifests).
+ *
+ * @param {HTMLElement} container       - element to append buttons into
+ *                                         (e.g. the #app-nav slot)
+ * @param {(btnConfig: object) => void} onActionTriggered - called with the
+ *                                         button's manifest entry on click
+ *
+ * Fail-soft by design: a server without /api/interface/status (or with no
+ * custom modules loaded) simply renders nothing extra.
+ */
+export async function renderDynamicHeaderButtons(container, onActionTriggered) {
+    if (!container) {
+        return;
+    }
+    try {
+        const status = await getInterfaceStatus();
+        const manifests = status.ui_manifests || [];
+
+        manifests.forEach((manifest) => {
+            (manifest.buttons || []).forEach((btnConfig) => {
+                if (document.getElementById(btnConfig.id)) return; // avoid duplicates
+
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.id = btnConfig.id;
+                btn.className = "header-nav-link";
+                btn.textContent = btnConfig.label;
+                btn.title = btnConfig.title || "";
+                btn.style.cursor = "pointer";
+
+                btn.addEventListener("click", () => {
+                    if (onActionTriggered) {
+                        onActionTriggered(btnConfig);
+                    }
+                });
+
+                container.appendChild(btn);
+            });
+        });
+    } catch (err) {
+        console.warn("[UI] Could not render dynamic header buttons:", err);
+    }
+}
+
 ```
 
 ## dashboard/js/ui/interface-indicator.js
@@ -12296,510 +12543,12 @@ function buildInlineNode(tag, groups) {
 
 ```
 
-## docs/01_IDEA_AND_ARCHITECTURE.md
-
-```markdown
-# 01_IDEA_AND_ARCHITECTURE.md: Modular Interface & System Update Architecture
-
-## 1. Executive Summary & Core Idea
-
-As an application grows, adding new features, experimental logic, or system updates directly into core modules increases complexity and risks breaking existing functionality. This architecture introduces a **Modular Interface & Change Tracking System** for the app.
-
-The key objectives are:
-1. **Isolation of Code Additions**: New updates are placed in domain-specific folders (`interface/updates/engine/`, `interface/updates/tools/`, `interface/updates/server/`) without modifying core files.
-2. **Direct Module Object Access (Option B)**: The system dynamically discovers imported Python module objects, allowing developers to execute module functions natively (e.g., `update_manager.get_active_module("engine", "newfunction").execute_new_logic()`).
-3. **Line-Number Change Tracing**: Execution calls can be wrapped in a dispatcher that uses Python's `inspect` module to log exact caller line numbers and file paths for troubleshooting.
-4. **External Archiving**: Inactive or retired update modules are moved out of the main codebase into an external archive folder (`data/interface_archive/`) to prevent repo bloat.
-5. **System-Wide Update & Contained Restoration**:
-   - **Apply**: Reloads all active update modules and regenerates documentation snapshots (`APP_STRUCTURE.md` and `APP_CODE_SNAPSHOT.md`).
-   - **Restore**: An isolated restoration system compares the current codebase against a known baseline (the `current-known-good-copy/` folder) using SHA-256 hashes, creates a safety backup (`data/snapshots/pre_restore_backup/`), excludes user data/env paths (`data/`, `venv/`, `.git/`, `app_settings.json`), and safely rolls back modified files.
-
----
-
-## 2. Target Architecture & Directory Layout
-
-The new components integrate seamlessly into the app structure:
-
-```text
-terminator1/
-├── interface/
-│   ├── interface_dispatcher.py    # Line-number tracing & execution dispatcher
-│   ├── update_manager.py          # Dynamic module discovery (Option B) & external archiver
-│   ├── restore_manager.py         # Isolated baseline comparison, backup & rollback manager
-│   └── updates/                   # Active update modules (grouped by domain)
-│       ├── engine/                # E.g., newfunction.py, agent_patch.py
-│       ├── tools/                 # E.g., custom_capability.py
-│       └── server/                # E.g., route_extensions.py
-├── about/
-│   ├── about.json
-│   └── set_title.py               # Updated with 'apply' and 'restore' CLI triggers
-├── data/
-│   ├── interface_archive/         # External archive directory for retired update files
-│   └── snapshots/
-│       └── pre_restore_backup/    # Automated pre-restoration safety snapshot
-├── current-known-good-copy/       # Complete working copy of the last good source
-│                                  # (the restore baseline, regenerated via `snapshot`)
-├── scripts/
-│   └── update_docs.py             # Codebase snapshot generator
-├── docs/
-│   ├── APP_STRUCTURE.md           # Auto-generated folder-tree snapshot
-│   └── APP_CODE_SNAPSHOT.md       # Auto-generated per-file source snapshot
-└── test/                          # Legacy pre-infection snapshot (recovery reference)
-```
-
----
-
-## 3. Component Breakdown & Responsibilities
-
-### Component A: `UpdateManager` (`interface/update_manager.py`)
-- **Discovery**: Automatically scans all `.py` files in `interface/updates/` subdirectories (`engine/`, `tools/`, `server/`) and imports them.
-- **Cataloging**: Stores live module objects in `active_modules_catalog` formatted as `{ "domain": { "module_name": module_object } }`.
-- **Option B Access**: Exposes `get_active_module(domain_name, module_name)` to return the live module object for direct, native execution.
-- **External Archiving**: Provides `move_module_to_external_archive(domain_name, module_name)`, which physically moves `.py` files out of the repository into `data/interface_archive/<domain>/` and refreshes the catalog.
-
-### Component B: `InterfaceDispatcher` (`interface/interface_dispatcher.py`)
-- **Caller Tracing**: Inspects the call stack using `inspect.currentframe().f_back` to retrieve the filename and line number of the caller.
-- **Execution Logging**: Logs trace entries showing the exact function name, module, and line number before execution.
-- **Traced Execution**: Provides `trace_and_execute(target_function, *args)` to wrap native Option B module calls with line logging.
-
-### Component C: `RestoreManager` (`interface/restore_manager.py`)
-- **Checksum Comparison**: Computes SHA-256 file hashes for every file in the active codebase against the baseline folder (`current-known-good-copy/` by default).
-- **Safety Backup**: Creates a complete snapshot in `data/snapshots/pre_restore_backup/` before overwriting any file.
-- **Exclusion Safety**: Strictly excludes runtime data and configuration paths (`data/`, `venv/`, `.git/`, `__pycache__`, `dashboard/config/app_settings.json`, `about/about.json`) to preserve user settings and chat logs.
-- **Restoration & Doc Sync**: Overwrites corrupted/modified files from the clean baseline and executes `scripts/update_docs.py` to keep documentation snapshots accurate.
-
-### Component D: Action Trigger Integration (`about/set_title.py`)
-- **CLI Commands**:
-  - `python about/set_title.py apply`: Re-discovers active modules and runs `scripts/update_docs.py`.
-  - `python about/set_title.py snapshot [dest]`: Publishing the current tree into `current-known-good-copy/` (the restore baseline).
-  - `python about/set_title.py restore [optional_baseline]`: Invokes `RestoreManager` to execute the rollback workflow.
-  - Default execution (no arguments) preserves interactive title/subtitle editing.
-
----
-
-## 4. System Workflow & Data Flow
-
-1. **Adding New Features**:
-   - Create a Python file under `interface/updates/<domain>/` (e.g., `interface/updates/engine/newfunction.py`).
-   - Run `python about/set_title.py apply` to register the update and refresh documentation.
-2. **Executing Logic (Option B)**:
-   - Access the module via `module = update_manager.get_active_module("engine", "newfunction")`.
-   - Call the function natively: `module.execute_new_logic(data)`.
-3. **Archiving Inactive Code**:
-   - Call `update_manager.move_module_to_external_archive("engine", "newfunction")`.
-   - File is moved to `data/interface_archive/engine/newfunction.py`.
-4. **Refreshing the Baseline**:
-   - Run `python about/set_title.py snapshot` to publish the current known-good tree into `current-known-good-copy/`.
-5. **Restoring Baseline**:
-   - Run `python about/set_title.py restore`.
-   - `RestoreManager` backs up the current codebase to `data/snapshots/pre_restore_backup/`, restores modified files from `current-known-good-copy/`, and regenerates `APP_STRUCTURE.md` and `APP_CODE_SNAPSHOT.md`.
-
----
-
-## 5. Design Decisions
-
-- **Restore semantics**: only files present in BOTH the live tree and the baseline whose SHA-256 differs are overwritten. Files that exist only in the baseline or only in the live tree are reported but left untouched.
-- **Baseline**: `current-known-good-copy/` is the default restore baseline. The legacy `test/` (pre-infection snapshot) is used as a fallback with a staleness warning.
-- **Exclusions**: `data/`, `venv/`, `.git/`, `__pycache__/`, `current-known-good-copy/`, `test/`, `dashboard/config/app_settings.json`, `about/about.json`, `*.bak`, `*.pyc`, `*.pyo`.
-```
-
-## docs/02_IMPLEMENTATION_PLAN.md
-
-```markdown
-# 02_IMPLEMENTATION_PLAN.md: Step-by-Step Implementation Guide & AI Prompt
-
-## Executive Instructions for AI Developer / Workflow
-
-Use the following step-by-step implementation guide and verbatim code blocks to implement the Modular Interface, Update Manager, Restore Manager, and Command Triggers in the codebase.
-
----
-
-## Step-by-Step Implementation Guide
-
-### Step 1: Create Directory Layout
-Create the `interface/` directory structure and external archive/backup folders:
-- `interface/updates/engine/`
-- `interface/updates/tools/`
-- `interface/updates/server/`
-- `data/interface_archive/`
-- `data/snapshots/pre_restore_backup/`
-
-### Step 2: Implement `interface/update_manager.py`
-Add `UpdateManager` to handle dynamic module discovery across domain directories, Option B direct module retrieval, and external archiving.
-
-### Step 3: Implement `interface/interface_dispatcher.py`
-Add `InterfaceDispatcher` to capture caller line numbers (`inspect.currentframe().f_back.f_lineno`) and log function execution.
-
-### Step 4: Implement `interface/restore_manager.py`
-Add `RestoreManager` to compare active codebase files against `test/` baseline hashes, create safety backups, apply path exclusions, and perform restorations.
-
-### Step 5: Update `about/set_title.py`
-Extend `about/set_title.py` to handle `apply` and `restore` CLI commands while maintaining interactive title/subtitle editing.
-
-### Step 6: Create Sample Update Module
-Add `interface/updates/engine/newfunction.py` as an initial update file to verify Option B dynamic loading.
-
-### Step 7: Wire into Server Startup & Refresh Docs
-Initialize `UpdateManager` and `InterfaceDispatcher` in `server/server.py` at startup, then run:
-```bash
-venv/bin/python scripts/update_docs.py
-```
-
----
-
-## Copy-Paste Implementation Prompt for AI Developer
-
-```text
-PROMPT: Implement Modular Interface, Update Manager, Restore Manager, and CLI Triggers
-
-Goal: Implement a modular interface system under `interface/` that dynamically loads Python module files across domain folders (`engine/`, `tools/`, `server/`), supports Option B direct module access, traces caller line numbers, manages external archiving in `data/interface_archive/`, and provides baseline restoration via `about/set_title.py`.
-
-MANDATORY REQUIREMENT: You MUST use the exact Python code blocks provided below verbatim without shortening variable names or modifying logic.
-
---------------------------------------------------------------------------------
-1. File: interface/update_manager.py
---------------------------------------------------------------------------------
-import importlib
-import shutil
-from pathlib import Path
-
-PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
-ACTIVE_UPDATES_DIRECTORY = Path(__file__).resolve().parent / "updates"
-EXTERNAL_ARCHIVE_DIRECTORY = PROJECT_ROOT_DIRECTORY / "data" / "interface_archive"
-
-
-class UpdateManager:
-    """Discovers active update modules in interface/updates/ and manages external archiving."""
-
-    def __init__(self):
-        # Structure: { "engine": {"newfunction": <module_object>} }
-        self.active_modules_catalog = {}
-
-    def discover_all_active_modules(self):
-        """Scans interface/updates/ for active Python files grouped by domain folder."""
-        self.active_modules_catalog.clear()
-
-        for domain_folder in ACTIVE_UPDATES_DIRECTORY.iterdir():
-            if domain_folder.is_dir() and not domain_folder.name.startswith(("_", ".")):
-                domain_name = domain_folder.name
-                self.active_modules_catalog[domain_name] = {}
-
-                for python_file in domain_folder.glob("*.py"):
-                    if python_file.name.startswith("_"):
-                        continue
-                    module_name = python_file.stem
-                    import_path = f"interface.updates.{domain_name}.{module_name}"
-                    self.active_modules_catalog[domain_name][module_name] = importlib.import_module(import_path)
-
-    def get_active_module(self, domain_name: str, module_name: str):
-        """Option B Direct Access: Returns the live Python module object for direct calls."""
-        return self.active_modules_catalog.get(domain_name, {}).get(module_name)
-
-    def list_domain_modules(self, domain_name: str) -> list:
-        """Returns a list of all loaded module names under a domain."""
-        return list(self.active_modules_catalog.get(domain_name, {}).keys())
-
-    def move_module_to_external_archive(self, domain_name: str, module_name: str):
-        """Moves an inactive module file from the codebase to the external archive folder."""
-        source_file_path = ACTIVE_UPDATES_DIRECTORY / domain_name / f"{module_name}.py"
-        if not source_file_path.exists():
-            raise FileNotFoundError(f"Source update file does not exist: {source_file_path}")
-
-        target_archive_directory = EXTERNAL_ARCHIVE_DIRECTORY / domain_name
-        target_archive_directory.mkdir(parents=True, exist_ok=True)
-        target_file_path = target_archive_directory / f"{module_name}.py"
-
-        shutil.move(str(source_file_path), str(target_file_path))
-        self.discover_all_active_modules()  # Refresh catalog after moving
-        return str(target_file_path)
-
-
---------------------------------------------------------------------------------
-2. File: interface/interface_dispatcher.py
---------------------------------------------------------------------------------
-import inspect
-import logging
-
-logger = logging.getLogger("app_change_tracker")
-
-
-class InterfaceDispatcher:
-    """Provides line-number execution tracing and function dispatching."""
-
-    def __init__(self, update_manager):
-        self.update_manager = update_manager
-
-    def trace_and_execute(self, target_function, *arguments, **keyword_arguments):
-        """Option B Traced Execution: Accepts a direct module function reference, logs caller line numbers, and executes."""
-        caller_frame = inspect.currentframe().f_back
-        line_number_in_code = caller_frame.f_lineno if caller_frame else "Unknown Line"
-        source_file_path = caller_frame.f_code.co_filename if caller_frame else "Unknown File"
-
-        function_name = getattr(target_function, "__name__", str(target_function))
-        module_name = getattr(target_function, "__module__", "Unknown Module")
-
-        logger.info(
-            f"[TRACE LOG] Executing '{function_name}' from '{module_name}' "
-            f"called from {source_file_path} at line {line_number_in_code}"
-        )
-
-        return target_function(*arguments, **keyword_arguments)
-
-    def execute_action(self, domain_category: str, submodule_name: str, function_to_call: str, *arguments, **keyword_arguments):
-        """Dispatches an action via string identifiers."""
-        target_module = self.update_manager.get_active_module(domain_category, submodule_name)
-        if not target_module:
-            raise ModuleNotFoundError(
-                f"Active update module '{submodule_name}' under domain '{domain_category}' was not found."
-            )
-
-        target_function = getattr(target_module, function_to_call)
-        return self.trace_and_execute(target_function, *arguments, **keyword_arguments)
-
-
---------------------------------------------------------------------------------
-3. File: interface/restore_manager.py
---------------------------------------------------------------------------------
-import hashlib
-import shutil
-import subprocess
-import sys
-from pathlib import Path
-
-PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
-DEFAULT_BASELINE_DIRECTORY = PROJECT_ROOT_DIRECTORY / "test"
-SNAPSHOT_BACKUP_DIRECTORY = PROJECT_ROOT_DIRECTORY / "data" / "snapshots" / "pre_restore_backup"
-
-EXCLUDED_RESTORE_PATHS = {
-    "data",
-    "venv",
-    ".git",
-    "__pycache__",
-    "dashboard/config/app_settings.json",
-}
-
-
-class RestoreManager:
-    """Manages baseline verification, pre-restore backups, file restoration, and doc updates."""
-
-    def __init__(self, project_root: Path = PROJECT_ROOT_DIRECTORY):
-        self.project_root = Path(project_root)
-
-    def calculate_file_hash(self, file_path: Path) -> str:
-        """Calculates SHA-256 hash for file comparison."""
-        sha256_hash = hashlib.sha256()
-        with open(file_path, "rb") as target_file:
-            for byte_block in iter(lambda: target_file.read(65536), b""):
-                sha256_hash.update(byte_block)
-        return sha256_hash.hexdigest()
-
-    def should_exclude_path(self, relative_path_str: str) -> bool:
-        """Checks if a path should be skipped during restoration."""
-        normalized_path = relative_path_str.replace("\\", "/")
-        for excluded_item in EXCLUDED_RESTORE_PATHS:
-            if normalized_path == excluded_item or normalized_path.startswith(f"{excluded_item}/"):
-                return True
-        return False
-
-    def create_pre_restore_backup(self):
-        """Copies the current working codebase into a pre-restore backup directory."""
-        print(f"[RESTORE] Creating safety backup in: {SNAPSHOT_BACKUP_DIRECTORY}")
-        if SNAPSHOT_BACKUP_DIRECTORY.exists():
-            shutil.rmtree(SNAPSHOT_BACKUP_DIRECTORY)
-
-        SNAPSHOT_BACKUP_DIRECTORY.mkdir(parents=True, exist_ok=True)
-
-        for source_item in self.project_root.rglob("*"):
-            relative_path = source_item.relative_to(self.project_root)
-            relative_str = str(relative_path)
-
-            if self.should_exclude_path(relative_str):
-                continue
-
-            destination_item = SNAPSHOT_BACKUP_DIRECTORY / relative_path
-            if source_item.is_dir():
-                destination_item.mkdir(parents=True, exist_ok=True)
-            elif source_item.is_file():
-                destination_item.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source_item, destination_item)
-
-        print("[RESTORE] Safety backup created successfully.")
-
-    def restore_from_baseline(self, baseline_source_directory: str = None):
-        """Restores codebase files from a known good baseline directory."""
-        source_dir = Path(baseline_source_directory) if baseline_source_directory else DEFAULT_BASELINE_DIRECTORY
-
-        if not source_dir.exists():
-            raise FileNotFoundError(f"[RESTORE ERROR] Baseline directory does not exist: {source_dir}")
-
-        print(f"[RESTORE] Initiating restoration from baseline: {source_dir}")
-
-        # 1. Create safety backup of current state
-        self.create_pre_restore_backup()
-
-        # 2. Compare and restore files
-        restored_files_count = 0
-        for baseline_file in source_dir.rglob("*"):
-            if not baseline_file.is_file():
-                continue
-
-            relative_path = baseline_file.relative_to(source_dir)
-            relative_str = str(relative_path)
-
-            if self.should_exclude_path(relative_str):
-                continue
-
-            target_file_path = self.project_root / relative_path
-
-            # Check if file needs updating
-            needs_copy = False
-            if not target_file_path.exists():
-                needs_copy = True
-            else:
-                if self.calculate_file_hash(baseline_file) != self.calculate_file_hash(target_file_path):
-                    needs_copy = True
-
-            if needs_copy:
-                target_file_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(baseline_file, target_file_path)
-                print(f"  -> Restored: {relative_str}")
-                restored_files_count += 1
-
-        print(f"[RESTORE] Total files restored: {restored_files_count}")
-
-        # 3. Refresh documentation snapshots
-        print("[RESTORE] Regenerating documentation snapshots...")
-        update_script = self.project_root / "scripts" / "update_docs.py"
-        subprocess.run([sys.executable, str(update_script)], check=True)
-        print("[RESTORE] System restoration completed successfully.")
-
-
---------------------------------------------------------------------------------
-4. File: about/set_title.py
---------------------------------------------------------------------------------
-"""Change the app title/subtitle shown on index.html OR execute app update commands.
-
-Usage:
-    python about/set_title.py [title [subtitle]]
-    python about/set_title.py apply
-    python about/set_title.py restore [snapshot_path]
-"""
-import json
-import subprocess
-import sys
-from pathlib import Path
-
-ABOUT_JSON_FILE_PATH = Path(__file__).parent / "about.json"
-PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
-
-
-def execute_system_update():
-    """Refreshes active interface modules and regenerates documentation snapshots."""
-    print("[UPDATE TRIGGER] Discovering and refreshing active update modules...")
-    from interface.update_manager import UpdateManager
-    update_manager = UpdateManager()
-    update_manager.discover_all_active_modules()
-    print("[UPDATE TRIGGER] Active modules successfully cataloged.")
-
-    print("[UPDATE TRIGGER] Regenerating APP_STRUCTURE.md and APP_CODE_SNAPSHOT.md...")
-    update_script = PROJECT_ROOT_DIRECTORY / "scripts" / "update_docs.py"
-    subprocess.run([sys.executable, str(update_script)], check=True)
-    print("[UPDATE TRIGGER] Documentation snapshots successfully updated.")
-
-
-def execute_system_restore(baseline_source_directory: str = None):
-    """Triggers the isolated RestoreManager to rollback code to a known baseline."""
-    from interface.restore_manager import RestoreManager
-    restore_manager = RestoreManager()
-    restore_manager.restore_from_baseline(baseline_source_directory=baseline_source_directory)
-
-
-def handle_title_update(arguments_list):
-    """Default interactive/argument-driven title and subtitle editor."""
-    data = json.loads(ABOUT_JSON_FILE_PATH.read_text(encoding="utf-8")) if ABOUT_JSON_FILE_PATH.exists() else {}
-    data.setdefault("title", "Genessis")
-    data.setdefault("subtitle", "Home")
-
-    for index_key, key_name in enumerate(("title", "subtitle")):
-        value = arguments_list[index_key] if index_key < len(arguments_list) else None
-        if value is None:
-            try:
-                value = input(f"{key_name} [{data[key_name]}]: ").strip()
-            except EOFError:
-                break
-        if value:
-            data[key_name] = value
-
-    ABOUT_JSON_FILE_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print("Saved ->", data["title"])
-
-
-def main():
-    command_line_arguments = sys.argv[1:]
-
-    if command_line_arguments:
-        first_argument_action = command_line_arguments[0].lower()
-        if first_argument_action == "apply":
-            execute_system_update()
-            return
-        elif first_argument_action == "restore":
-            target_snapshot = command_line_arguments[1] if len(command_line_arguments) > 1 else None
-            execute_system_restore(baseline_source_directory=target_snapshot)
-            return
-
-    handle_title_update(command_line_arguments)
-
-
-if __name__ == "__main__":
-    main()
-
-
---------------------------------------------------------------------------------
-5. File: interface/updates/engine/newfunction.py
---------------------------------------------------------------------------------
-"""
-LOCATION: interface/updates/engine/newfunction.py
-USAGE (Option B Direct Access):
-    module = update_manager.get_active_module("engine", "newfunction")
-    result = module.execute_new_logic("Input Data")
-"""
-import logging
-
-logger = logging.getLogger("app_change_tracker")
-
-
-def execute_new_logic(data_payload: str):
-    """Example logic function for engine updates."""
-    logger.info(f"[ENGINE: newfunction] Processing payload: {data_payload}")
-    return f"Engine processed payload: {data_payload}"
-
-
-def secondary_engine_action(value: int):
-    """Secondary action inside the same module file."""
-    return value * 10
-
-
---------------------------------------------------------------------------------
-6. Execution Tasks:
---------------------------------------------------------------------------------
-1. Create folder structure (`interface/updates/engine/`, `interface/updates/tools/`, `interface/updates/server/`, `data/interface_archive/`).
-2. Write `interface/update_manager.py` verbatim.
-3. Write `interface/interface_dispatcher.py` verbatim.
-4. Write `interface/restore_manager.py` verbatim.
-5. Update `about/set_title.py` verbatim.
-6. Write sample module `interface/updates/engine/newfunction.py`.
-7. Execute: `python about/set_title.py apply`
-8. Execute: `venv/bin/python scripts/update_docs.py`
-```
-
-```
-
 ## docs/APP_STRUCTURE.md
 
 ```markdown
 # Terminator1 — App Structure
 
-_Auto-generated on 2026-09-13T12:57:57 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-14T11:35:34 by `scripts/update_docs.py`._
 
 
 ```
@@ -12836,12 +12585,25 @@ genV2_Interface_projectManager/
 |   |-- config.html
 |   `-- index.html
 |-- docs
-|   |-- 01_IDEA_AND_ARCHITECTURE.md
-|   |-- 02_IMPLEMENTATION_PLAN.md
+|   |-- phase-1-2-3-update
+|   |   |-- about
+|   |   |   `-- set_title.py
+|   |   |-- dashboard
+|   |   |   `-- js
+|   |   |       |-- ui
+|   |   |       |   |-- config-form.js
+|   |   |       |   `-- header-nav.js
+|   |   |       `-- app.js
+|   |   |-- interface
+|   |   |   `-- custom_module_manager.py
+|   |   |-- server
+|   |   |   |-- paths.py
+|   |   |   `-- server.py
+|   |   `-- INSTRUCTIONS.md
 |   |-- APP_CODE_SNAPSHOT.md
 |   |-- APP_STRUCTURE.md
 |   |-- CHANGELOG.md
-|   `-- RESTRUCTURE_README.md
+|   `-- HOW_TO_USE.md
 |-- engine
 |   |-- agent_library
 |   |   |-- basic_chat
@@ -12870,17 +12632,17 @@ genV2_Interface_projectManager/
 |-- interface
 |   |-- updates
 |   |   |-- engine
-|   |   |   |-- __init__.py
-|   |   |   |-- hello_update.py
-|   |   |   |-- newfunction.py
-|   |   |   `-- project_creator.py
+|   |   |   `-- __init__.py
 |   |   |-- server
-|   |   |   |-- __init__.py
-|   |   |   `-- project_routes.py
+|   |   |   `-- __init__.py
 |   |   |-- tools
 |   |   |   `-- __init__.py
 |   |   `-- __init__.py
+|   |-- wiring
+|   |   |-- __init__.py
+|   |   `-- bridges.py
 |   |-- __init__.py
+|   |-- custom_module_manager.py
 |   |-- interface_dispatcher.py
 |   |-- restore_manager.py
 |   `-- update_manager.py
@@ -12911,7 +12673,7 @@ genV2_Interface_projectManager/
 `-- requirements.txt
 ```
 
-_76 tracked source file(s)._
+_81 tracked source file(s)._
 
 ```
 
@@ -12922,6 +12684,95 @@ _76 tracked source file(s)._
 
 All notable changes to this project. Format based on Keep a Changelog
 (https://keepachangelog.com/), grouped by date.
+
+## 2026-09-13 — Phase 1/2/3: drop-in custom modules (Dynamic External Module Loader)
+
+Installed the three-phase "drop a `.py` file in and it just works" extension
+system, following `phase-1-2-3-update/INSTRUCTIONS.md`. You can now drop a
+standalone `.py` module into **Custom Modules Path** (default
+`data/custom_modules/`) and — after a restart, or a live apply — it gets a
+header button on the dashboard plus its own FastAPI routes, with **no manual
+editing** of `index.html`, `header-nav.js`, or `server.py`.
+
+This is a **second, independent** loader from the existing
+`interface/update_manager.py` domain system (`interface/updates/<domain>/`).
+The two managers never talk to each other, so nothing already built was
+touched or can break.
+
+### Added — new file
+
+- `interface/custom_module_manager.py` — `CustomModuleManager` scans the flat
+  `CUSTOM_MODULES_DIR` folder for `*.py` files (skipping `_`/`.`-prefixed
+  helpers), imports each standalone file with `importlib.util` (they are not a
+  Python package), and exposes `active_modules_catalog`, `reload_all()`,
+  `get_active_module(name)`, `list_modules()` and `ui_manifests()`. A module
+  with a broken import is logged and skipped — one bad drop-in file never
+  blocks boot. Also provides the process-wide `get_custom_module_manager()`
+  singleton.
+
+### Added — `server/paths.py`
+
+- `customModulesPath` setting key (Settings → App defaults → **Custom Modules
+  Path**), with `GENESSIS_CUSTOM_MODULES_PATH` env-var override, resolved the
+  same way `dataDir` / `ragDbPath` already are (relative → project root,
+  absolute → used as-is, blank → `<dataDir>/custom_modules`). Exposed as
+  `CUSTOM_MODULES_PATH` / `CUSTOM_MODULES_DIR`; `about()` now reports
+  `custom_modules_dir` and its `sources` map. `data/custom_modules/` is
+  created automatically on first boot.
+
+### Added — `server/server.py`
+
+- `lifespan()` creates a `CustomModuleManager`, prints the active catalog, and
+  calls each active module's `register_routes(app)`; a broken module can never
+  block boot (warns and sets `app.state.custom_module_manager = None`).
+- `_register_custom_routes(manager)` + the `_CUSTOM_ROUTES_REGISTERED` set —
+  routes are registered at most once per process, so
+  `POST /api/interface/apply` can pick up brand-new modules **live** without
+  double-registering old ones (edits to an already-loaded module's route logic
+  still need a real restart).
+- `GET /api/interface/status` now also returns `custom_modules` (resolved
+  folder + active names) and `ui_manifests` (every active module's
+  `UI_MANIFEST`, used by the frontend to render header buttons).
+
+### Added — CLI (`about/set_title.py`)
+
+- `python about/set_title.py create-module <name>` — scaffolds a drop-in
+  module pre-wired with a `UI_MANIFEST` and `register_routes(app)` (writes to
+  Custom Modules Path, default `data/custom_modules/<name>.py`). Validates the
+  name (letters / numbers / `-` / `_`), refuses to overwrite existing files,
+  and prints activate instructions.
+- `apply` now prints a `CustomModuleManager.summary()` catalog line (new
+  modules go live via `apply`, edits to loaded ones need a restart).
+
+### Added — frontend (`dashboard/`)
+
+- `js/ui/header-nav.js` — new export `renderDynamicHeaderButtons(container,
+  onClick)`: fetches `/api/interface/status`, reads `ui_manifests`, and appends
+  one button per manifest entry (id-deduplicated). Fail-soft — renders nothing
+  on a server with no custom modules.
+- `js/app.js` — calls `renderDynamicHeaderButtons` right after mounting the
+  normal nav row; a click follows the `action: "prompt_input"` contract
+  (prompt via `prompt_message`, POST to `api_endpoint`, alert the response).
+- `js/ui/config-form.js` — "Custom Modules Path" text field on the Settings
+  page, persisted through the existing generic `saveAppSettings()` merge; path
+  changes apply after a restart (the existing "restart needed" banner).
+
+### Using it
+
+```bash
+python about/set_title.py create-module analytics_builder   # scaffold one
+python server.py                                            # restart to activate
+# or, without restarting: python about/set_title.py apply
+```
+
+Reload the dashboard — the "＋ Analytics Builder" button appears in the header
+automatically and POSTs to the module's endpoint on click.
+
+### Verified
+
+- `python -m py_compile` clean on the 4 changed/new Python files; `node
+  --check` clean on the 3 changed JS files.
+- `CustomModuleManager` imports cleanly (empty folder → zero active modules).
 
 ## 2026-09-12 — Cross-platform paths (Windows/Linux/macOS) + save feedback
 
@@ -13072,8 +12923,9 @@ browser tab on every page.
 
 ## 2026-09-12 — 02 implementation plan folded in; server startup wiring
 
-Follow-up to the Modular Interface build, based on `docs/02_IMPLEMENTATION_PLAN.md`
-(dropped into `docs/`). The plan's missing pieces were folded into the existing
+Follow-up to the Modular Interface build, based on the 02 implementation plan
+(`docs/02_IMPLEMENTATION_PLAN.md`, later folded in and removed). The plan's
+missing pieces were folded into the existing
 implementation instead of a verbatim overwrite, preserving the earlier choices
 (`current-known-good-copy/` baseline, `--dry-run`, `snapshot` command, safer
 exclusions). The plan's Linux path (`venv/bin/python`) is `venv\Scripts\python.exe`
@@ -13105,7 +12957,9 @@ on this Windows project.
 ## 2026-09-12 — Modular Interface & System Update Architecture
 
 Introduced a pluggable update/restore layer so new features never touch core
-modules again. Design reference: `docs/01_IDEA_AND_ARCHITECTURE.md`.
+modules again. Design reference: see **`README.md`** ("Modular interface") and
+this changelog — the original design doc
+(`docs/01_IDEA_AND_ARCHITECTURE.md`) was folded in and removed.
 
 ### Added — `interface/` package
 
@@ -13243,200 +13097,2916 @@ project root), and `venv\Scripts\python -m uvicorn server.server:app` (root).
   launch-anywhere noted.
 ```
 
-## docs/RESTRUCTURE_README.md
+## docs/HOW_TO_USE.md
 
 ```markdown
-﻿# Terminator1 â€” Reorganized Layout
+# How to Use the Custom Modules Feature
 
-This is your original app, regrouped into four clear domains. All import
-paths were rewritten to match â€” this isn't just a file shuffle, it's a
-working package layout.
+This is your day-to-day guide for adding new features to the app without
+touching `index.html`, `header-nav.js`, or `server.py` by hand. Every new
+feature is just one `.py` file.
 
-```
-terminator1/
-â”œâ”€â”€ engine/                 # The agent factory ("engine")
-â”‚   â”œâ”€â”€ core/
-â”‚   â”‚   â”œâ”€â”€ agent.py        # Agent runtime: think/act/observe loop
-â”‚   â”‚   â”œâ”€â”€ llm.py          # ask_llm(), model resolution (falls back to a
-â”‚   â”‚   â”‚                   # detected model; prefers tools-capable), Ollama scan
-â”‚   â”‚   â””â”€â”€ prompt.py       # agent.md sections + tools -> system prompt
-â”‚   â”œâ”€â”€ agents/
-â”‚   â”‚   â”œâ”€â”€ loader.py       # Reads agent_library/{id}/agent.md + agent.json
-â”‚   â”‚   â”œâ”€â”€ registry.py     # Scans agent_library/ -> available agents
-â”‚   â”‚   â””â”€â”€ factory.py      # build_agent(agent_id, model) -> ready Agent
-â”‚   â””â”€â”€ agent_library/      # Agent definitions (data, not code)
-â”‚       â”œâ”€â”€ basic_chat/
-â”‚       â”œâ”€â”€ dev_assistant/
-â”‚       â”œâ”€â”€ problem_discovery_agent/
-â”‚       â””â”€â”€ rag_assistant/
-â”‚
-â”œâ”€â”€ tools/                  # Tools available to agents (per-agent capabilities)
-â”‚   â”œâ”€â”€ registry.py         # TOOL_REGISTRY: tool IDs -> Python functions
-â”‚   â”œâ”€â”€ state.py            # FileSession: shared/persisted file-working state
-â”‚   â””â”€â”€ tools.py            # map/read/write/delete + date/time + search tools
-â”‚
-â”œâ”€â”€ memory/                 # RAG memory store (was "rag/")
-â”‚   â”œâ”€â”€ ingest.py           # Transcript chunking (ingest_file / ingest_directory)
-â”‚   â”œâ”€â”€ search.py           # RAGStorage: Chroma store + fallback vector DB
-â”‚   â”œâ”€â”€ main.py             # Standalone RAG CLI / cognitive loop experiment
-â”‚   â””â”€â”€ rag_commit.py       # Commit, purge, rebuild, status for the store
-â”‚
-â”œâ”€â”€ dashboard/               # Frontend (was "static/")
-â”‚   â”œâ”€â”€ index.html          # Main UI shell (agent cards, floating chat)
-â”‚   â”œâ”€â”€ chat.html           # Standalone self-contained chat page
-â”‚   â”œâ”€â”€ config.html         # NEW: consolidated settings page (one place for
-â”‚   â”‚                       #      app defaults, appearance, every agent,
-â”‚   â”‚                       #      shared tests, models)
-â”‚   â”œâ”€â”€ config/app_settings.json
-â”‚   â”œâ”€â”€ css/styles.css
-â”‚   â””â”€â”€ js/
-â”‚       â”œâ”€â”€ app.js
-â”‚       â”œâ”€â”€ config-page.js  # NEW: boot module for config.html
-â”‚       â”œâ”€â”€ api/api.js
-â”‚       â”œâ”€â”€ classes/ (ChatSession.js, chat-window.js)
-â”‚       â”œâ”€â”€ logic/  (models.js, chat-formatter.js)
-â”‚       â””â”€â”€ ui/     (markdown.js, agents.js, appearance.js, config-form.js,
-â”‚                    agent-editor.js, header-nav.js,
-â”‚                    interface-indicator.js,   # header "N updates" pill
-â”‚                    interface-manager.js)     # Settings "Updates/Interface" card
-â”‚
-â”œâ”€â”€ server/                  # Thin glue: FastAPI app + chat log + path config
-â”‚   â”œâ”€â”€ server.py            # HTTP endpoints, static mount, lifespan; also
-â”‚   â”‚                        # discovers interface/updates at startup and
-â”‚   â”‚                        # exposes update_manager + dispatcher on app.state;
-â”‚   â”‚                        # /api/interface/{status,apply,snapshot,restore,
-â”‚   â”‚                        # run,toggle-run} wire the UI to the update system
-â”‚   â”œâ”€â”€ paths.py             # Config-driven runtime path authority (dataDir /
-â”‚   â”‚                         # chatSavePath / ragDbPath, incl. per-OS Windows /
-â”‚   â”‚                         # Linux / macOS keys + GENESSIS_* env overrides)
-â”‚   â””â”€â”€ chat_store/
-â”‚       â”œâ”€â”€ logger.py
-â”‚       â””â”€â”€ store.py
-â”‚
-â”œâ”€â”€ config/
-â”‚   â””â”€â”€ models.json          # auto-generated model snapshot (the old
-â”‚                            # settings.json is gone - one default now lives
-â”‚                            # in app_settings.json#defaultAgentId)
-â”œâ”€â”€ scripts/
-â”‚   â”œâ”€â”€ rebuild_rag.py
-â”‚   â”œâ”€â”€ version_chats.py
-â”‚   â””â”€â”€ update_docs.py        # NEW: regenerates APP_STRUCTURE.md + APP_CODE_SNAPSHOT.md
-â”œâ”€â”€ interface/                # NEW: modular update & restore layer
-â”‚   â”œâ”€â”€ update_manager.py     #    discover/import interface/updates/<domain>/*
-â”‚   â”œâ”€â”€ interface_dispatcher.py  # trace_and_execute() caller line tracing
-â”‚   â”œâ”€â”€ restore_manager.py    #    baseline compare/restore + snapshot_baseline()
-â”‚   â””â”€â”€ updates/              #    engine/ | tools/ | server/
-â”œâ”€â”€ about/
-â”‚   â”œâ”€â”€ about.json           # title/subtitle served by GET /api/about
-â”‚   â””â”€â”€ set_title.py         # + 'apply' / 'snapshot' / 'restore' CLI triggers
-â”œâ”€â”€ docs/
-â”‚   â”œâ”€â”€ CHANGELOG.md
-â”‚   â”œâ”€â”€ RESTRUCTURE_README.md
-â”‚   â”œâ”€â”€ 01_IDEA_AND_ARCHITECTURE.md   # NEW: design doc for the update/restore layer
-â”‚   â”œâ”€â”€ APP_STRUCTURE.md              # AUTO-GENERATED
-â”‚   â””â”€â”€ APP_CODE_SNAPSHOT.md          # AUTO-GENERATED
-â”œâ”€â”€ current-known-good-copy/ # GENERATED restore baseline (python about/set_title.py snapshot)
-â”œâ”€â”€ requirements.txt
-â””â”€â”€ README.md                 # Original project README (kept up to date)
+---
+
+## The 4-step loop
+
+1. **Generate** a module from the terminal.
+2. **Edit** the one function that does the work.
+3. **Activate** it (restart, or the live-apply trick below).
+4. **Click** the button that shows up in the dashboard header.
+
+That's it. Repeat for every new feature.
+
+---
+
+## Step 1 — Generate a module
+
+From your project root:
+
+```bash
+python about/set_title.py create-module analytics_builder
 ```
 
-## Launching
-
-`python server.py` now works from any directory (a `sys.path` bootstrap at the
-top of the file adds the project root and drops the script's own folder so the
-`server` package is never shadowed). Equivalent launch from the project root:
+Pick any name you want (letters, numbers, `-` and `_`). This writes a new
+file:
 
 ```
-# Windows
-venv\Scripts\python -m uvicorn server.server:app
-
-# Linux
-venv/bin/python -m uvicorn server.server:app
+data/custom_modules/analytics_builder.py
 ```
 
-The app is cross-platform (Windows / Linux / macOS / ChromeOS Linux). All
-runtime storage is resolved by `server/paths.py` from `dataDir` /
-`chatSavePath` / `ragDbPath` (defaults = project-relative `data/`), with
-`GENESSIS_DATA_DIR` / `GENESSIS_CHAT_SAVE_PATH` / `GENESSIS_RAG_DB_PATH` env
-overrides taking precedence. Windows absolute paths (`E:\...`) saved in
-`app_settings.json` are auto-mapped to project-relative folders on non-Windows
-OSes, and cleared on save from the Settings page. See the README's "Changing
-where data is saved".
+(or wherever your **Custom Modules Path** points, if you changed it in
+Settings — see "Changing where modules live" below).
 
-> The Agent Monitor feature (`dashboard/monitor.html`, `dashboard/js/monitor.js`,
-> `server/activity.py` and the `/api/activity*` endpoints) was removed in
-> 2026-09-12. See `docs/CHANGELOG.md`.
+If a module with that name already exists, the command refuses to overwrite
+it and tells you so — pick a different name or delete the old file first.
 
-> Since 2026-09-12 the app also runs cross-platform: per-OS path overrides
-> (`dataDirLinux` / `chatSavePathLinux` / `ragDbPathLinux`) keep one settings
-> file working on Windows and Linux, and `engine/core/llm.py` falls back to a
-> detected model when a requested one is not installed. See `docs/CHANGELOG.md`.
+## Step 2 — Edit the module
 
-## What changed under the hood
+Open the file it just created. You'll see two things:
 
-Every cross-module import was rewritten to match the new folder names:
+```python
+UI_MANIFEST = {
+    "module_id": "analytics_builder",
+    "buttons": [
+        {
+            "id": "btn-analytics_builder",
+            "label": "＋ Analytics Builder",
+            "target": "header",
+            "action": "prompt_input",
+            "prompt_message": "Enter name/parameter for Analytics Builder:",
+            "api_endpoint": "/api/analytics_builder/execute",
+            "title": "Trigger Analytics Builder action"
+        }
+    ]
+}
 
-| Old import | New import |
+def register_routes(app):
+    @app.post("/api/analytics_builder/execute")
+    def execute_module_action(payload: dict):
+        user_input = payload.get("project_name") or payload.get("input", "Default")
+        return {
+            "status": "success",
+            "message": f"[analytics_builder] Successfully processed input: {user_input}",
+        }
+```
+
+**`UI_MANIFEST`** controls what shows up in the header — the button's label,
+its tooltip, and what it asks the user for. You can safely edit:
+
+- `"label"` — the button text (emoji optional, e.g. `"＋ Analytics Builder"`)
+- `"prompt_message"` — the text of the popup asking for input
+- `"title"` — the tooltip shown on hover
+
+Leave `"id"` and `"api_endpoint"` alone unless you also update them
+consistently in `register_routes` below.
+
+**`register_routes(app)`** is where the real logic goes. `execute_module_action`
+is called every time someone clicks the button and submits the prompt.
+Replace the body with whatever you actually want to happen — write a file,
+call another part of your app, hit an external API, whatever. Just make
+sure it returns a dict with a `"message"` key (that's what gets shown in
+the alert box on the frontend).
+
+Example — make it actually create a folder:
+
+```python
+from pathlib import Path
+from server.paths import DATA_DIR
+
+def register_routes(app):
+    @app.post("/api/analytics_builder/execute")
+    def execute_module_action(payload: dict):
+        name = (payload.get("project_name") or payload.get("input") or "untitled").strip()
+        folder = DATA_DIR / "projects" / name
+        folder.mkdir(parents=True, exist_ok=True)
+        return {"status": "success", "message": f"Created project folder: {folder}"}
+```
+
+You can add as many buttons to `UI_MANIFEST["buttons"]` and as many routes
+inside `register_routes` as you want in a single module — they don't have
+to be 1:1.
+
+## Step 3 — Activate it
+
+Pick whichever is easier in the moment:
+
+- **Restart the server** — always works, no surprises:
+  ```bash
+  python server.py
+  ```
+- **Or, without restarting** — reload modules and register any brand-new
+  ones live:
+  ```bash
+  python about/set_title.py apply
+  ```
+  This also works from the browser: whatever button in **Settings → Updates
+  / Interface** calls `POST /api/interface/apply` does the same thing.
+
+  > One caveat: `apply` only wires up routes for modules it has **never
+  > seen before**. If you edit a module that was already loaded (change
+  > what `execute_module_action` does), that edit needs a real restart to
+  > take effect — the old version is still bound to the route in memory.
+  > New file → `apply` is enough. Edited file → restart.
+
+## Step 4 — Use it
+
+Reload the dashboard page (`index.html`). Your new button appears in the
+header nav automatically, right next to Dashboard / Chat / Settings.
+Click it:
+
+1. A prompt pops up asking whatever you put in `prompt_message`.
+2. Type something and hit OK.
+3. It POSTs to your `api_endpoint`, and whatever `"message"` your function
+   returned pops up in an alert.
+
+If nothing shows up in the header after activating, check the server's
+console output for a line like:
+
+```
+[custom-modules] Failed to load analytics_builder.py: <error>
+```
+
+That means there's a Python error in your module — fix it and re-apply/restart.
+
+---
+
+## Removing or disabling a module
+
+There's no CLI command for this yet — just delete or rename the `.py` file
+in your custom modules folder and restart the server (or `apply`). A
+renamed file starting with `_` or `.` (e.g. `_analytics_builder.py`) is
+skipped by the loader too, which is a quick way to "turn off" a module
+without deleting your code.
+
+## Checking what's currently loaded
+
+Hit this endpoint directly (in a browser or with curl) any time:
+
+```
+GET /api/interface/status
+```
+
+Look for:
+
+```json
+{
+  "custom_modules": {
+    "dir": "/path/to/data/custom_modules",
+    "active": ["analytics_builder", "project_manager"]
+  },
+  "ui_manifests": [ ... ]
+}
+```
+
+`custom_modules.active` is the list of every module currently loaded.
+`ui_manifests` is exactly what the frontend uses to draw the buttons — if
+your module's manifest isn't in that list, it either failed to import or
+hasn't been picked up yet (restart / `apply`).
+
+## Changing where modules live
+
+Settings → App defaults → **Custom Modules Path**. Point it at any folder
+— a project-relative path, an absolute path, or an external drive/synced
+folder. Leave it blank to use the default (`data/custom_modules/`). Like
+the other path fields, this needs a server restart after you save it.
+
+---
+
+## Quick reference
+
+| I want to... | Do this |
 |---|---|
-| `from app.core.agent import Agent` | `from engine.core.agent import Agent` |
-| `from app.core.llm import ask_llm` | `from engine.core.llm import ask_llm` |
-| `from app.agents.factory import build_agent` | `from engine.agents.factory import build_agent` |
-| `from app.tools.registry import resolve_tools` | `from tools.registry import resolve_tools` |
-| `from app.tools.state import FileSession` | `from tools.state import FileSession` |
-| `from rag.ingest import ingest_directory` | `from memory.ingest import ingest_directory` |
-| `from rag.search import RAGStorage` | `from memory.search import RAGStorage` |
-| `from app.rag_commit import status` | `from memory.rag_commit import status` |
-| `from app.chat_store import store` | `from server.chat_store import store` |
-| `from app import paths` | `from server import paths` |
+| Add a new feature/button | `python about/set_title.py create-module <name>` |
+| Make the button do something real | Edit `execute_module_action` in the generated file |
+| Change the button's text/prompt | Edit `UI_MANIFEST` in the generated file |
+| Pick up a brand-new module without restarting | `python about/set_title.py apply` |
+| Pick up an edit to an existing module | Restart the server |
+| Turn a module off | Rename it to start with `_` (or delete it), then restart/apply |
+| See what's currently loaded | `GET /api/interface/status` |
+| Move where modules are stored | Settings → Custom Modules Path (restart after) |
 
-`server/server.py`'s `STATIC_DIR` now points at `dashboard/` instead of
-`static/`, and `server/paths.py`'s `APP_SETTINGS_FILE` now points at
-`dashboard/config/app_settings.json`.
+```
 
-The dashboard's **Settings** page (`dashboard/config.html` +
-`dashboard/js/config-page.js`) consolidates all configuration into one
-place: app defaults, appearance, every agent's metadata/behavior/tests
-(via `GET/PUT /api/agents/{id}/config`, writing the agent's own
-`agent.json` / `agent.md`), the shared test pool, and the model list.
+## docs/phase-1-2-3-update/INSTRUCTIONS.md
 
-`engine/agents/loader.py`'s `AGENT_LIBRARY_DIR` now resolves to
-`engine/agent_library/` (previously the project-root `agent_library/`).
+```markdown
+# Phase 1 + 2 + 3 — Install Instructions
 
-## Verified
+## Heads-up before you copy anything
 
-- Every `.py` file compiles (`python3 -m py_compile`).
-- `engine.agents.registry.list_agents()` runs end-to-end and correctly
-  discovers all four agents from `engine/agent_library/`.
-- The only remaining import failures are missing third-party packages
-  (`ollama`, `chromadb`, `docling`) â€” install with
-  `pip install -r requirements.txt`, then run:
+Your actual `interface/update_manager.py` already has its own module system
+(domain folders under `interface/updates/engine|tools|server/`, discovered by
+`UpdateManager`). That system is **untouched** — nothing below deletes or
+edits it. Phase 1's "drop a `.py` file in and it just works" loader is
+implemented as a **second, independent** system living in a new file:
+`interface/custom_module_manager.py`. The two managers never talk to each
+other, so nothing you already built can break.
 
-  ```
-  python -m uvicorn server.server:app --reload
-  ```
+What you get, end to end:
 
-  (run this from the project root, i.e. the folder containing `server/`,
-  `engine/`, `tools/`, `memory/`, `dashboard/`).
+- Drop a `.py` file with `UI_MANIFEST` + `register_routes(app)` into your
+  **Custom Modules Path** folder (default `data/custom_modules/`) → it's
+  auto-imported at boot, its route goes live, and its header button appears
+  on the dashboard automatically. No editing `index.html`, `header-nav.js`,
+  or `server.py` by hand.
+- `python about/set_title.py create-module <name>` scaffolds that `.py` file
+  for you, pre-wired and ready to edit.
 
-## Note on scope
+---
 
-This reorganization is based on `APP_SNAPSHOT.md` (the v1-11 era of your
-project â€” before "Genessis Step 1/2" added `app/core/environment.py`,
-`app/core/project_creator.py`, `app/contracts/`, and `app/engine/`). If
-you want those newer modules folded into this same layout, upload the
-current `APP_SNAPSHOT.md` (or the actual project files) for
-`app/core/environment.py`, `app/core/project_creator.py`,
-`app/contracts/*`, and `app/engine/*`, and I'll fold them in â€” they'd
-naturally slot into `engine/` (project provisioning) and a new
-`engine/contracts/` (the host class-library contracts) respectively.
+## 1. Files to REPLACE (same filename — just copy over the old one)
 
-## About the "dashboard" idea
+| File in this delivery | Copy over → (in your project) |
+|---|---|
+| `server/paths.py` | `server/paths.py` |
+| `server/server.py` | `server/server.py` |
+| `about/set_title.py` | `about/set_title.py` |
+| `dashboard/js/app.js` | `dashboard/js/app.js` |
+| `dashboard/js/ui/header-nav.js` | `dashboard/js/ui/header-nav.js` |
+| `dashboard/js/ui/config-form.js` | `dashboard/js/ui/config-form.js` |
 
-The frontend files are copied over as-is (functionally identical, just
-relocated). If you want an actual visual refresh â€” nicer typography, a
-real dashboard layout with sidebar navigation between agents/memory/tools
-status â€” say the word and I'll rework `dashboard/index.html` +
-`styles.css` on top of this structure rather than just relocating files.
+Every one of these is your original file with the Phase 1/2/3 additions
+inserted — nothing else was rewritten. Diff-review them if you want to be
+sure, then just overwrite.
+
+## 2. Files to ADD (new — don't exist in your project yet)
+
+| New file | Goes at |
+|---|---|
+| `interface/custom_module_manager.py` | `interface/custom_module_manager.py` |
+
+That's the only brand-new source file. Everything else is a folder that
+gets created **automatically** the first time the server boots (see below) —
+you don't need to make it by hand, but you can if you want it to exist ahead
+of time.
+
+## 3. Folder created automatically at runtime
+
+```
+data/
+└── custom_modules/        ← created on first boot if missing
+    └── (your .py modules land here)
+```
+
+If you'd rather point this somewhere else (an external folder, a synced
+drive, whatever), open **Settings → Custom Modules Path** in the dashboard
+after you install this and set it there — it works exactly like the
+existing Data folder / RAG database path fields. Leave it blank to keep the
+default (`data/custom_modules/`).
+
+---
+
+## Updated project tree (only the touched/added paths are marked)
+
+```
+genV2_Interface_projectManager/
+├── about/
+│   └── set_title.py                       ← REPLACE (adds `create-module`)
+├── dashboard/
+│   ├── config/
+│   │   └── app_settings.json              (unchanged — gains "customModulesPath" key
+│   │                                         automatically the first time you save Settings)
+│   └── js/
+│       ├── app.js                         ← REPLACE (wires dynamic header buttons)
+│       └── ui/
+│           ├── config-form.js             ← REPLACE (adds "Custom Modules Path" field)
+│           └── header-nav.js              ← REPLACE (adds renderDynamicHeaderButtons)
+├── data/
+│   └── custom_modules/                    ← NEW FOLDER (auto-created at boot)
+│       └── <your-generated-modules>.py    ← where `create-module` writes files
+├── interface/
+│   ├── custom_module_manager.py           ← ADD (new file)
+│   ├── update_manager.py                  (unchanged — your existing domain system)
+│   ├── interface_dispatcher.py            (unchanged)
+│   ├── restore_manager.py                 (unchanged)
+│   └── updates/                           (unchanged)
+└── server/
+    ├── paths.py                           ← REPLACE (adds CUSTOM_MODULES_DIR)
+    └── server.py                          ← REPLACE (loads + registers custom modules)
+```
+
+---
+
+## 4. How to use it
+
+### Generate a new module (Phase 3)
+
+```bash
+python about/set_title.py create-module analytics_builder
+```
+
+This writes `data/custom_modules/analytics_builder.py` (or wherever your
+Custom Modules Path points), pre-filled with:
+
+- `UI_MANIFEST` — declares a "＋ Analytics Builder" header button
+- `register_routes(app)` — declares `POST /api/analytics_builder/execute`
+
+Open that file and put your real logic inside `execute_module_action`.
+
+### Activate it
+
+Two ways:
+
+1. **Restart the server** (`python server.py`) — simplest, always works.
+2. **Or**, without restarting: `python about/set_title.py apply`
+   (or click whatever button in Settings → Updates/Interface calls
+   `POST /api/interface/apply`). New modules get their routes registered
+   live in the running process. (If you *edit* a module that was already
+   loaded, its route logic is still the old closure until a real restart —
+   only brand-new modules pick up instantly.)
+
+### See it in the UI
+
+Reload the dashboard (`index.html`). A new button appears in the header nav
+automatically — no template or JS edits needed. Clicking it prompts for
+input (per `prompt_message`) and POSTs to the module's `api_endpoint`.
+
+### Change where modules are read from
+
+Settings → App defaults → **Custom Modules Path**. Same rules as the other
+path fields: blank = `data/<Data folder>/custom_modules`, relative paths
+resolve from the project root, absolute paths are used as-is, and a change
+here needs a server restart to take effect (the field will tell you so via
+the existing "restart needed" banner).
+
+---
+
+## 5. What each new/changed piece actually does
+
+- **`server/paths.py`** — adds `CUSTOM_MODULES_PATH` / `CUSTOM_MODULES_DIR`,
+  resolved the same way `dataDir` / `ragDbPath` already are (relative →
+  project root, absolute → used as-is, `GENESSIS_CUSTOM_MODULES_PATH` env
+  var overrides everything).
+- **`interface/custom_module_manager.py`** — scans that folder for `*.py`
+  files, imports each with `importlib.util` (they're standalone files, not a
+  Python package), and exposes `active_modules_catalog`, `ui_manifests()`,
+  and `get_active_module(name)`.
+- **`server/server.py`** — at startup (`lifespan`), creates a
+  `CustomModuleManager`, calls `register_routes(app)` once per module, and
+  remembers which ones are already registered (`_CUSTOM_ROUTES_REGISTERED`)
+  so `apply` can register new ones live without double-registering old ones.
+  `GET /api/interface/status` now also returns `custom_modules` (folder +
+  active names) and `ui_manifests` (every active module's manifest, for the
+  frontend to render buttons from).
+- **`dashboard/js/ui/header-nav.js`** — new export
+  `renderDynamicHeaderButtons(container, onClick)` fetches
+  `/api/interface/status`, reads `ui_manifests`, and appends one button per
+  manifest entry into `container`, wired to `onClick`.
+- **`dashboard/js/app.js`** — calls that function right after mounting the
+  normal nav row, with a click handler that follows each button's
+  `action: "prompt_input"` contract (prompt → POST `api_endpoint` → alert
+  the response).
+- **`dashboard/js/ui/config-form.js`** — adds the "Custom Modules Path" text
+  field to the Settings form, saved through the existing generic
+  `saveAppSettings()` call (no server change needed for that part — it
+  already merges whatever keys you send it).
+- **`about/set_title.py`** — adds the `create-module` CLI command and its
+  boilerplate template (module name → `UI_MANIFEST` + `register_routes`),
+  plus a summary line for the custom-module catalog in `apply`.
+
+```
+
+## docs/phase-1-2-3-update/about/set_title.py
+
+```python
+"""Change the app title/subtitle shown as the H1 on index.html, and trigger
+the modular update/restore system.
+
+Usage:
+    python about/set_title.py                      edit about.json interactively
+    python about/set_title.py [title [subtitle]]   set title/subtitle positionally
+    python about/set_title.py apply [--snapshot]   reload update modules + regen docs
+    python about/set_title.py snapshot [folder]    publish current tree as baseline
+    python about/set_title.py restore [baseline] [--dry-run]   roll back modified files
+    python about/set_title.py create-module <name>  scaffold a new drop-in module
+                                                      (Phase 3 - CLI Module Generator)
+
+about.json is read by the server on every request, so a title change shows
+after a refresh.
+"""
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve()
+_PROJECT_ROOT = _SCRIPT_DIR.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+F = _SCRIPT_DIR.parent / "about.json"
+
+
+def _save_about(data: dict) -> None:
+    F.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _load_about() -> dict:
+    return json.loads(F.read_text(encoding="utf-8")) if F.exists() else {}
+
+
+def cmd_apply(argv):
+    """Reload all active update modules and regenerate the docs snapshots."""
+    from interface.update_manager import UpdateManager
+    from interface.restore_manager import RestoreManager
+
+    manager = UpdateManager()
+    manager.reload_all()
+    print(manager.summary())
+
+    try:
+        from interface.custom_module_manager import CustomModuleManager
+        custom_manager = CustomModuleManager()
+        print(custom_manager.summary())
+        print("Note: NEW custom modules register their routes live via "
+              "POST /api/interface/apply (or restart the server). Edits to "
+              "an already-loaded module's route logic still need a restart.")
+    except Exception as exc:
+        print(f"WARNING: custom module discovery failed: {exc}")
+
+    script = _PROJECT_ROOT / "scripts" / "update_docs.py"
+    result = subprocess.run([sys.executable, str(script)], cwd=str(_PROJECT_ROOT))
+    if result.returncode != 0:
+        print(f"WARNING: docs regeneration exited with code {result.returncode}")
+        return 1
+    print("Docs snapshots regenerated (docs/APP_STRUCTURE.md, docs/APP_CODE_SNAPSHOT.md).")
+
+    if "--snapshot" in argv:
+        # Snapshot AFTER the docs regen so the baseline carries the fresh
+        # snapshots (documents the ordering bug fix - previously the baseline
+        # was published with pre-regen docs, making restore --dry-run report
+        # the two doc files as modified).
+        count = RestoreManager().snapshot_baseline()
+        print(f"Baseline refreshed: {count} file(s) -> current-known-good-copy/")
+
+    return 0
+
+
+def cmd_snapshot(argv):
+    """Publish a complete working copy of the current tree as the baseline."""
+    from interface.restore_manager import RestoreManager
+
+    dest = argv[0] if argv else None
+    count = RestoreManager().snapshot_baseline(dest)
+    label = dest or "current-known-good-copy/"
+    print(f"Baseline published: {count} file(s) -> {label}")
+    return 0
+
+
+def cmd_restore(argv):
+    """Compare against the baseline, back up and roll back modified files."""
+    from interface.restore_manager import RestoreManager
+
+    baseline = None
+    dry_run = False
+    for arg in argv:
+        if arg in ("-n", "--dry-run"):
+            dry_run = True
+        elif arg.startswith("--"):
+            print(f"unknown option: {arg}")
+            return 1
+        elif baseline is None:
+            baseline = arg
+        else:
+            print(f"unexpected argument: {arg}")
+            return 1
+
+    RestoreManager().restore(baseline, dry_run=dry_run)
+    return 0
+
+
+# --------------------------------------------------------------------------
+# Phase 3 - CLI Module Generator
+# --------------------------------------------------------------------------
+# Scaffolds a new drop-in .py module inside the configured custom modules
+# folder (server.paths.CUSTOM_MODULES_DIR - default data/custom_modules/,
+# or wherever "Custom Modules Path" in Settings points). The generated file
+# already has a valid UI_MANIFEST (Phase 2 - a header button that appears
+# automatically) and register_routes(app) (Phase 1 - an auto-registered
+# FastAPI endpoint) - drop it in, apply/restart, and it's live.
+
+MODULE_TEMPLATE = '''"""
+Drop-in Update Module: {module_name}.py
+Automatically loaded by CustomModuleManager from {custom_dir}
+"""
+
+# ----------------------------------------------------------------
+# 1. UI MANIFEST (Exposed via GET /api/interface/status -> ui_manifests)
+# ----------------------------------------------------------------
+UI_MANIFEST = {{
+    "module_id": "{module_name}",
+    "buttons": [
+        {{
+            "id": "btn-{module_name}",
+            "label": "\uff0b {label}",
+            "target": "header",
+            "action": "prompt_input",
+            "prompt_message": "Enter name/parameter for {label}:",
+            "api_endpoint": "/api/{module_name}/execute",
+            "title": "Trigger {label} action"
+        }}
+    ]
+}}
+
+
+# ----------------------------------------------------------------
+# 2. AUTO-ROUTE REGISTRATION (Hooked by server/server.py's lifespan +
+#    POST /api/interface/apply for newly-added modules)
+# ----------------------------------------------------------------
+def register_routes(app):
+    """Registers FastAPI endpoints automatically at server startup."""
+
+    @app.post("/api/{module_name}/execute")
+    def execute_module_action(payload: dict):
+        user_input = payload.get("project_name") or payload.get("input", "Default")
+        # Add your feature logic here.
+        return {{
+            "status": "success",
+            "message": f"[{module_name}] Successfully processed input: {{user_input}}",
+        }}
+'''
+
+
+def cmd_create_module(argv):
+    """Generate a new boilerplate drop-in module template in the custom
+    modules folder."""
+    if not argv:
+        print("Usage: python about/set_title.py create-module <module_name>")
+        return 1
+
+    from server.paths import CUSTOM_MODULES_DIR
+
+    module_name = argv[0].lower().replace("-", "_").replace(".py", "")
+    if not module_name or not module_name.replace("_", "").isalnum():
+        print(f"Error: '{argv[0]}' is not a valid module name (letters, numbers, - and _ only).")
+        return 1
+
+    target_dir = CUSTOM_MODULES_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = target_dir / f"{module_name}.py"
+    if file_path.exists():
+        print(f"Error: Module '{file_path.name}' already exists in {target_dir}")
+        return 1
+
+    label = module_name.replace("_", " ").title()
+    content = MODULE_TEMPLATE.format(
+        module_name=module_name,
+        label=label,
+        custom_dir=target_dir,
+    )
+    file_path.write_text(content, encoding="utf-8")
+
+    print(f"\u2713 Created new drop-in module: {file_path}")
+    print("\u27a4 Restart your server, or POST /api/interface/apply "
+          "(python about/set_title.py apply), to activate it.")
+    return 0
+
+
+def cmd_title(argv) -> int:
+    """Original behavior: edit about.json interactively or positionally."""
+    data = _load_about()
+    data.setdefault("title", "Genessis")
+    data.setdefault("subtitle", "Home")
+
+    for i, key in enumerate(("title", "subtitle")):
+        value = argv[i] if i < len(argv) else None
+        if value is None:
+            try:
+                value = input(f"{key} [{data[key]}]: ").strip()
+            except EOFError:
+                break
+        if value:
+            data[key] = value
+
+    _save_about(data)
+    print("Saved ->", data["title"])
+    return 0
+
+
+COMMANDS = {
+    "apply": cmd_apply,
+    "snapshot": cmd_snapshot,
+    "restore": cmd_restore,
+    "create-module": cmd_create_module,  # <-- Phase 3
+}
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if args and args[0] in COMMANDS:
+        return COMMANDS[args[0]](args[1:])
+    return cmd_title(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+```
+
+## docs/phase-1-2-3-update/dashboard/js/app.js
+
+```javascript
+// ==========================================
+// js/app.js - ENTRY POINT (the only script index.html loads)
+// ==========================================
+// BOOT:
+//   1. Render the AI agent card grid (ui/agents.js)
+//   2. Build ONE persistent floating chat widget (classes/chat-window.js
+//      in flyout mode) that sits in the corner of the screen. It targets
+//      the first agent by default and can switch agents via the dropdown
+//      in its header. Clicking an agent card also switches + expands it.
+//      The ChatWindow ONLY renders; all AI/session/persist logic lives here.
+//   (All configuration/settings now live on /static/config.html.)
+//
+// FOLDER MAP:
+//   js/app.js                        -> boot + wiring (this file)
+//   js/logic/                        -> pure logic (models, chat-formatter)
+//   js/classes/ChatSession.js        -> chat data model (no DOM)
+//   js/classes/chat-window.js        -> reusable flyout chat engine
+//   js/api/                          -> every server call (api.js)
+//   js/ui/                           -> agents, markdown, appearance (+ config-page)
+
+import { renderAgents } from "./ui/agents.js";
+import { applyAppearance } from "./ui/appearance.js";
+import { renderHeaderNav, renderDynamicHeaderButtons } from "./ui/header-nav.js";
+import { ChatSession } from "./classes/ChatSession.js";
+import { ChatFactory } from "./classes/chat-window.js";
+import { renderMarkdown } from "./ui/markdown.js";
+import { renderInterfaceIndicator } from "./ui/interface-indicator.js";
+import * as api from "./api/api.js";
+
+// ---- app-level state ----
+let settings = {};            // cached app settings (chatSavePath, defaults)
+let agents = [];              // the list of discovered agents
+let widget = null;            // the single persistent ChatWindow (flyout)
+let activeAgentId = null;     // which agent the widget is currently talking to
+
+// One ChatSession per agent so history survives switching agents in the
+// single widget. Sending routes through the currently active session.
+const agentSessions = new Map(); // agentId -> ChatSession
+
+// Auto-"say hi" feature (experimental, may be removed).
+const AUTO_HI_TEXT = "hi";     // message injected into a brand-new chat
+const AUTO_HI_DEFAULT = true;  // default state of the auto-hi toggle
+
+// ---- boot ----
+async function boot() {
+    // 0. Cache server settings and apply the stored appearance (font + size)
+    //    to THIS page right away - chat.html applies its own copy on load.
+    try {
+        settings = await api.loadAppSettings();
+    } catch (_) {
+        settings = {};
+    }
+    applyAppearance(settings);
+
+    // 0b. Header: shared nav + the editable H1/tagline from about/about.json.
+    //     Fail-soft - a stale server or missing /api/about keeps the defaults
+    //     already written into the HTML.
+    const navSlot = document.getElementById("app-nav");
+    if (navSlot) {
+        navSlot.replaceChildren(renderHeaderNav("dashboard"));
+
+        // Phase 2 - Dynamic UI Manifests: mount any header buttons declared
+        // by drop-in custom modules (interface/custom_module_manager.py).
+        // Fail-soft; adds nothing on a server with no custom modules loaded.
+        renderDynamicHeaderButtons(navSlot, async (btnConfig) => {
+            if (btnConfig.action === "prompt_input") {
+                const userInput = window.prompt(btnConfig.prompt_message || "Enter value:");
+                if (userInput && userInput.trim()) {
+                    try {
+                        const response = await fetch(btnConfig.api_endpoint, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ project_name: userInput.trim() }),
+                        });
+                        const resData = await response.json();
+                        alert(resData.message || "Action completed!");
+                    } catch (error) {
+                        alert(`Action failed: ${error.message}`);
+                    }
+                }
+            }
+        });
+    }
+    try {
+        const about = await api.getAbout();
+        setPageTitle(about.title, about.subtitle);
+    } catch (_) {
+        /* keep the hardcoded defaults */
+    }
+
+    // 0c. Interface pill: "N update modules" in the header (hidden on servers
+    //     without /api/interface/* or when nothing is loaded).
+    renderInterfaceIndicator({
+        container: document.querySelector(".app-header-row"),
+        onMesh: true,
+    });
+
+    // 1. Render agent cards (returns the full agent list).
+    agents = await renderAgents({
+        containerId: "agent-cards",
+        statusId: "agent-status-area",
+        onSelect: onAgentSelected,
+    });
+
+    // 2. Create the persistent corner widget for the first agent (if any).
+    //    (The old inline config panel moved to /static/config.html - see the
+    //    "Settings" link in the header.)
+
+    // 3. Create the persistent corner widget for the first agent (if any).
+    if (agents.length > 0) {
+        buildWidget();
+    }
+}
+
+/** Update the header H1 + tagline (fall back to the current text when a
+ *  value is empty). Directly driven by about/about.json on the server. */
+function setPageTitle(title, subtitle) {
+    const titleEl = document.getElementById("app-title");
+    const taglineEl = document.getElementById("app-tagline");
+    if (titleEl && title && title.trim()) {
+        titleEl.textContent = title.trim();
+    }
+    if (taglineEl && subtitle && subtitle.trim()) {
+        taglineEl.textContent = subtitle.trim();
+    }
+    // Browser-tab title: "Genessis - <subtitle>" (falls back to the raw title).
+    const cleanSub = (subtitle && subtitle.trim()) ? " \u2014 " + subtitle.trim() : "";
+    document.title = ((title && title.trim()) ? title.trim() : "") + cleanSub;
+}
+
+/** Create the single persistent flyout widget + wire its agent switcher. */
+function buildWidget() {
+    const defaultAgent = agents[0];
+    const config = buildAgentConfig(defaultAgent);
+    config.layout.flyout = true;
+
+    widget = ChatFactory.create(config);
+
+    // Feed the switcher with all selectable agents.
+    widget.setAgents(agents);
+
+    // Present the default agent (fresh session, no auto-hi on startup).
+    selectSession(defaultAgent, false);
+
+    // Route sends to the active session.
+    widget.onSend((text) => {
+        const session = activeSession();
+        if (session) {
+            handleSend(session, widget, text);
+        }
+    });
+
+    widget.onAction("saveChat", () => {
+        const session = activeSession();
+        if (session) {
+            handleSaveAction(session, widget);
+        }
+    });
+    widget.onAction("clearChat", () => {
+        const session = activeSession();
+        if (session) {
+            handleClearAction(session, widget);
+        }
+    });
+
+    // Switcher in the widget header changes the active agent.
+    widget.onSwitchAgent((agentId) => {
+        const agent = agents.find((a) => String(a.id) === String(agentId));
+        if (agent) {
+            switchToAgent(agent, false);
+        }
+    });
+}
+
+/** The ChatSession for the agent currently shown in the widget. */
+function activeSession() {
+    return activeAgentId ? agentSessions.get(activeAgentId) : null;
+}
+
+// ---- agent card click -> switch + expand the widget ----
+function onAgentSelected(agent) {
+    if (!widget) {
+        return;
+    }
+    switchToAgent(agent);
+    if (!widget.isOpen) {
+        widget.open();
+    }
+}
+
+/** (Re)point the widget at an agent, keeping its per-agent session. */
+function switchToAgent(agent, autoHi = true) {
+    if (!widget) {
+        return;
+    }
+    widget.setActiveAgent(agent.id);
+    selectSession(agent, autoHi);
+}
+
+/**
+ * Ensure a ChatSession exists for the agent and load it into the widget.
+ * The auto-"say hi" fires only the first time we meet this agent, and only
+ * once the widget is expanded so the injected message can be sent.
+ */
+function selectSession(agent, autoHi = false) {
+    let session = agentSessions.get(agent.id);
+    const created = !session;
+    if (!session) {
+        session = new ChatSession({
+            agentId: agent.id,
+            agentName: agent.name,
+            model: settings.defaultModel || "",
+        });
+        agentSessions.set(agent.id, session);
+    }
+    activeAgentId = agent.id;
+
+    if (created && autoHi && widget && widget.isOpen && widget.getPanelValues().autoHi === true) {
+        // Prefill "hi" so the chat starts itself after you've named it (the
+        // "Chat title" field in the panel). No auto-send: you get a chance
+        // to title the chat first.
+        widget.setInputValue(AUTO_HI_TEXT);
+        widget._input?.focus();
+    }
+    return created;
+}
+
+/**
+ * The entity config that drives the chat window for one AI agent.
+ * The right panel is generated fully from `sections` - no HTML edits
+ * needed to change an agent's controls/branding.
+ */
+function buildAgentConfig(agent) {
+    const commitOnSave =
+        settings.rag && typeof settings.rag.commitOnSave === "boolean"
+            ? settings.rag.commitOnSave
+            : false;
+    return {
+        id: agent.id,
+        type: "agent",
+        name: agent.name,
+        title: agent.name,
+        description: agent.description || "AI agent",
+        layout: { rightPanel: true, resizable: true, collapsible: true, panelWidth: 300 },
+        renderMarkdown,
+        headerToggle: {
+            name: "ragCommit",
+            label: "Save to memory",
+            value: commitOnSave,
+        },
+        sections: [
+            {
+                title: "Agent Information",
+                fields: [
+                    { type: "text", label: "Status", value: "Ready" },
+                    { type: "text", label: "Category", value: agent.mode || "General" },
+                ],
+            },
+            {
+                title: "Chat",
+                fields: [
+                    {
+                        type: "input",
+                        name: "chatTitle",
+                        label: "Chat title",
+                        placeholder: "Name this chat...",
+                        value: "",
+                    },
+                ],
+            },
+            {
+                title: "Actions",
+                fields: [
+                    { type: "button", label: "Save chat", action: "saveChat" },
+                    { type: "button", label: "Clear chat", action: "clearChat" },
+                ],
+            },
+            {
+                title: "Behavior",
+                fields: [
+                    {
+                        type: "toggle",
+                        name: "autoHi",
+                        label: '"Say hi" on a new chat',
+                        value: AUTO_HI_DEFAULT,
+                    },
+                ],
+            },
+        ],
+    };
+}
+
+// ---- send flow (the ChatWindow already showed the user bubble) ----
+async function handleSend(session, chat, text) {
+    session.addUserMessage(text);
+    chat.setWaiting(true);
+
+    try {
+        const panelValues = widget.getPanelValues();
+        const userTitle = String(panelValues.chatTitle || "").trim();
+
+        const result = await api.sendChat({
+            message: text,
+            agentId: session.agentId,
+            model: session.model,
+            history: session.getApiHistory(),
+            sessionId: session.sessionId || "",
+            title: userTitle,
+            newChat: !session.sessionId,
+            rag: Boolean(panelValues.ragCommit),
+        });
+
+        session.addAssistantMessage(result.reply);
+        chat.addAssistantMessage(result.reply, session.agentName);
+        session.setSessionId(result.session_id, result.title);
+        chat.setSaveStatus(
+            session.sessionId ? "Chat tracked on the server." : "Chat saved.",
+            "ok"
+        );
+    } catch (error) {
+        chat.addSystemMessage(`Sorry - that failed. ${error.message}`);
+        chat.setSaveStatus(`Send failed: ${error.message}`, "error");
+    } finally {
+        chat.setWaiting(false);
+    }
+}
+
+// ---- save handlers ----
+/**
+ * "Save chat" action: finalize the active chat on the server. The server
+ * writes the transcript to data/chatlog/agent-text-records/<title>[-v].txt and
+ * logs it. If you keep chatting after saving, the next save writes the next
+ * version.
+ *
+ * If no subject was set in the panel, prompt for one so every chat ends up
+ * meaningfully named (works the same for every agent).
+ */
+async function handleSaveAction(session, chat) {
+    if (!session || !session.sessionId) {
+        chat.setSaveStatus("No active chat to save yet.", "error");
+        return;
+    }
+
+    try {
+        const panelValues = widget.getPanelValues();
+        let title = String(panelValues.chatTitle || "").trim();
+
+        if (!title) {
+            const subject = window.prompt(
+                "Name this chat:",
+                session.title !== "New chat" ? session.title : ""
+            );
+            if (subject !== null && subject.trim()) {
+                title = subject.trim();
+            }
+        }
+
+        const result = await api.endChat({
+            title,
+            rag: Boolean(widget.getPanelValues().ragCommit),
+        });
+        chat.setSaveStatus(
+            result.saved
+                ? `Saved: ${result.file} (v${result.version})`
+                : `Save failed: ${result.error || "no active chat"}`,
+            result.saved ? "ok" : "error"
+        );
+    } catch (error) {
+        chat.setSaveStatus(`Save failed: ${error.message}`, "error");
+    }
+}
+
+/** "Clear chat" action: wipe the session data and the rendered bubbles. */
+function handleClearAction(session, chat) {
+    session.newChat();
+    chat.clearMessages();
+    chat.setSaveStatus("Chat cleared.", "ok");
+}
+
+// ---- go ----
+boot();
+
+```
+
+## docs/phase-1-2-3-update/dashboard/js/ui/config-form.js
+
+```javascript
+// ==========================================
+// ui/config-form.js - CONFIG FORM BUILDER
+// ==========================================
+// Builds the configuration form (default agent/model selects + chat
+// save path text field) and returns handles to read the values.
+// Uses the shared .panel and .field CSS classes.
+
+/**
+ * Build the config form DOM.
+ *
+ * @param {object} opts
+ * @param {object[]} opts.agents   - [{id, name}]
+ * @param {object[]} opts.models   - [{id, name}]
+ * @param {object} opts.settings   - stored app settings
+ * @returns {{ root: HTMLElement, values: () => object }}
+ */
+export function buildConfigForm({ agents = [], models = [], settings = {}, platform = "nix" }) {
+    const root = document.createElement("div");
+    root.className = "panel";
+
+    // ---- Default agent ----
+    root.appendChild(fieldSelect("default-agent-select", "Default agent", [
+        { value: "", label: "(server default)" },
+        ...agents.map((a) => ({ value: a.id, label: `${a.name} (${a.id})` })),
+    ], settings.defaultAgentId || ""));
+
+    // ---- Default model ----
+    root.appendChild(fieldSelect("default-model-select", "Default model", [
+        { value: "", label: "(server default)" },
+        ...models.map((m) => ({ value: m.id, label: m.name })),
+    ], settings.defaultModel || ""));
+
+    // ---- Chat save path ----
+    const pathField = document.createElement("label");
+    pathField.className = "field";
+    const pathLabel = document.createElement("span");
+    pathLabel.textContent = "Chat save path";
+    const pathInput = document.createElement("input");
+    pathInput.type = "text";
+    pathInput.id = "chat-save-path";
+    pathInput.placeholder = "e.g. data/chatlog/agent-text-records or absolute folder";
+    pathInput.value = settings.chatSavePath || "";
+    pathField.appendChild(pathLabel);
+    pathField.appendChild(pathInput);
+    root.appendChild(pathField);
+
+    const pathNote = document.createElement("p");
+    pathNote.className = "config-note";
+    pathNote.textContent = "Where saved chat transcripts (.txt files) are written. This is SEPARATE from the Data folder - transcripts follow this field, not Data folder. Blank = a chatlog sub-folder inside the Data folder.";
+    root.appendChild(pathNote);
+
+    // ---- Data folder path ----
+    root.appendChild(fieldTextInput(
+        "data-dir-path",
+        "Data folder",
+        "Base data folder: chat records, history, exports and (by default) transcripts + the RAG store. Absolute path or relative to the project root. Path changes apply after a server restart.",
+        settings.dataDir || "data"
+    ));
+
+    // ---- RAG database path ----
+    root.appendChild(fieldTextInput(
+        "rag-db-path",
+        "RAG database path",
+        "Folder for the RAG memory store (chroma.sqlite3). Blank = data folder\\rag_db. Absolute path or relative to the project root; a new path starts an empty store. Path changes apply after a server restart.",
+        settings.ragDbPath || ""
+    ));
+
+    // ---- Custom modules path (Phase 1 - Dynamic External Module Loader) ----
+    root.appendChild(fieldTextInput(
+        "custom-modules-path",
+        "Custom Modules Path",
+        "External directory on disk containing drop-in .py modules (e.g., C:\\MyCustomModules, or a project-relative folder). Blank = data/custom_modules. Generate a starter module with \"python about/set_title.py create-module <name>\". Path changes apply after a server restart.",
+        settings.customModulesPath || ""
+    ));
+
+    // ---- Per-OS paths (three choices: Windows / Linux / macOS) ----
+    // One settings file can carry a separate folder layout for Windows,
+    // Linux and macOS. The row for the machine you're on now is highlighted;
+    // OSes you don't use are left alone (blank = their project defaults).
+    const osHeading = document.createElement("h3");
+    osHeading.className = "config-section-heading";
+    osHeading.textContent = "Per-OS paths (Windows / Linux / macOS)";
+    root.appendChild(osHeading);
+
+    const osNote = document.createElement("p");
+    osNote.className = "config-note";
+    osNote.textContent =
+        "Each OS picks its own folders: the row for this machine wins, the " +
+        "plain fields above are the fallback, and a GENESSIS_DATA_DIR / " +
+        "GENESSIS_CHAT_SAVE_PATH / GENESSIS_RAG_DB_PATH environment variable " +
+        "overrides everything. Leave OSes you don't use alone. Changes apply " +
+        "after a server restart.";
+    root.appendChild(osNote);
+
+    const osRows = [
+        { suffix: "Windows", label: "Windows", current: platform === "win" },
+        { suffix: "Linux", label: "Linux", current: platform === "linux" },
+        { suffix: "Mac", label: "macOS", current: platform === "mac" },
+    ];
+    const pathGroups = [
+        { key: "dataDir", label: "Data folder", hint: "chat records, history, exports, transcripts + RAG by default" },
+        { key: "chatSavePath", label: "Chat save path", hint: "saved chat transcripts (.txt)" },
+        { key: "ragDbPath", label: "RAG database path", hint: "RAG memory store (chroma.sqlite3)" },
+    ];
+    for (const group of pathGroups) {
+        const wrap = document.createElement("div");
+        wrap.className = "os-path-group";
+        const title = document.createElement("div");
+        title.className = "os-path-group-title";
+        title.textContent = group.label + " \u2014 " + group.hint;
+        wrap.appendChild(title);
+        for (const os of osRows) {
+            const field = document.createElement("label");
+            field.className = "field" + (os.current ? " os-path-current" : "");
+            const span = document.createElement("span");
+            span.textContent = group.label + " (" + os.label + ")" + (os.current ? " \u2014 this machine" : "");
+            const input = document.createElement("input");
+            input.type = "text";
+            input.id = group.key + os.suffix + "-input";
+            input.placeholder = "absolute or project-relative folder (blank = default)";
+            input.value = settings[group.key + os.suffix] || "";
+            field.appendChild(span);
+            field.appendChild(input);
+            wrap.appendChild(field);
+        }
+        root.appendChild(wrap);
+    }
+
+    // ---- Chat versioning toggle ----
+    const versionField = document.createElement("label");
+    versionField.className = "field field-toggle";
+    const versionLabel = document.createElement("span");
+    versionLabel.textContent = "Disable chat versioning";
+    const versionToggle = document.createElement("input");
+    versionToggle.type = "checkbox";
+    versionToggle.id = "disable-versioning";
+    versionToggle.checked = Boolean(settings.disableVersioning);
+    const versionSwitch = document.createElement("span");
+    versionSwitch.className = "field-switch";
+    versionField.appendChild(versionLabel);
+    versionField.appendChild(versionToggle);
+    versionField.appendChild(versionSwitch);
+    root.appendChild(versionField);
+
+    const versionNote = document.createElement("p");
+    versionNote.className = "config-note";
+    versionNote.textContent =
+        "On: re-saving a chat overwrites <title>.txt. Off (default): re-saving writes the next version (<title>-2.txt, ...).";
+    root.appendChild(versionNote);
+
+    // ---- RAG memory: defaults ----
+    const ragHeading = document.createElement("h3");
+    ragHeading.className = "config-section-heading";
+    ragHeading.textContent = "RAG memory";
+    root.appendChild(ragHeading);
+
+    root.appendChild(fieldToggle(
+        "rag-commit-save",
+        "Commit saved chats to memory by default",
+        "Default state of the \"Save to memory\" toggle in the chat (you can still change it per chat).",
+        settings.rag && settings.rag.commitOnSave
+    ));
+
+    root.appendChild(fieldToggle(
+        "rag-auto-ingest",
+        "Auto-load transcripts when the memory store is empty",
+        "On: the first search ingests every saved transcript. Off: only per-chat saves and a manual rebuild fill the store.",
+        !settings.rag || settings.rag.autoIngest !== false
+    ));
+
+    root.appendChild(buildRagStoreManager());
+
+    return {
+        root,
+        values() {
+            const values = {
+                defaultAgentId: byId("default-agent-select").value,
+                defaultModel: byId("default-model-select").value,
+                chatSavePath: byId("chat-save-path").value.trim(),
+                dataDir: byId("data-dir-path").value.trim(),
+                ragDbPath: byId("rag-db-path").value.trim(),
+                customModulesPath: byId("custom-modules-path").value.trim(),
+                disableVersioning: byId("disable-versioning").checked,
+                rag: {
+                    commitOnSave: byId("rag-commit-save").checked,
+                    autoIngest: byId("rag-auto-ingest").checked,
+                },
+            };
+            for (const suffix of ["Windows", "Linux", "Mac"]) {
+                values["dataDir" + suffix] = byId("dataDir" + suffix + "-input").value.trim();
+                values["chatSavePath" + suffix] = byId("chatSavePath" + suffix + "-input").value.trim();
+                values["ragDbPath" + suffix] = byId("ragDbPath" + suffix + "-input").value.trim();
+            }
+            return values;
+        },
+    };
+}
+
+/** Buttons + live info for the RAG store (path, chunk count, purge/rebuild). */
+function buildRagStoreManager() {
+    const wrap = document.createElement("div");
+    wrap.className = "rag-store-manager";
+
+    const info = document.createElement("p");
+    info.className = "config-note";
+    info.id = "rag-store-info";
+    info.textContent = "RAG store: loading...";
+    wrap.appendChild(info);
+
+    const actions = document.createElement("div");
+    actions.className = "section-actions";
+
+    const purge = document.createElement("button");
+    purge.type = "button";
+    purge.className = "btn";
+    purge.textContent = "Forget everything";
+    purge.title = "Delete the RAG store so it starts empty (transcripts are kept).";
+
+    const rebuild = document.createElement("button");
+    rebuild.type = "button";
+    rebuild.className = "btn";
+    rebuild.textContent = "Rebuild memory";
+    rebuild.title = "Re-index every saved transcript into the RAG store.";
+
+    actions.appendChild(purge);
+    actions.appendChild(rebuild);
+    wrap.appendChild(actions);
+
+    async function refresh() {
+        const { ragStatus } = await import("../api/api.js");
+        try {
+            const st = await ragStatus();
+            const status = st.status || st;
+            info.textContent = `RAG store: ${status.path} — ${status.chunks} segment(s) indexed.`;
+        } catch (error) {
+            info.textContent = `RAG store: ${error.message}`;
+        }
+    }
+
+    purge.addEventListener("click", async () => {
+        if (!window.confirm("Are you sure you want to clear the RAG memory?\nAll RAG DB entries will be reset to zero.")) {
+            return;
+        }
+        const { resetRag } = await import("../api/api.js");
+        await resetRag();
+        await refresh();
+    });
+
+    rebuild.addEventListener("click", async () => {
+        const { rebuildRag } = await import("../api/api.js");
+        await rebuildRag();
+        await refresh();
+    });
+
+    refresh();
+    return wrap;
+}
+
+function fieldTextInput(id, label, note, value) {
+    const wrap = document.createElement("div");
+    const field = document.createElement("label");
+    field.className = "field";
+    const span = document.createElement("span");
+    span.textContent = label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = id;
+    input.value = value || "";
+    field.appendChild(span);
+    field.appendChild(input);
+    wrap.appendChild(field);
+    if (note) {
+        const p = document.createElement("p");
+        p.className = "config-note";
+        p.textContent = note;
+        wrap.appendChild(p);
+    }
+    return wrap;
+}
+
+function fieldToggle(id, label, note, value) {
+    const wrap = document.createElement("div");
+    const field = document.createElement("label");
+    field.className = "field field-toggle";
+    const span = document.createElement("span");
+    span.textContent = label;
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.id = id;
+    input.checked = Boolean(value);
+    const switchEl = document.createElement("span");
+    switchEl.className = "field-switch";
+    field.appendChild(span);
+    field.appendChild(input);
+    field.appendChild(switchEl);
+    wrap.appendChild(field);
+    if (note) {
+        const p = document.createElement("p");
+        p.className = "config-note";
+        p.textContent = note;
+        wrap.appendChild(p);
+    }
+    return wrap;
+}
+
+function fieldSelect(id, label, options, value) {
+    const field = document.createElement("label");
+    field.className = "field";
+
+    const span = document.createElement("span");
+    span.textContent = label;
+    field.appendChild(span);
+
+    const select = document.createElement("select");
+    select.id = id;
+    options.forEach((opt) => {
+        const o = new Option(opt.label, opt.value);
+        if (opt.value === value) {
+            o.selected = true;
+        }
+        select.appendChild(o);
+    });
+    field.appendChild(select);
+    return field;
+}
+
+function byId(id) {
+    return document.getElementById(id);
+}
+
+```
+
+## docs/phase-1-2-3-update/dashboard/js/ui/header-nav.js
+
+```javascript
+// ============================================================
+// ui/header-nav.js - SHARED APP NAVIGATION (used by every page)
+// ============================================================
+// One place that lists the app's pages. Future options = add one
+// entry to PAGES. Each page renders the row and marks its own link
+// with "current":
+//   index.html  -> renderHeaderNav("dashboard")  (via js/app.js)
+//   config.html -> renderHeaderNav("config")     (via js/config-page.js)
+//   chat.html   -> renderHeaderNav("chat")       (static anchors in markup)
+//
+// renderDynamicHeaderButtons (Phase 2 - Dynamic UI Manifests) mounts extra
+// buttons declared by drop-in custom modules (interface/custom_module_manager.py)
+// via GET /api/interface/status -> ui_manifests. Adding a new .py module with
+// a UI_MANIFEST (see about/set_title.py's `create-module` generator) is
+// enough to get a new header button - no edits to this file or index.html.
+// ============================================================
+
+import { getInterfaceStatus } from "../api/api.js";
+
+const PAGES = [
+    { id: "dashboard", label: "Dashboard", href: "/static/index.html" },
+    { id: "chat", label: "Chat", href: "/static/chat.html" },
+    { id: "config", label: "Settings", href: "/static/config.html" },
+];
+
+/** Build the shared nav row, highlighting the entry whose id === currentId. */
+export function renderHeaderNav(currentId = "") {
+    const nav = document.createElement("nav");
+    nav.className = "app-header-nav";
+    nav.setAttribute("aria-label", "Primary");
+
+    PAGES.forEach((page) => {
+        const link = document.createElement("a");
+        link.href = page.href;
+        link.textContent = page.label;
+        link.className = "header-nav-link" + (page.id === currentId ? " current" : "");
+        if (page.id === currentId) {
+            link.setAttribute("aria-current", "page");
+        }
+        nav.appendChild(link);
+    });
+
+    return nav;
+}
+
+/**
+ * Fetch /api/interface/status and mount every registered custom module's
+ * UI_MANIFEST buttons into `container` (Phase 2 - Dynamic UI Manifests).
+ *
+ * @param {HTMLElement} container       - element to append buttons into
+ *                                         (e.g. the #app-nav slot)
+ * @param {(btnConfig: object) => void} onActionTriggered - called with the
+ *                                         button's manifest entry on click
+ *
+ * Fail-soft by design: a server without /api/interface/status (or with no
+ * custom modules loaded) simply renders nothing extra.
+ */
+export async function renderDynamicHeaderButtons(container, onActionTriggered) {
+    if (!container) {
+        return;
+    }
+    try {
+        const status = await getInterfaceStatus();
+        const manifests = status.ui_manifests || [];
+
+        manifests.forEach((manifest) => {
+            (manifest.buttons || []).forEach((btnConfig) => {
+                if (document.getElementById(btnConfig.id)) return; // avoid duplicates
+
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.id = btnConfig.id;
+                btn.className = "header-nav-link";
+                btn.textContent = btnConfig.label;
+                btn.title = btnConfig.title || "";
+                btn.style.cursor = "pointer";
+
+                btn.addEventListener("click", () => {
+                    if (onActionTriggered) {
+                        onActionTriggered(btnConfig);
+                    }
+                });
+
+                container.appendChild(btn);
+            });
+        });
+    } catch (err) {
+        console.warn("[UI] Could not render dynamic header buttons:", err);
+    }
+}
+
+```
+
+## docs/phase-1-2-3-update/interface/custom_module_manager.py
+
+```python
+"""interface/custom_module_manager.py
+====================================
+
+Phase 1 - Dynamic External Module Loader & Auto-Route Registration.
+
+This is a SEPARATE, ADDITIVE system from interface/update_manager.py's
+domain-based UpdateManager (engine/tools/server under interface/updates/).
+It does not touch that catalog or its endpoints.
+
+CustomModuleManager scans a single flat folder - server.paths.CUSTOM_MODULES_DIR
+(configurable in Settings as "Custom Modules Path", default
+data/custom_modules/) - for standalone .py files and imports each one with
+importlib.util (they live outside any Python package, so this does NOT use
+`import`/dotted module names the way UpdateManager does).
+
+Convention for a drop-in module (see about/set_title.py's `create-module`
+CLI command for a generator):
+
+    UI_MANIFEST = {
+        "module_id": "my_feature",
+        "buttons": [ { "id": ..., "label": ..., "target": "header",
+                        "action": "prompt_input", "prompt_message": ...,
+                        "api_endpoint": "/api/my_feature/execute",
+                        "title": ... } ]
+    }
+
+    def register_routes(app):
+        @app.post("/api/my_feature/execute")
+        def execute(payload: dict):
+            ...
+
+server/server.py's lifespan() discovers these at boot, calls register_routes()
+once per module, and GET /api/interface/status exposes every active module's
+UI_MANIFEST (via ui_manifests) so dashboard/js/ui/header-nav.js can render the
+buttons dynamically (Phase 2) without ever editing index.html or header-nav.js
+by hand.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+from types import ModuleType
+
+from server.paths import CUSTOM_MODULES_DIR
+
+
+class CustomModuleManager:
+    """Finds, imports and tracks flat drop-in modules from CUSTOM_MODULES_DIR."""
+
+    def __init__(self) -> None:
+        self.active_modules_catalog: dict[str, ModuleType] = {}
+        self.discover_all_active_modules()
+
+    # ------------------------------------------------------------------ scan
+
+    def discover_all_active_modules(self) -> dict[str, ModuleType]:
+        """(Re)scan CUSTOM_MODULES_DIR and (re)import every module found.
+
+        Files starting with "_" or "." are skipped (private/hidden helpers).
+        A module that fails to import is logged and skipped - one broken
+        drop-in file must never take the whole app down.
+        """
+        self.active_modules_catalog.clear()
+
+        target_dir = Path(CUSTOM_MODULES_DIR)
+        if not target_dir.exists():
+            target_dir.mkdir(parents=True, exist_ok=True)
+            return self.active_modules_catalog
+
+        for file in sorted(target_dir.glob("*.py")):
+            if file.name.startswith(("_", ".")):
+                continue
+            mod_name = file.stem
+            try:
+                module = self._import_from_path(mod_name, file)
+                self.active_modules_catalog[mod_name] = module
+            except Exception as exc:
+                print(f"[custom-modules] Failed to load {file.name}: {exc}")
+
+        return self.active_modules_catalog
+
+    def reload_all(self) -> dict[str, ModuleType]:
+        """Alias kept for symmetry with UpdateManager.reload_all()."""
+        return self.discover_all_active_modules()
+
+    def _import_from_path(self, mod_name: str, file: Path) -> ModuleType:
+        """Import a standalone .py file that isn't part of any package."""
+        qualified_name = f"custom_modules.{mod_name}"
+        spec = importlib.util.spec_from_file_location(qualified_name, file)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"could not build an import spec for {file}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[qualified_name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    # -------------------------------------------------------------- lookups
+
+    def get_active_module(self, name: str) -> ModuleType:
+        """Return the live module object for direct, native execution."""
+        try:
+            return self.active_modules_catalog[name]
+        except KeyError:
+            known = sorted(self.active_modules_catalog)
+            raise KeyError(
+                f"no active custom module '{name}' "
+                f"(known modules: {known or 'none'})"
+            ) from None
+
+    def list_modules(self) -> list[str]:
+        """Sorted names of every loaded custom module."""
+        return sorted(self.active_modules_catalog)
+
+    def ui_manifests(self) -> list[dict]:
+        """UI_MANIFEST dict from every active module that declares one."""
+        manifests = []
+        for mod in self.active_modules_catalog.values():
+            manifest = getattr(mod, "UI_MANIFEST", None)
+            if isinstance(manifest, dict):
+                manifests.append(manifest)
+        return manifests
+
+    # ------------------------------------------------------------- summary
+
+    def summary(self) -> str:
+        """Human-readable catalog listing."""
+        names = sorted(self.active_modules_catalog)
+        lines = [f"Custom drop-in modules in {CUSTOM_MODULES_DIR}:"]
+        lines.append("  " + (", ".join(names) if names else "(none)"))
+        lines.append(f"total: {len(names)} active module(s)")
+        return "\n".join(lines)
+
+
+_manager: CustomModuleManager | None = None
+
+
+def get_custom_module_manager() -> CustomModuleManager:
+    """Process-wide CustomModuleManager singleton (mirrors get_update_manager)."""
+    global _manager
+    if _manager is None:
+        _manager = CustomModuleManager()
+    return _manager
+
+```
+
+## docs/phase-1-2-3-update/server/paths.py
+
+```python
+r"""
+app/paths.py
+============
+
+Single source of truth for every runtime folder/file the app reads or
+writes. Paths are configured from the dashboard's consolidated settings
+page (config.html), stored in dashboard/config/app_settings.json via
+/api/settings:
+
+    app_settings.json keys:
+        dataDir            base data folder (default "data").
+                           Relative -> project root; absolute -> used as-is.
+        chatSavePath       where saved chat transcripts (.txt) are written.
+                           Empty -> <dataDir>/chatlog/agent-text-records
+        ragDbPath          where the RAG store (chroma.sqlite3) lives.
+                           Empty -> <dataDir>/rag_db
+        customModulesPath  external folder containing drop-in .py update
+                           modules (Phase 1 - Dynamic External Module
+                           Loader). Empty -> <dataDir>/custom_modules
+        rag                { commitOnSave: bool, autoIngest: bool }
+
+    Per-OS keys (one settings file works on Windows, Linux and macOS):
+        <key>Windows / <key>Linux / <key>Mac    e.g. dataDirLinux,
+                       chatSavePathWindows, ragDbPathMac. The key matching
+                       the CURRENT machine wins over the plain key below it;
+                       keys for OSes you do not use are simply left alone.
+                       A plain key that is a Windows drive path (D:\... /
+                       D:/...) is ignored on non-Windows hosts unless a
+                       per-OS key for that host is set - the app falls back
+                       to a project default instead of creating a literal
+                       folder.
+
+    Environment variables (highest precedence - handy on a Chromebook or a
+    second machine, no file edits needed):
+        GENESSIS_DATA_DIR            -> dataDir
+        GENESSIS_CHAT_SAVE_PATH      -> chatSavePath
+        GENESSIS_RAG_DB_PATH         -> ragDbPath
+        GENESSIS_CUSTOM_MODULES_PATH -> customModulesPath
+
+Everything else is derived from these so changing "data folder" moves the
+chatlog, transcripts, history, exports and RAG store together.
+
+Per-agent settings (agent.json metadata + tests, agent.md behavior) are the
+agent's own files under engine/agent_library/ - edited from the same
+config.html page, one agent card per agent.
+
+Path config is resolved at import time - save settings in the UI, then
+restart the server for dataDir/ragDbPath/chatSavePath/customModulesPath
+changes to apply. `restart_needed()` tells callers when a restart is
+required.
+"""
+
+import json
+import os
+import re
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+APP_SETTINGS_FILE = BASE_DIR / "dashboard" / "config" / "app_settings.json"
+
+_EMPTY = (None, "", "")
+
+_IS_WINDOWS = os.name == "nt"
+# Absolute Windows path: drive letter (D:\... / D:/...) or UNC (\\server\...).
+_WIN_PATH_RE = re.compile(r"^(?:[A-Za-z]:[\\/]|[\\/]{2})")
+
+# Settings key -> environment variable override.
+_ENV_KEYS = {
+    "dataDir": "GENESSIS_DATA_DIR",
+    "chatSavePath": "GENESSIS_CHAT_SAVE_PATH",
+    "ragDbPath": "GENESSIS_RAG_DB_PATH",
+    "customModulesPath": "GENESSIS_CUSTOM_MODULES_PATH",
+}
+
+# Current platform -> per-OS settings-key suffix.
+_OS_SUFFIX = {"win": "Windows", "linux": "Linux", "mac": "Mac"}
+
+
+def _get_text(value):
+    """Normalize a config value to str; '' for empty/missing."""
+    if value in _EMPTY:
+        return ""
+    return str(value).strip()
+
+
+def _bool(value):
+    return bool(value)
+
+
+def platform() -> str:
+    """'win' on Windows, 'linux' on Linux, 'mac' on macOS - used by the
+    dashboard to highlight the path fields for the current machine."""
+    if _IS_WINDOWS:
+        return "win"
+    if os.environ.get("GENESSIS_PLATFORM"):
+        normalized = os.environ["GENESSIS_PLATFORM"].strip().lower()
+        if normalized in _OS_SUFFIX:
+            return normalized
+    return "linux" if os.path.exists("/etc/os-release") else (
+        "mac" if os.path.exists("/System/Library/CoreServices") else "linux")
+
+
+def os_text(value):
+    r"""Public: normalize a raw path string for the current OS.
+
+    Returns '' when a Windows-only path (E:\\... / E:/... / \\\\UNC) is being
+    resolved on a non-Windows host, so it can never be turned into a literal
+    folder on Linux/macOS. On Windows the value is returned verbatim.
+    """
+    text = _get_text(value)
+    if not _IS_WINDOWS and text and _WIN_PATH_RE.match(text):
+        return ""
+    return text
+
+
+def _env_override(key):
+    """Expanded env-var override for `key`, or None when not set."""
+    env_name = _ENV_KEYS.get(key)
+    if not env_name:
+        return None
+    value = os.environ.get(env_name)
+    if value is None or not value.strip():
+        return None
+    return os.path.expanduser(os.path.expandvars(value.strip()))
+
+
+def _os_value(cfg, key):
+    """Platform-aware value for one path setting.
+
+    Precedence: environment variable > the per-OS key for THIS machine
+    (<key>Windows / <key>Linux / <key>Mac) > the plain `key`. Windows drive
+    paths in the plain key are ignored on non-Windows hosts so the app falls
+    back to a project default instead of creating a literal folder.
+    """
+    env_value = _env_override(key)
+    if env_value is not None:
+        return _get_text(env_value)
+    suffix = _OS_SUFFIX.get(platform(), "")
+    os_key = f"{key}{suffix}" if suffix else key
+    return os_text(cfg.get(os_key) or cfg.get(key))
+
+
+def _load_app_settings() -> dict:
+    try:
+        return json.loads(APP_SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def resolve_path(raw, *fallback_parts) -> Path:
+    """Base folder for a configured location.
+
+    `raw` is a folder path and is used verbatim when present (absolute paths
+    are used as-is so the data/RAG store can live outside the project;
+    relative paths resolve against the project root). When `raw` is empty,
+    fall back to BASE_DIR/<fallback_parts>.
+    """
+    text = os_text(raw)
+    if not text:
+        return BASE_DIR.joinpath(*fallback_parts).resolve()
+    path = Path(os.path.expandvars(text)).expanduser()
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path.resolve()
+
+
+def _rooted(raw, default: Path) -> Path:
+    """Like resolve_path, but the fallback is an already-resolved Path."""
+    text = os_text(raw)
+    if not text:
+        return default
+    path = Path(os.path.expandvars(text)).expanduser()
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path.resolve()
+
+
+# --------------------------------------------------------------------------
+# Runtime values (resolved once at import - restart server after editing).
+# --------------------------------------------------------------------------
+
+_cfg = _load_app_settings()
+
+# Snapshot of the stored *path* settings at import. The UI can compare
+# against the live file to tell the user a restart is required.
+_PATH_KEYS = ("dataDir", "chatSavePath", "ragDbPath", "customModulesPath")
+_path_keys_at_import = {key: _os_value(_cfg, key) for key in _PATH_KEYS}
+
+# Base data folder (dataDir / dataDirLinux / ... overrides the default "data").
+DATA_DIR = resolve_path(_os_value(_cfg, "dataDir"), "data")
+
+# Chat log folder + transcripts (chatSavePath overrides the sub-folder).
+CHATS_DIR = DATA_DIR / "chatlog"
+CHAT_SAVE_PATH = _os_value(_cfg, "chatSavePath")
+RECORDS_DIR = _rooted(CHAT_SAVE_PATH, DATA_DIR / "chatlog" / "agent-text-records")
+CHAT_RECORDS_DIR = RECORDS_DIR  # alias used by the RAG search tool
+
+# RAG store (ragDbPath overrides <dataDir>/rag_db).
+RAG_DB_DIR = _rooted(_os_value(_cfg, "ragDbPath"), DATA_DIR / "rag_db")
+
+# Custom drop-in modules folder (Phase 1 - Dynamic External Module Loader).
+# customModulesPath overrides <dataDir>/custom_modules. Any .py file placed
+# here that declares UI_MANIFEST / register_routes(app) is auto-discovered
+# by interface/custom_module_manager.py at boot (and on "apply").
+CUSTOM_MODULES_PATH = _os_value(_cfg, "customModulesPath")
+CUSTOM_MODULES_DIR = _rooted(CUSTOM_MODULES_PATH, DATA_DIR / "custom_modules")
+
+# Chat log metadata + active session.
+LOG_FILE = CHATS_DIR / "chatRecord.jsonl"
+ACTIVE_SESSION_FILE = CHATS_DIR / ".active-chat.json"
+
+# History + exports (server.py).
+HISTORY_FILE = DATA_DIR / "history.json"
+EXPORTS_DIR = DATA_DIR / "exports"
+
+
+# --------------------------------------------------------------------------
+# RAG behavior switches (read live, so the UI changes apply immediately).
+# --------------------------------------------------------------------------
+
+def rag_config(default_commit: bool | None = None) -> dict:
+    """The current RAG behavior settings: commitOnSave + autoIngest.
+
+    `default_commit`: when supplied, an explicit per-chat flag overrides it;
+    otherwise the stored commitOnSave value is returned.
+    """
+    rag = _cfg.get("rag") or {}
+    commit = _bool(rag.get("commitOnSave", False))
+    if default_commit is not None:
+        commit = bool(default_commit)
+    return {
+        "commitOnSave": commit,
+        "autoIngest": _bool(rag.get("autoIngest", True)),
+    }
+
+
+def restart_needed() -> bool:
+    """True when stored path settings changed since import - the running
+    server is still using the old resolved locations until a restart."""
+    current = _load_app_settings()
+    for key in _PATH_KEYS:
+        if _os_value(current, key) != _path_keys_at_import.get(key):
+            return True
+    return False
+
+
+def about() -> dict:
+    """Human-readable summary of the resolved locations (for the config UI
+    and the /api/rag/status endpoint)."""
+    def _source(key):
+        if _env_override(key):
+            return _ENV_KEYS[key]
+        suffix = _OS_SUFFIX.get(platform(), "")
+        os_key = f"{key}{suffix}" if suffix else key
+        value = _cfg.get(os_key)
+        if value not in _EMPTY:
+            return os_key
+        if _cfg.get(key) not in _EMPTY:
+            if not _IS_WINDOWS and _WIN_PATH_RE.match(_get_text(_cfg.get(key))):
+                return f"{key} (ignored Windows path on this OS)"
+            return key
+        return f"{key} (default)"
+    return {
+        "platform": platform(),
+        "data_dir": str(DATA_DIR),
+        "chat_records_dir": str(RECORDS_DIR),
+        "chat_log_file": str(LOG_FILE),
+        "active_session_file": str(ACTIVE_SESSION_FILE),
+        "history_file": str(HISTORY_FILE),
+        "exports_dir": str(EXPORTS_DIR),
+        "rag_db_dir": str(RAG_DB_DIR),
+        "custom_modules_dir": str(CUSTOM_MODULES_DIR),
+        "sources": {
+            "dataDir": _source("dataDir"),
+            "chatSavePath": _source("chatSavePath"),
+            "ragDbPath": _source("ragDbPath"),
+            "customModulesPath": _source("customModulesPath"),
+        },
+        "rag": rag_config(),
+    }
+
+```
+
+## docs/phase-1-2-3-update/server/server.py
+
+```python
+import sys
+import os
+import subprocess
+
+# Make `python server.py` work from anywhere (server/, root, ...):
+#   1. put the project root on sys.path so `engine.*` imports resolve;
+#   2. drop this script's own folder from sys.path so our `server.py`
+#      does not shadow the `server/` package (`from server import paths`,
+#      `from server.chat_store import store`).
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
+sys.path[:] = [p for p in sys.path if os.path.abspath(p) != _SCRIPT_DIR]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import List
+from datetime import datetime
+import json
+import os
+
+# App modules:
+#   app.core.llm.refresh_models     -> scans installed Ollama models into config/models.json
+#   app.agents.registry.list_agents -> scans agent_library/ for available agents
+#   app.agents.factory.build_agent  -> builds a fresh Agent from
+#                                      agent_library/{agent_id}/agent.md + agent.json,
+#                                      replays chat history, and returns the LLM reply
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from engine.core.llm import refresh_models
+from engine.agents.registry import list_agents
+from engine.agents.factory import build_agent, replay_history, AgentNotFoundError
+from server.chat_store import store as chat_store
+from server import paths
+
+# Modular interface layer (docs/01_IDEA_AND_ARCHITECTURE.md): update modules
+# under interface/updates/<domain>/ are discovered and executed natively.
+from interface.update_manager import (UpdateManager, get_update_manager,
+                                      UPDATES_DIR, ARCHIVE_DIR)
+from interface.interface_dispatcher import (InterfaceDispatcher,
+                                            get_dispatcher, TRACE_LOG_FILE)
+from interface.restore_manager import (RestoreManager, get_restore_manager,
+                                       DEFAULT_BASELINE, MANIFEST_NAME)
+
+# Phase 1/2/3 - Dynamic External Module Loader: flat drop-in .py modules
+# under server.paths.CUSTOM_MODULES_DIR, each optionally declaring
+# UI_MANIFEST (Phase 2 - auto-rendered header buttons) and register_routes(app)
+# (Phase 1 - auto-registered FastAPI endpoints). Generated from the terminal
+# via `python about/set_title.py create-module <name>` (Phase 3). This is a
+# separate system from the interface/updates/<domain>/ UpdateManager above -
+# neither one touches the other's catalog.
+from interface.custom_module_manager import (CustomModuleManager,
+                                              get_custom_module_manager)
+
+# Runs once at startup; scans data/chatlog/agent-text-records/*.txt and records
+# their header info in data/chatlog/chatRecord.jsonl so past chats appear in
+# the drop-down immediately.
+
+# server.py now lives in server/, so the project root is one level up.
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "dashboard"
+MODELS_FILE = BASE_DIR / "config" / "models.json"
+SETTINGS_FILE = BASE_DIR / "config" / "settings.json"
+
+# Frontend-owned data (written by the /api/history, /api/settings and
+# /api/exports endpoints below). Folder locations resolve through app.paths
+# so the UI configuration can relocate the data folder.
+DATA_DIR = paths.DATA_DIR
+HISTORY_FILE = paths.HISTORY_FILE
+EXPORTS_DIR = paths.EXPORTS_DIR
+APP_SETTINGS_FILE = paths.APP_SETTINGS_FILE
+
+# The chat log lives in data/chatlog/chatRecord.jsonl, owned by
+# app.chat_store (import_once / list_log / save_discussion / delete_discussion).
+# The legacy /api/discussions endpoints below are thin wrappers over it.
+
+
+def _load_json(path, default):
+    """Read a JSON file; return `default` when missing or unreadable."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
+def _save_json(path, value) -> None:
+    """Pretty-write a JSON file, creating parent folders when needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(value, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def _default_agent() -> str:
+    """The agent used when a chat request carries no agent_id.
+
+    Comes from config/settings.json ("default_agent"); falls back to
+    "basic_chat" when the file is missing or unreadable.
+    """
+    try:
+        settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        return settings.get("default_agent") or "basic_chat"
+    except (OSError, json.JSONDecodeError):
+        return "basic_chat"
+
+
+# Names of custom drop-in modules (interface/custom_module_manager.py) whose
+# register_routes(app) has already been called for THIS process. FastAPI lets
+# routes be added to app.router at any time, so "apply" can register routes
+# for newly-added modules live, without a full restart - but a module is only
+# ever registered once per process to avoid duplicate route entries.
+_CUSTOM_ROUTES_REGISTERED: set[str] = set()
+
+
+def _register_custom_routes(manager: "CustomModuleManager") -> list[str]:
+    """Call register_routes(app) for every not-yet-registered custom module.
+    Returns the names that were newly registered this call."""
+    newly_registered = []
+    for name, mod in manager.active_modules_catalog.items():
+        if name in _CUSTOM_ROUTES_REGISTERED:
+            continue
+        if hasattr(mod, "register_routes"):
+            try:
+                mod.register_routes(app)
+                _CUSTOM_ROUTES_REGISTERED.add(name)
+                newly_registered.append(name)
+                print(f"[custom-modules] Auto-registered routes for: {name}")
+            except Exception as exc:
+                print(f"[custom-modules] Failed to register routes for {name}: {exc}")
+    return newly_registered
+
+
+# Startup hook: scan Ollama models BEFORE any request is served, and import
+# any existing data/chatlog/agent-text-records/*.txt transcripts into the log
+# (data/chatlog/chatRecord.jsonl) so old chats show up in the frontend
+# drop-down without manual work.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    refresh_models()           # ollama -> config/models.json
+    chat_store.import_once()   # agent-text-records/*.txt -> data/chatlog/chatRecord.jsonl
+
+    # Resolved storage locations at boot (cross-platform - data/chat/rag can
+    # live anywhere via app_settings.json or GENESSIS_* env overrides).
+    _boot_paths = paths.about()
+    print("[paths] data      -> " + _boot_paths["data_dir"])
+    print("[paths] records   -> " + _boot_paths["chat_records_dir"])
+    print("[paths] rag db    -> " + _boot_paths["rag_db_dir"])
+    print("[paths] custom modules -> " + _boot_paths["custom_modules_dir"])
+    for key, source in _boot_paths.get("sources", {}).items():
+        if source != key:
+            print(f"[paths] {key} overridden by {source}")
+
+    # Modular interface: discover update modules + traced dispatcher once at
+    # startup (exposed on app.state so request handlers can reach them).
+    try:
+        interface_manager = UpdateManager()
+        interface_manager.discover_all_active_modules()
+        print("[interface] active update modules: "
+              + ", ".join(f"{d}/{', '.join(n) if n else ''}"
+                          for d, n in sorted(interface_manager.active_modules_catalog.items())))
+        app.state.update_manager = interface_manager
+        app.state.interface_dispatcher = InterfaceDispatcher(interface_manager)
+    except Exception as exc:   # a broken update module must never block boot
+        print(f"[interface] WARNING: update discovery failed: {exc}")
+        app.state.update_manager = None
+        app.state.interface_dispatcher = None
+
+    # Phase 1 - Custom drop-in modules (flat CUSTOM_MODULES_DIR folder):
+    # discover, then auto-register every module's FastAPI routes.
+    try:
+        custom_manager = CustomModuleManager()
+        print("[custom-modules] active: "
+              + (", ".join(custom_manager.list_modules()) or "(none)"))
+        app.state.custom_module_manager = custom_manager
+        _register_custom_routes(custom_manager)
+    except Exception as exc:   # a broken drop-in module must never block boot
+        print(f"[custom-modules] WARNING: discovery failed: {exc}")
+        app.state.custom_module_manager = None
+
+    yield                      # serve requests; code after this runs on shutdown
+
+app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class ChatRequest(BaseModel):
+    message: str
+    model: str = ""
+    agent_id: str = ""
+    history: List[dict] = []  # Prior turns from the frontend: [{role, content}, ...]
+    # --- server-side chat session fields ---
+    session_id: str = ""      # "" on the first message of a new chat
+    title: str = ""           # optional user-chosen title for the chat
+    new_chat: bool = False    # start a fresh chat (finalizes the previous one)
+    rag: bool = False         # commit this chat to the RAG memory store on save
+
+# --- UI SOURCE OF TRUTH ---
+
+"""
+GET /api/models
+---------------
+What this request is:
+    The front-end calls this endpoint on page load to populate the model
+    dropdown (#model-select). It is a simple GET request with no body.
+
+What it needs:
+    1. A file named "models.json" located in the config folder of the project
+       (config/models.json, relative to server.py), written by refresh_models().
+    2. The file must contain a "models" key: a list of objects shaped like
+       {"id": str, "name": str}.
+
+Behaviour:
+    - If models.json exists and has models, the list is returned.
+    - If the file is missing, unreadable, or contains no models, the
+      endpoint returns an empty list: {"models": []}.
+"""
+
+@app.get("/api/models")
+async def get_models():
+    if not MODELS_FILE.exists():
+        print("[MODELS] models.json not found - returning empty list")
+        return {"models": []}
+
+    try:
+        data = json.loads(MODELS_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        print("[MODELS] models.json unreadable - returning empty list")
+        return {"models": []}
+
+    models = data.get("models", [])
+
+    if not models:
+        print("[MODELS] models.json has no models - returning empty list")
+        return {"models": []}
+
+    print("json file sent: models")
+    return {"models": models}
+
+
+@app.get("/api/agents")
+async def get_agents():
+    """Return every discovered agent from agent_library/.
+
+    Each entry carries {id, name, description, mode}. Adding a new folder
+    under agent_library/ (with agent.md + agent.json) automatically makes
+    it show up here and in the frontend selector after a restart.
+    """
+    agents = list_agents()
+    print(f"[AGENTS] {len(agents)} agent(s) discovered")
+    return {"agents": agents}
+
+
+@app.get("/api/tools")
+async def get_tools():
+    """Every tool id an agent can pick in its config (feeds the checkboxes)."""
+    from tools.registry import list_tools
+
+    return {"tools": list_tools()}
+
+
+# --- AGENT CONFIG (the dashboard's per-agent settings editor) ---
+
+def _agent_tests(meta: dict) -> list:
+    """The agent's own tests stored in its agent.json (default [])."""
+    tests = meta.get("tests") or []
+    return tests if isinstance(tests, list) else []
+
+
+def _shared_tests() -> list:
+    """Tests that run for EVERY agent (kept in the app settings)."""
+    stored = _load_json(APP_SETTINGS_FILE, {})
+    tests = ((stored.get("chatTests") or {}).get("tests")) or []
+    return [t for t in tests if isinstance(t, dict) and not t.get("agentId")]
+
+
+@app.get("/api/agents/{agent_id}/config")
+async def get_agent_config(agent_id: str):
+    """One agent's consolidated config: agent.json (meta+tests), agent.md raw
+    text + parsed sections, and the shared tests that also run for it."""
+    from engine.agents.loader import agent_dir, load_definition, AgentNotFoundError
+
+    try:
+        definition = load_definition(agent_id)
+    except AgentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    meta = definition["meta"]
+    md_file = agent_dir(agent_id) / "agent.md"
+
+    return {
+        "agent": {
+            "id": meta.get("id") or agent_id,
+            "name": meta.get("name") or agent_id,
+            "description": meta.get("description", ""),
+            "mode": meta.get("mode", "chat"),
+        },
+        "meta": meta,
+        "markdown": md_file.exists() and md_file.read_text(encoding="utf-8") or "",
+        "tests": _agent_tests(meta),
+        "sharedTests": _shared_tests(),
+    }
+
+
+@app.put("/api/agents/{agent_id}/config")
+async def save_agent_config(agent_id: str, payload: dict):
+    """Partial update of one agent's config.
+
+    Accepts any of {meta, markdown, tests} (each optional):
+      - meta:     merged into agent.json (top-level fields only)
+      - markdown: written verbatim to agent.md
+      - tests:    replaces agent.json#tests (scoped to this agent)
+    Always returns the fresh consolidated config.
+    """
+    from engine.agents.loader import (
+        agent_dir,
+        load_definition,
+        save_markdown,
+        save_meta,
+        save_tests,
+        AgentNotFoundError,
+    )
+
+    try:
+        load_definition(agent_id)  # 404 when the agent is unknown
+    except AgentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    meta_update = payload.get("meta")
+    if isinstance(meta_update, dict):
+        normalized = dict(meta_update)
+        for key in ("name", "description"):
+            if key in normalized and not isinstance(normalized[key], str):
+                normalized[key] = ""
+        if "mode" in normalized and str(normalized["mode"]).lower() not in ("chat", "agent"):
+            normalized["mode"] = "chat"
+        if "model" in normalized and not normalized["model"]:
+            normalized["model"] = None
+        if "tools" in normalized and (normalized["tools"] is None or not isinstance(normalized["tools"], list)):
+            normalized["tools"] = []
+        save_meta(agent_id, normalized)
+
+    markdown_update = payload.get("markdown")
+    if isinstance(markdown_update, str):
+        save_markdown(agent_id, markdown_update)
+
+    tests_update = payload.get("tests")
+    if isinstance(tests_update, list):
+        save_tests(agent_id, tests_update)
+
+    definition = load_definition(agent_id)
+    meta = definition["meta"]
+    md_file = agent_dir(agent_id) / "agent.md"
+    return {
+        "agent": {
+            "id": meta.get("id") or agent_id,
+            "name": meta.get("name") or agent_id,
+            "description": meta.get("description", ""),
+            "mode": meta.get("mode", "chat"),
+        },
+        "meta": meta,
+        "markdown": md_file.exists() and md_file.read_text(encoding="utf-8") or "",
+        "tests": _agent_tests(meta),
+        "sharedTests": _shared_tests(),
+    }
+
+# --- I/O ROUTES ---
+
+@app.post("/api/chat")
+def chat(data: ChatRequest):
+    """Handle a chat message from the frontend.
+
+    The backend now tracks chat sessions itself (ONE active session at a
+    time). Each chat has its own start -> middle -> end:
+      - the first message ({new_chat: true}, or no active session) finalizes
+        any previous chat and starts a new one;
+      - every message appends the user turn + assistant reply to the active
+        session (persisted in data/chatlog/.active-chat.json);
+      - when a chat ends (new chat, "Save chat" or /api/chats/end), the
+        transcript is written once to data/chatlog/agent-text-records/<title>[-v].txt
+        and logged in data/chatlog/chatRecord.jsonl.
+
+    The agent is still built FRESH per request and the browser may keep its
+    own copy of history, but the server is now the source of truth for the
+    conversation so a refresh never loses it.
+
+    This stays a SYNC endpoint on purpose: the blocking LLM call runs in
+    FastAPI's threadpool, so the event loop stays free.
+    """
+    agent_id = data.agent_id or _default_agent()
+    print(f"[SERVER] Message for '{agent_id}': {data.message}")
+    print(f"[SERVER] history turns received: {len(data.history)}")
+
+    try:
+        agent = build_agent(agent_id, model=data.model or None)
+    except AgentNotFoundError as exc:
+        print(f"[SERVER] {exc}")
+        return {"reply": f"(unknown agent '{agent_id}' - is the folder present in agent_library/?)"}
+
+    # One session at a time: start one when asked, otherwise continue it.
+    session = chat_store.ensure_session(
+        agent,
+        session_id=data.session_id,
+        title=data.title,
+        new_chat=data.new_chat,
+        rag=data.rag,
+    )
+
+    # Seed the fresh agent with the server's copy of the conversation so the
+    # LLM always sees the full chat (browser history is ignored when a session
+    # already exists server-side).
+    for turn in session.get("messages", []):
+        agent.messages.append({"role": turn.get("role"), "content": turn.get("content", "")})
+
+    reply = agent.think(data.message)
+    session = chat_store.append_turn(data.message, reply) or session
+    print(f"[SERVER] Reply via {agent.model}: {reply[:120]}...")
+
+    return {"reply": reply, "session_id": session["id"], "title": session.get("title", "")}
+
+
+# --- CHAT SESSIONS (server-side organization) ---
+
+@app.get("/api/chats")
+async def list_chats():
+    """The chat log (data/chatlog/chatRecord.jsonl): header rows for every
+    transcript + the currently active session. Feeds the frontend chats
+    drop-down."""
+    return {"chats": chat_store.list_log()}
+
+
+@app.get("/api/chats/{chat_id}")
+async def get_chat(chat_id: str):
+    """One chat: its log row + the .txt content + parsed messages."""
+    chat = chat_store.get_chat(chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail=f"Chat '{chat_id}' not found")
+    return chat
+
+
+@app.post("/api/chats/end")
+async def end_chat(payload: dict = None):
+    """Finalize the active chat: writes its .txt (versioned on name collision)
+    and adds a header row to the log. Safe to call repeatedly.
+
+    payload.rag: optional bool override for committing this chat to the RAG
+    memory store (falls back to the chat's stored flag / commitOnSave default).
+    """
+    payload = payload or {}
+    rag = payload.get("rag")
+    row = chat_store.finalize_session(
+        title=payload.get("title") or payload.get("chatTitle"),
+        rag=rag if isinstance(rag, bool) else None,
+    )
+    if not row:
+        return {"finalized": False, "saved": False, "error": "No active chat to finalize."}
+    return {"finalized": True, "saved": True, "file": row["fileName"], "id": row["id"], "version": row["version"]}
+
+
+# --- RAG MEMORY STORE ---
+
+@app.get("/api/rag/status")
+async def rag_status():
+    """Store location + how many segments are indexed (0 = empty)."""
+    from memory.rag_commit import status
+
+    return {"status": status()}
+
+
+@app.post("/api/rag/rebuild")
+async def rag_rebuild():
+    """Re-index every saved transcript into the RAG store (idempotent)."""
+    from memory.rag_commit import rebuild_store
+
+    return {"message": rebuild_store()}
+
+
+@app.post("/api/rag/reset")
+async def rag_reset():
+    """Delete the RAG store so it starts empty (records + transcripts keep)."""
+    from memory.rag_commit import purge_store
+
+    return {"message": purge_store()}
+
+
+@app.delete("/api/chats/{chat_id}")
+async def delete_chat(chat_id: str):
+    """Permanently erase a chat: its .txt transcript(s) + log records (+ the
+    active session when that is the chat being deleted)."""
+    result = chat_store.delete_chat(chat_id)
+    if not result["recordsRemoved"] and not result["filesRemoved"] and not result["wasActive"]:
+        raise HTTPException(status_code=404, detail=f"Chat '{chat_id}' not found")
+    return {"deleted": True, "id": chat_id, **result}
+
+
+# --- DISCUSSIONS (data/chatlog/chatRecord.jsonl - the chat log) ---
+
+@app.get("/api/discussions")
+async def list_discussions():
+    """Every stored chat header row, newest first (the log)."""
+    return {"discussions": chat_store.list_log()}
+
+
+@app.post("/api/discussions")
+async def save_discussion(discussion: dict):
+    """Create or update one discussion (upsert by its `id`).
+
+    The server stamps `updatedAt` itself - the frontend never has to.
+    Delegated to chat_store, which writes data/chatlog/chatRecord.jsonl.
+    """
+    discussion_id = discussion.get("id")
+    if not discussion_id:
+        return {"saved": False, "error": "A discussion needs an 'id' to be saved."}
+
+    discussion["updatedAt"] = datetime.now().isoformat(timespec="seconds")
+    saved = chat_store.save_discussion(discussion)
+    if saved:
+        print(f"[DISCUSSIONS] saved '{discussion_id}'")
+    return {"saved": saved}
+
+
+@app.delete("/api/discussions/{discussion_id}")
+async def delete_discussion(discussion_id: str):
+    """Permanently remove one discussion by id (404 when unknown)."""
+    deleted = chat_store.delete_discussion(discussion_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Discussion '{discussion_id}' not found")
+    print(f"[DISCUSSIONS] deleted '{discussion_id}'")
+    return {"deleted": True, "id": discussion_id}
+
+
+# --- HISTORY (data/history.json) ---
+
+@app.get("/api/history")
+async def list_history():
+    """Every saved message snapshot ("Save" button copies)."""
+    return {"history": _load_json(HISTORY_FILE, [])}
+
+
+@app.post("/api/history")
+async def save_history(message: dict):
+    """Store one message snapshot (upsert by its `id`)."""
+    message_id = message.get("id") or os.urandom(8).hex()
+    message["id"] = message_id
+
+    history = _load_json(HISTORY_FILE, [])
+    replaced = False
+    for index, existing in enumerate(history):
+        if existing.get("id") == message_id:
+            history[index] = message
+            replaced = True
+            break
+
+    if not replaced:
+        history.append(message)
+
+    _save_json(HISTORY_FILE, history)
+    print(f"[HISTORY] saved '{message_id}' ({'updated' if replaced else 'new'})")
+    return {"saved": True}
+
+
+@app.delete("/api/history/{message_id}")
+async def delete_history(message_id: str):
+    """Remove one saved message by id (404 when unknown)."""
+    history = _load_json(HISTORY_FILE, [])
+    remaining = [m for m in history if m.get("id") != message_id]
+
+    if len(remaining) == len(history):
+        raise HTTPException(status_code=404, detail=f"History item '{message_id}' not found")
+
+    _save_json(HISTORY_FILE, remaining)
+    print(f"[HISTORY] deleted '{message_id}'")
+    return {"deleted": True, "id": message_id}
+
+
+# --- APP SETTINGS (static/config/app_settings.json) ---
+
+@app.get("/api/about")
+async def get_about():
+    """Site identity read from about/about.json (the H1 + tagline on
+    index.html). Changed by: `python about/set_title.py`. Read per request,
+    so edits apply on the next page load without a server restart.
+    """
+    about_file = BASE_DIR / "about" / "about.json"
+    defaults = {
+        "title": "Terminator 2",
+        "subtitle": "Pick an agent below to chat with it in the floating chat, or use the chat button in the corner.",
+    }
+    try:
+        data = json.loads(about_file.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+    return {
+        "title": str(data.get("title") or defaults["title"]).strip(),
+        "subtitle": str(data.get("subtitle") or defaults["subtitle"]).strip(),
+    }
+
+
+@app.get("/api/settings")
+async def get_app_settings():
+    """The stored browser defaults; {} when nothing was saved yet.
+
+    `restartNeeded` is true when the stored path settings (dataDir,
+    chatSavePath, ragDbPath, customModulesPath) changed since the server
+    started - the running process is still using the old resolved folders
+    until a restart.
+    """
+    payload = _load_json(APP_SETTINGS_FILE, {})
+    return {
+        "settings": payload,
+        "restartNeeded": paths.restart_needed(),
+        "platform": paths.platform(),
+    }
+
+
+@app.post("/api/settings")
+async def save_app_settings(partial_settings: dict):
+    """Merge a partial settings object into what is already stored.
+
+    Path values are stored verbatim - each OS picks its own per-OS key
+    (dataDirWindows / dataDirLinux / dataDirMac, ...) or falls back to the
+    plain key, and the running server keeps its already-resolved folders
+    until a restart (`restartNeeded`)."""
+    stored = _load_json(APP_SETTINGS_FILE, {})
+    stored.update(partial_settings)
+
+    _save_json(APP_SETTINGS_FILE, stored)
+    print(f"[SETTINGS] updated keys: {', '.join(partial_settings.keys()) or '(none)'}")
+    return {
+        "settings": stored,
+        "restartNeeded": paths.restart_needed(),
+        "platform": paths.platform(),
+    }
+
+
+# --- CHAT SAVE (write chat transcripts as .txt files) ---
+
+def _sanitize_file_name(raw: str) -> str:
+    """Keep only filesystem-friendly characters; fall back to 'chat'."""
+    cleaned = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in str(raw).strip())
+    cleaned = cleaned.strip("_.") or "chat"
+    return cleaned[:120]
+
+
+def _resolve_chat_dir(raw_path: str) -> Path:
+    """Resolve the configured output folder, always anchored inside BASE_DIR.
+
+    - Empty path -> BASE_DIR / "data" / "chatlog" / "agent-text-records"
+    - Relative path -> BASE_DIR / <path>
+    - Absolute path -> kept only if it stays inside BASE_DIR; otherwise
+      an absolute path is re-rooted under BASE_DIR (so a crafted value
+      can never escape the project).
+
+    A Windows-style drive path (E:\\... ) has no meaning on Linux and is
+    treated as empty there (same rule as server/paths.py).
+    """
+    raw_path = paths.os_text(raw_path)
+    candidate = Path(raw_path or "")
+
+    if not candidate.is_absolute():
+        resolved = (BASE_DIR / candidate).resolve()
+    else:
+        resolved = candidate.resolve()
+
+    # Prevent escaping BASE_DIR (sandbox the save location).
+    try:
+        resolved.relative_to(BASE_DIR.resolve())
+    except ValueError:
+        resolved = (BASE_DIR / "data" / "chatlog" / "agent-text-records").resolve()
+
+    return resolved
+
+
+@app.post("/api/chat-save")
+async def save_chat_session(payload: dict):
+    """Finalize the ACTIVE chat: name the .txt from the chat title, bump the
+    version on a name collision (unless disableVersioning is on), and log it.
+
+    The transcript is built server-side from the active session, so the
+    frontend no longer sends raw 'content' per reply. If no active session
+    exists, it falls back to writing the legacy payload the old way.
+    """
+    row = chat_store.finalize_session(title=payload.get("title"))
+    if row:
+        print(f"[CHAT-SAVE] finalized '{row['title']}' -> {row['fileName']} (v{row['version']})")
+        return {"saved": True, "file": str(chat_store.RECORDS_DIR / row["fileName"]), "id": row["id"]}
+
+    content = payload.get("content")
+    if content is None:
+        return {"saved": False, "error": "No active chat to finalize, and no 'content' supplied."}
+
+    # Legacy fallback: write the raw blob (used by older clients).
+    raw_name = str(payload.get("fileName") or "").strip() or "chat"
+    safe_name = _sanitize_file_name(raw_name)
+    if not safe_name.lower().endswith(".txt"):
+        safe_name = f"{safe_name}.txt"
+
+    out_dir = _resolve_chat_dir(str(payload.get("path") or ""))
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = out_dir / safe_name
+    file_path.write_text(str(content), encoding="utf-8")
+
+    print(f"[CHAT-SAVE] wrote {file_path}")
+    return {"saved": True, "file": str(file_path)}
+
+
+# --- WIZARD EXPORTS (data/exports/) ---
+
+def _safe_export_name(raw: str) -> str:
+    """Keep only filesystem-friendly characters; fall back to 'export'."""
+    cleaned = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in raw.strip())
+    cleaned = cleaned.strip("_") or "export"
+    return cleaned[:80]
+
+
+@app.post("/api/exports")
+async def save_export(payload: dict):
+    """Save one wizard prompt as TWO files: {name}.md + {name}.json.
+
+    The frontend slugifies `name` already; we sanitize it again so a
+    crafted name can never escape data/exports/.
+    """
+    name_raw = str(payload.get("name") or "")
+    markdown = payload.get("markdown")
+    export_data = payload.get("data")
+
+    if not name_raw or markdown is None or export_data is None:
+        return {"saved": False, "error": "An export needs 'name', 'markdown' and 'data'."}
+
+    safe_name = _safe_export_name(name_raw)
+    EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    md_path = EXPORTS_DIR / f"{safe_name}.md"
+    json_path = EXPORTS_DIR / f"{safe_name}.json"
+    md_path.write_text(str(markdown), encoding="utf-8")
+    json_path.write_text(json.dumps(export_data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    print(f"[EXPORTS] wrote {md_path.name} + {json_path.name}")
+    return {"saved": True, "files": [md_path.name, json_path.name]}
+
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+@app.get("/")
+async def home():
+    return FileResponse(STATIC_DIR / "index.html")
+
+# --- MODULAR INTERFACE / UPDATE SYSTEM (docs/01_IDEA_AND_ARCHITECTURE.md) ---
+
+# Master switch for /api/interface/run (executes update-module functions with
+# arbitrary arguments - the user opted in for this local app). Starts OFF so a
+# fresh boot is never armed; /api/interface/toggle-run flips it for the
+# current process.
+INTERFACE_RUN_ENABLED = False
+
+
+def _update_manager():
+    """The lifespan-created manager, or the process-world singleton when the
+    startup discovery failed (so the endpoints never crash)."""
+    manager = getattr(app.state, "update_manager", None)
+    return manager if manager is not None else get_update_manager()
+
+
+def _custom_manager():
+    """The lifespan-created CustomModuleManager, or the process-wide
+    singleton when startup discovery failed."""
+    manager = getattr(app.state, "custom_module_manager", None)
+    return manager if manager is not None else get_custom_module_manager()
+
+
+def _dispatcher():
+    dispatcher = getattr(app.state, "interface_dispatcher", None)
+    return dispatcher if dispatcher is not None else get_dispatcher()
+
+
+def _restore_manager():
+    manager = getattr(app.state, "restore_manager", None)
+    return manager if manager is not None else get_restore_manager()
+
+
+def _json_safe(value):
+    """Best-effort JSON serialization for /api/interface/run results."""
+    if isinstance(value, (dict, list, str, int, float, bool)) or value is None:
+        return value
+    try:
+        return json.loads(json.dumps(value, default=str))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+class InterfaceRunRequest(BaseModel):
+    domain: str
+    module: str
+    function: str
+    args: list = []
+    kwargs: dict = {}
+
+
+class InterfaceToggleRequest(BaseModel):
+    enabled: bool
+
+
+@app.get("/api/interface/status")
+def interface_status():
+    """Everything the Settings 'Updates / Interface' card needs: the active
+    module catalog, the external archive, the trace-log tail and the
+    baseline (current-known-good-copy/) freshness + live drift.
+
+    Also exposes the Phase 1/2 custom drop-in module layer:
+      - custom_modules: {dir, active} - names loaded from CUSTOM_MODULES_DIR
+      - ui_manifests:   every active custom module's UI_MANIFEST dict, used
+                        by dashboard/js/ui/header-nav.js to auto-render
+                        header buttons (Phase 2) without editing index.html.
+    """
+    try:
+        manager = _update_manager()
+        catalog = {
+            domain: sorted(names)
+            for domain, names in sorted(manager.active_modules_catalog.items())
+        }
+    except Exception:
+        catalog = {}
+
+    archived: dict[str, list[str]] = {}
+    if ARCHIVE_DIR.is_dir():
+        for domain_dir in sorted(ARCHIVE_DIR.iterdir()):
+            if domain_dir.is_dir():
+                archived[domain_dir.name] = sorted(
+                    p.name for p in domain_dir.glob("*.py")
+                )
+
+    trace_tail: list[str] = []
+    if TRACE_LOG_FILE.is_file():
+        trace_tail = TRACE_LOG_FILE.read_text(
+            encoding="utf-8", errors="replace"
+        ).splitlines()[-20:]
+
+    baseline = {
+        "folder": str(DEFAULT_BASELINE),
+        "exists": DEFAULT_BASELINE.is_dir(),
+        "manifest": None,
+        "drift": None,
+        "error": None,
+    }
+    try:
+        diff = _restore_manager().diff()
+        baseline.update({
+            "folder": diff["baseline"],
+            "exists": Path(diff["baseline"]).is_dir(),
+            "drift": {
+                "modified": len(diff["modified"]),
+                "modified_files": diff["modified"][:50],
+                "shared": diff["shared"],
+                "skipped": len(diff["skipped"]),
+                "untracked": len(diff["untracked"]),
+            },
+        })
+    except Exception as exc:
+        baseline["error"] = str(exc)
+
+    manifest_path = Path(baseline["folder"]) / MANIFEST_NAME
+    if manifest_path.is_file():
+        baseline["manifest"] = _load_json(manifest_path, None)
+
+    try:
+        custom_manager = _custom_manager()
+        custom_modules = {
+            "dir": str(paths.CUSTOM_MODULES_DIR),
+            "active": custom_manager.list_modules(),
+        }
+        ui_manifests = custom_manager.ui_manifests()
+    except Exception as exc:
+        custom_modules = {"dir": str(paths.CUSTOM_MODULES_DIR), "active": [], "error": str(exc)}
+        ui_manifests = []
+
+    return {
+        "ok": True,
+        "run_enabled": INTERFACE_RUN_ENABLED,
+        "updates_dir": str(UPDATES_DIR),
+        "archive_dir": str(ARCHIVE_DIR),
+        "trace_log": str(TRACE_LOG_FILE),
+        "catalog": catalog,
+        "archived": archived,
+        "trace_tail": trace_tail,
+        "baseline": baseline,
+        "custom_modules": custom_modules,
+        "ui_manifests": ui_manifests,
+    }
+
+
+@app.post("/api/interface/apply")
+def interface_apply():
+    """Reload every update module from disk, then regenerate the docs
+    snapshots (docs/APP_STRUCTURE.md + docs/APP_CODE_SNAPSHOT.md).
+
+    Also reloads the Phase 1 custom drop-in modules and auto-registers
+    routes for any that are newly discovered (edits to an already-loaded
+    module still need a restart to take effect, since its old route
+    closures stay bound - but a brand NEW module's routes go live here).
+    """
+    try:
+        manager = _update_manager()
+        catalog = manager.reload_all()
+        print("[interface] apply: reloaded modules per domain:"
+              + ", ".join(f"{d}={len([n for n in ns])}"
+                          for d, ns in sorted(catalog.items())))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"module reload failed: {exc}")
+
+    try:
+        custom_manager = _custom_manager()
+        custom_manager.discover_all_active_modules()
+        newly_registered = _register_custom_routes(custom_manager)
+        if newly_registered:
+            print("[custom-modules] apply: newly registered -> " + ", ".join(newly_registered))
+    except Exception as exc:
+        print(f"[custom-modules] WARNING: apply failed: {exc}")
+
+    docs_script = BASE_DIR / "scripts" / "update_docs.py"
+    docs_ok = True
+    if docs_script.is_file():
+        result = subprocess.run(
+            [sys.executable, str(docs_script)], cwd=str(BASE_DIR)
+        )
+        docs_ok = result.returncode == 0
+    else:
+        docs_ok = False
+
+    return {
+        "ok": True,
+        "catalog": {
+            d: sorted(names)
+            for d, names in sorted(_update_manager().active_modules_catalog.items())
+        },
+        "custom_modules": _custom_manager().list_modules(),
+        "docs_regenerated": docs_ok,
+    }
+
+
+@app.post("/api/interface/snapshot")
+def interface_snapshot():
+    """Publish the current live tree as the new baseline (rebaseline)."""
+    try:
+        count = _restore_manager().snapshot_baseline()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"snapshot failed: {exc}")
+    return {"ok": True, "files": count, "baseline": str(DEFAULT_BASELINE)}
+
+
+@app.post("/api/interface/restore")
+def interface_restore(payload: dict = None):
+    """Roll the live tree back to the baseline. DRY-RUN by default - the
+    browser must send {"apply": true} (or {"dryRun": false}) to actually
+    restore. A real restore backs everything up first into
+    data/snapshots/pre_restore_backup/."""
+    payload = payload or {}
+    baseline = payload.get("baseline")
+    requested = payload.get("apply", False)
+    dry_run = requested is not True
+    if payload.get("dryRun") is False:
+        dry_run = False
+    if dry_run:
+        result = _restore_manager().restore(baseline=baseline, dry_run=True)
+        return {"ok": True, "dry_run": True, **result}
+    try:
+        result = _restore_manager().restore(baseline=baseline, dry_run=False)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"restore failed: {exc}")
+    return {"ok": True, "dry_run": False, **result}
+
+
+@app.post("/api/interface/run")
+def interface_run(data: InterfaceRunRequest):
+    """Execute an update-module function by (domain, module, function) names.
+    Arbitrary code execution - gated by INTERFACE_RUN_ENABLED, which the
+    Settings card arms explicitly via /api/interface/toggle-run."""
+    if not INTERFACE_RUN_ENABLED:
+        raise HTTPException(
+            status_code=403,
+            detail="Module execution is disabled. Enable it in Settings -> "
+                   "Updates / Interface first.",
+        )
+    try:
+        result = _dispatcher().execute_action(
+            data.domain, data.module, data.function,
+            *data.args, **data.kwargs,
+        )
+    except ModuleNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+    return {"ok": True, "domain": data.domain, "module": data.module,
+            "function": data.function, "result": _json_safe(result)}
+
+
+@app.post("/api/interface/toggle-run")
+def interface_toggle_run(data: InterfaceToggleRequest):
+    """Arm/disarm /api/interface/run for this process. The flip is logged to
+    data/interface_trace.log so a change of state is never silent."""
+    global INTERFACE_RUN_ENABLED
+    INTERFACE_RUN_ENABLED = data.enabled
+    entry = f"[RUN TOGGLE] module execution {'ENABLED' if data.enabled else 'DISABLED'}"
+    print(entry)
+    try:
+        from interface.interface_dispatcher import logger as _trace_logger
+        _trace_logger.info(entry)
+    except Exception:
+        pass
+    return {"ok": True, "run_enabled": INTERFACE_RUN_ENABLED}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run(app, host=host, port=port)
 
 ```
 
@@ -13603,13 +16173,6 @@ You are patient, practical, clear, direct, and analytical. You act as both a sof
 - Explain concepts clearly.
 - Prefer maintainable and simple solutions.
 - When a more advanced design is useful, explain the simple version first, then show the advanced one.
-
-## decision_style
-
-- Prefer simple solutions before complex ones.
-- Separate facts from assumptions.
-- Use tools when external information is required.
-- Do not make hidden assumptions.
 
 ## priorities
 
@@ -13895,8 +16458,8 @@ If no important constraints were identified, write:
 ## role
 You are the **RAG Assistant**, a secure workspace file-manager and memory-retrieval specialist.
 
-##
-Starndard greeting I am a RAG Assistant
+## greeting
+Standard greeting: I am a RAG Assistant.
 
 ## purpose
 Retrieve insights from past sessions and help Jesus discover, read, write, and manage workspace files safely.
@@ -15093,6 +17656,156 @@ by `interface/restore_manager.py`. Design: docs/01_IDEA_AND_ARCHITECTURE.md.
 """
 ```
 
+## interface/custom_module_manager.py
+
+```python
+"""interface/custom_module_manager.py
+====================================
+
+Phase 1 - Dynamic External Module Loader & Auto-Route Registration.
+
+This is a SEPARATE, ADDITIVE system from interface/update_manager.py's
+domain-based UpdateManager (engine/tools/server under interface/updates/).
+It does not touch that catalog or its endpoints.
+
+CustomModuleManager scans a single flat folder - server.paths.CUSTOM_MODULES_DIR
+(configurable in Settings as "Custom Modules Path", default
+data/custom_modules/) - for standalone .py files and imports each one with
+importlib.util (they live outside any Python package, so this does NOT use
+`import`/dotted module names the way UpdateManager does).
+
+Convention for a drop-in module (see about/set_title.py's `create-module`
+CLI command for a generator):
+
+    UI_MANIFEST = {
+        "module_id": "my_feature",
+        "buttons": [ { "id": ..., "label": ..., "target": "header",
+                        "action": "prompt_input", "prompt_message": ...,
+                        "api_endpoint": "/api/my_feature/execute",
+                        "title": ... } ]
+    }
+
+    def register_routes(app):
+        @app.post("/api/my_feature/execute")
+        def execute(payload: dict):
+            ...
+
+server/server.py's lifespan() discovers these at boot, calls register_routes()
+once per module, and GET /api/interface/status exposes every active module's
+UI_MANIFEST (via ui_manifests) so dashboard/js/ui/header-nav.js can render the
+buttons dynamically (Phase 2) without ever editing index.html or header-nav.js
+by hand.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+from types import ModuleType
+
+from server.paths import CUSTOM_MODULES_DIR
+
+
+class CustomModuleManager:
+    """Finds, imports and tracks flat drop-in modules from CUSTOM_MODULES_DIR."""
+
+    def __init__(self) -> None:
+        self.active_modules_catalog: dict[str, ModuleType] = {}
+        self.discover_all_active_modules()
+
+    # ------------------------------------------------------------------ scan
+
+    def discover_all_active_modules(self) -> dict[str, ModuleType]:
+        """(Re)scan CUSTOM_MODULES_DIR and (re)import every module found.
+
+        Files starting with "_" or "." are skipped (private/hidden helpers).
+        A module that fails to import is logged and skipped - one broken
+        drop-in file must never take the whole app down.
+        """
+        self.active_modules_catalog.clear()
+
+        target_dir = Path(CUSTOM_MODULES_DIR)
+        if not target_dir.exists():
+            target_dir.mkdir(parents=True, exist_ok=True)
+            return self.active_modules_catalog
+
+        for file in sorted(target_dir.glob("*.py")):
+            if file.name.startswith(("_", ".")):
+                continue
+            mod_name = file.stem
+            try:
+                module = self._import_from_path(mod_name, file)
+                self.active_modules_catalog[mod_name] = module
+            except Exception as exc:
+                print(f"[custom-modules] Failed to load {file.name}: {exc}")
+
+        return self.active_modules_catalog
+
+    def reload_all(self) -> dict[str, ModuleType]:
+        """Alias kept for symmetry with UpdateManager.reload_all()."""
+        return self.discover_all_active_modules()
+
+    def _import_from_path(self, mod_name: str, file: Path) -> ModuleType:
+        """Import a standalone .py file that isn't part of any package."""
+        qualified_name = f"custom_modules.{mod_name}"
+        spec = importlib.util.spec_from_file_location(qualified_name, file)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"could not build an import spec for {file}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[qualified_name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    # -------------------------------------------------------------- lookups
+
+    def get_active_module(self, name: str) -> ModuleType:
+        """Return the live module object for direct, native execution."""
+        try:
+            return self.active_modules_catalog[name]
+        except KeyError:
+            known = sorted(self.active_modules_catalog)
+            raise KeyError(
+                f"no active custom module '{name}' "
+                f"(known modules: {known or 'none'})"
+            ) from None
+
+    def list_modules(self) -> list[str]:
+        """Sorted names of every loaded custom module."""
+        return sorted(self.active_modules_catalog)
+
+    def ui_manifests(self) -> list[dict]:
+        """UI_MANIFEST dict from every active module that declares one."""
+        manifests = []
+        for mod in self.active_modules_catalog.values():
+            manifest = getattr(mod, "UI_MANIFEST", None)
+            if isinstance(manifest, dict):
+                manifests.append(manifest)
+        return manifests
+
+    # ------------------------------------------------------------- summary
+
+    def summary(self) -> str:
+        """Human-readable catalog listing."""
+        names = sorted(self.active_modules_catalog)
+        lines = [f"Custom drop-in modules in {CUSTOM_MODULES_DIR}:"]
+        lines.append("  " + (", ".join(names) if names else "(none)"))
+        lines.append(f"total: {len(names)} active module(s)")
+        return "\n".join(lines)
+
+
+_manager: CustomModuleManager | None = None
+
+
+def get_custom_module_manager() -> CustomModuleManager:
+    """Process-wide CustomModuleManager singleton (mirrors get_update_manager)."""
+    global _manager
+    if _manager is None:
+        _manager = CustomModuleManager()
+    return _manager
+
+```
+
 ## interface/interface_dispatcher.py
 
 ```python
@@ -15611,13 +18324,20 @@ class UpdateManager:
 
     # ----------------------------------------------------------------- summary
 
-    def summary(self) -> str:
-        """Human-readable catalog listing, domain by domain."""
+    def summary(self, exclude: str | None = None) -> str:
+        """Human-readable catalog listing, domain by domain.
+
+        `exclude` (e.g. the wiring bridge domain `"custom"`) is skipped so a
+        virtual injection never shows up as a physical update folder.
+        """
         lines = [f"Update modules in {UPDATES_DIR}:"]
-        for domain in sorted(self.active_modules_catalog):
-            names = sorted(self.active_modules_catalog[domain])
-            lines.append(f"  {domain}/  ->  {', '.join(names) if names else '(none)'}")
-        total = sum(len(names) for names in self.active_modules_catalog.values())
+        total = 0
+        for domain, names in sorted(self.active_modules_catalog.items()):
+            if domain == exclude:
+                continue
+            sorted_names = sorted(names)
+            lines.append(f"  {domain}/  ->  {', '.join(sorted_names) if sorted_names else '(none)'}")
+            total += len(sorted_names)
         lines.append(f"total: {total} active module(s)")
         return "\n".join(lines)
 
@@ -15649,165 +18369,7 @@ via `get_active_module(domain, name)`.
 ```python
 """Update modules that extend the agent engine (engine/)."""
 
-__all__ = ["hello_update", "newfunction"]
-```
-
-## interface/updates/engine/hello_update.py
-
-```python
-"""Example update module for the `engine` domain.
-
-Discovered by UpdateManager and executable natively:
-    from interface.update_manager import UpdateManager
-    mod = UpdateManager().get_active_module("engine", "hello_update")
-    print(mod.run_example())
-"""
-
-
-def run_example() -> str:
-    """Return a short self-identification string for the example module."""
-    return "hello from interface/updates/engine/hello_update.py"
-
-
-def double(number: int | float) -> int | float:
-    """Trivial demo transform: return twice `number`."""
-    return number * 2
-```
-
-## interface/updates/engine/newfunction.py
-
-```python
-"""
-LOCATION: interface/updates/engine/newfunction.py
-USAGE (Option B Direct Access):
-    module = update_manager.get_active_module("engine", "newfunction")
-    result = module.execute_new_logic("Input Data")
-"""
-import logging
-
-logger = logging.getLogger("app_change_tracker")
-
-
-def execute_new_logic(data_payload: str):
-    """Example logic function for engine updates."""
-    logger.info(f"[ENGINE: newfunction] Processing payload: {data_payload}")
-    return f"Engine processed payload: {data_payload}"
-
-
-def secondary_engine_action(value: int):
-    """Secondary action inside the same module file."""
-    return value * 10
-```
-
-## interface/updates/engine/project_creator.py
-
-```python
-"""Project creator module.
-
-LOCATION: interface/updates/engine/project_creator.py
-USAGE (Option B Direct Access):
-    mod = update_manager.get_active_module("engine", "project_creator")
-    result = mod.create_project("MyNewProject", "C:\\Projects\\MyNewProject")
-"""
-
-import sys
-import venv
-import subprocess
-from pathlib import Path
-import logging
-
-logger = logging.getLogger("app_change_tracker")
-
-# Standard workspace folder layout
-STANDARD_FOLDERS = [
-    "config",
-    "server",
-    "dashboard",
-    "modules",
-    "project_scope",
-    "to_do",
-    "updates",
-    "data",
-]
-
-DEFAULT_REQUIREMENTS = [
-    "fastapi",
-    "uvicorn",
-    "streamlit",
-]
-
-STARTER_SERVER_CODE = """from fastapi import FastAPI
-
-app = FastAPI(title="Project Server")
-
-@app.get("/")
-def read_root():
-    return {"status": "online", "message": "Project server running"}
-
-@app.get("/api/status")
-def get_status():
-    return {"status": "ready"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8500)
-"""
-
-STARTER_DASHBOARD_CODE = """import streamlit as st
-
-st.set_page_config(page_title="Project Dashboard", layout="wide")
-st.title("Project Dashboard")
-st.write("Welcome to your standalone project workspace!")
-
-st.header("Project Status")
-st.info("Server & Workspace Initialized")
-"""
-
-
-def get_venv_python(project_path: Path) -> Path:
-    """Returns the path to the Python executable in .venv based on OS."""
-    if sys.platform == "win32":
-        return project_path / ".venv" / "Scripts" / "python.exe"
-    return project_path / ".venv" / "bin" / "python"
-
-
-def create_project(project_name: str, target_dir: str, dependencies: list = None) -> dict:
-    """Creates a standalone project environment with standard folders, .venv, server, and dashboard."""
-    project_path = Path(target_dir).resolve()
-    logger.info(f"[PROJECT BUILDER] Creating project '{project_name}' at {project_path}")
-
-    # 1. Generate Standard Workspace Folders
-    project_path.mkdir(parents=True, exist_ok=True)
-    for folder in STANDARD_FOLDERS:
-        (project_path / folder).mkdir(parents=True, exist_ok=True)
-
-    # 2. Build Platform-Specific Virtual Environment
-    venv_dir = project_path / ".venv"
-    if not venv_dir.exists():
-        builder = venv.EnvBuilder(with_pip=True)
-        builder.create(venv_dir)
-
-    # 3. Write requirements.txt and install dependencies
-    req_list = dependencies or DEFAULT_REQUIREMENTS
-    req_file = project_path / "requirements.txt"
-    req_file.write_text("\n".join(req_list) + "\n", encoding="utf-8")
-
-    venv_python = get_venv_python(project_path)
-    subprocess.run(
-        [str(venv_python), "-m", "pip", "install", "-r", str(req_file)],
-        check=True,
-    )
-
-    # 4. Generate Starter Server & Dashboard
-    (project_path / "server" / "server.py").write_text(STARTER_SERVER_CODE, encoding="utf-8")
-    (project_path / "dashboard" / "app.py").write_text(STARTER_DASHBOARD_CODE, encoding="utf-8")
-
-    return {
-        "status": "success",
-        "project_name": project_name,
-        "path": str(project_path),
-        "venv_python": str(venv_python),
-    }
+__all__: list[str] = []
 ```
 
 ## interface/updates/server/__init__.py
@@ -15818,61 +18380,221 @@ def create_project(project_name: str, target_dir: str, dependencies: list = None
 __all__: list[str] = []
 ```
 
-## interface/updates/server/project_routes.py
-
-```python
-"""
-LOCATION: interface/updates/server/project_routes.py
-"""
-import os
-from pathlib import Path
-from pydantic import BaseModel
-from interface.update_manager import UpdateManager
-
-class CreateProjectRequest(BaseModel):
-    project_name: str
-    target_dir: str
-    dependencies: list[str] = None
-
-def register_routes(app):
-    """Registers project manager API endpoints onto the FastAPI app."""
-    
-    @app.post("/api/projects/create")
-    def api_create_project(req: CreateProjectRequest):
-        mgr = UpdateManager()
-        builder = mgr.get_active_module("engine", "project_creator")
-        if not builder:
-            return {"status": "error", "message": "project_creator module not found"}
-        
-        result = builder.create_project(
-            project_name=req.project_name,
-            target_dir=req.target_dir,
-            dependencies=req.dependencies
-        )
-        return result
-
-    @app.get("/api/projects/list")
-    def api_list_projects(base_dir: str = "C:\\Projects"):
-        """Lists created project folders at the target location."""
-        path = Path(base_dir)
-        if not path.exists():
-            return {"projects": []}
-        
-        projects = [
-            d.name for d in path.iterdir() 
-            if d.is_dir() and (d / "requirements.txt").exists()
-        ]
-        return {"base_dir": str(path), "projects": projects}
-
-
-```
-
 ## interface/updates/tools/__init__.py
 
 ```python
 """Update modules that extend agent capabilities (tools/)."""
 
 __all__: list[str] = []
+```
+
+## interface/wiring/__init__.py
+
+```python
+"""interface/wiring/
+====================
+
+The connection layer between the module loaders and the running app.
+
+- `UpdateManager` discovers `interface/updates/<domain>/*.py` - callable
+  natively from core code, traced by `InterfaceDispatcher`.
+- `CustomModuleManager` discovers flat `data/custom_modules/*.py` - each with
+  a `UI_MANIFEST` (header button) and `register_routes(app)` (FastAPI route).
+
+This package joins the two worlds:
+
+- route registration for custom modules lives here (previously hand-rolled in
+  `server/server.py`), still idempotent per process;
+- custom modules are bridged into the update manager's catalog under the
+  virtual domain `custom`, so their functions are ALSO callable from core
+  code through the same traced dispatcher:
+
+      InterfaceDispatcher().execute_action("custom", <module>, <func>, ...)
+
+`WiringManager` is the front door: `wire(app)` at boot, `rewire(app)` on
+`apply`, `registry()` for `/api/interface/status`. Nothing here replaces the
+loaders - it only connects them to the app.
+"""
+
+from __future__ import annotations
+
+from interface.wiring.bridges import BRIDGE_DOMAIN, CustomModuleBridge
+
+__all__ = ["WiringManager", "CustomModuleBridge", "BRIDGE_DOMAIN"]
+
+
+class WiringManager:
+    """Front door for wiring loaded modules into the running app."""
+
+    def __init__(self, update_manager=None, custom_manager=None) -> None:
+        if update_manager is None:
+            from interface.update_manager import get_update_manager
+            update_manager = get_update_manager()
+        if custom_manager is None:
+            from interface.custom_module_manager import get_custom_module_manager
+            custom_manager = get_custom_module_manager()
+        self.update_manager = update_manager
+        self.custom_manager = custom_manager
+        self.bridge = CustomModuleBridge(update_manager, custom_manager)
+
+    # ------------------------------------------------------------------ wiring
+
+    def wire(self, app=None) -> None:
+        """Scan custom modules, register their routes once per process and
+        bridge them into the dispatcher's catalog.
+
+        `app` may be None (CLI usage) - then discovery + bridging still run
+        but route registration needs an app and is skipped.
+        """
+        self.custom_manager.discover_all_active_modules()
+        if app is not None:
+            self.bridge.register_routes(app)
+        self.bridge.activate()
+        if app is not None:
+            app.state.wiring = self
+
+    def rewire(self, app=None) -> None:
+        """Reload BOTH loaders from disk, then wire() again (the `apply`
+        trigger). The bridge is re-injected because reload_all() rebuilds the
+        update catalog from scratch."""
+        self.update_manager.reload_all()
+        self.wire(app)
+
+    # ----------------------------------------------------------------- registry
+
+    def registry(self) -> dict:
+        """Consolidated view of both layers, for /api/interface/status."""
+        from server.paths import CUSTOM_MODULES_DIR
+
+        if self.custom_manager is not None:
+            active = self.custom_manager.list_modules()
+            ui_manifests = self.custom_manager.ui_manifests()
+        else:
+            active, ui_manifests = [], []
+
+        catalog: dict[str, list[str]] = {}
+        if self.update_manager is not None:
+            for domain, names in sorted(self.update_manager.active_modules_catalog.items()):
+                if domain == BRIDGE_DOMAIN:
+                    continue
+                catalog[domain] = sorted(names)
+
+        return {
+            "catalog": catalog,
+            "custom_modules": {"dir": str(CUSTOM_MODULES_DIR), "active": active},
+            "ui_manifests": ui_manifests,
+            "bridge": {
+                "domain": BRIDGE_DOMAIN,
+                "active": self.bridge.reachable_names(),
+            },
+        }
+
+    # ------------------------------------------------------------------ summary
+
+    def summary(self) -> str:
+        """Human-readable catalog + bridge listing for boot / CLI."""
+        lines = []
+        if self.update_manager is not None:
+            lines.append(self.update_manager.summary(exclude=BRIDGE_DOMAIN))
+        if self.custom_manager is not None:
+            lines.append(self.custom_manager.summary())
+        lines.append(self.bridge.summary())
+        return "\n".join(lines)
+```
+
+## interface/wiring/bridges.py
+
+```python
+"""interface/wiring/bridges.py
+==============================
+
+The concrete connections between the module loaders and the running app:
+
+  - Route registration: calls `register_routes(app)` for every custom drop-in
+    module, at most once per process. FastAPI allows adding routes at any
+    time, so brand-new modules can go live via `apply` without a restart.
+  - The dispatcher bridge: custom modules are mirrored into the update
+    manager's catalog under the virtual domain `BRIDGE_DOMAIN`, making them
+    reachable from core code through the SAME traced dispatcher used for
+    update modules:
+
+        InterfaceDispatcher().execute_action("custom", "analytics_builder",
+                                             "my_logic", arg)
+
+    The bridge is re-injected after every reload because
+    UpdateManager.reload_all() rebuilds its catalog from scratch.
+"""
+
+from __future__ import annotations
+
+BRIDGE_DOMAIN = "custom"
+
+# Custom drop-in modules whose register_routes(app) has already been called
+# for THIS process (see CustomModuleBridge.register_routes).
+_REGISTERED: set[str] = set()
+
+
+class CustomModuleBridge:
+    """Joins the flat custom drop-ins to the domain-based update world."""
+
+    def __init__(self, update_manager=None, custom_manager=None) -> None:
+        self.update_manager = update_manager
+        self.custom_manager = custom_manager
+
+    # ------------------------------------------------------------------ routes
+
+    def register_routes(self, app) -> list[str]:
+        """Call register_routes(app) for every not-yet-registered custom
+        module. Returns the names newly registered this call."""
+        newly_registered: list[str] = []
+        if self.custom_manager is None:
+            return newly_registered
+        for name, mod in self.custom_manager.active_modules_catalog.items():
+            if name in _REGISTERED:
+                continue
+            if hasattr(mod, "register_routes"):
+                try:
+                    mod.register_routes(app)
+                    _REGISTERED.add(name)
+                    newly_registered.append(name)
+                    print(f"[custom-modules] Auto-registered routes for: {name}")
+                except Exception as exc:
+                    print(f"[custom-modules] Failed to register routes for {name}: {exc}")
+        return newly_registered
+
+    # ------------------------------------------------------------------ bridge
+
+    def activate(self) -> None:
+        """Mirror every active custom module into the update manager's catalog
+        under BRIDGE_DOMAIN so execute_action("custom", ...) can reach it."""
+        self.deactivate()
+        if self.custom_manager is None or self.update_manager is None:
+            return
+        catalog = dict(self.custom_manager.active_modules_catalog)
+        if catalog:
+            self.update_manager.active_modules_catalog[BRIDGE_DOMAIN] = catalog
+        names = ", ".join(sorted(catalog)) if catalog else "(none)"
+        print(f"[wiring] bridge: custom modules -> domain '{BRIDGE_DOMAIN}': {names}")
+
+    def deactivate(self) -> None:
+        """Drop the bridge domain (used before re-injecting after a reload)."""
+        if self.update_manager is not None:
+            self.update_manager.active_modules_catalog.pop(BRIDGE_DOMAIN, None)
+
+    def reachable_names(self) -> list[str]:
+        """Names of custom modules callable via execute_action(BRIDGE_DOMAIN,
+        <name>, <func>, ...)."""
+        if self.update_manager is None:
+            return []
+        return sorted(self.update_manager.active_modules_catalog.get(BRIDGE_DOMAIN, {}))
+
+    # ------------------------------------------------------------------ summary
+
+    def summary(self) -> str:
+        names = self.reachable_names()
+        return ("Custom modules reachable via execute_action"
+                f"('{BRIDGE_DOMAIN}', <name>, <func>): "
+                + (", ".join(names) if names else "(none)"))
 ```
 
 ## memory/__init__.py
@@ -16766,7 +19488,7 @@ def search_chat_logs(query: str) -> str:
 
 ```text
 # requirements.txt - Declares dependencies for the Stateful Agentic RAG Module
-# Designed to run locally on your Linux environment
+# Cross-platform: runs on Windows, Linux, macOS and ChromeOS (Linux container)
 chromadb>=0.4.0
 docling>=2.59.0
 ollama>=0.3.0
@@ -18345,13 +21067,16 @@ page (config.html), stored in dashboard/config/app_settings.json via
 /api/settings:
 
     app_settings.json keys:
-        dataDir        base data folder (default "data").
-                       Relative -> project root; absolute -> used as-is.
-        chatSavePath   where saved chat transcripts (.txt) are written.
-                       Empty -> <dataDir>/chatlog/agent-text-records
-        ragDbPath      where the RAG store (chroma.sqlite3) lives.
-                       Empty -> <dataDir>/rag_db
-        rag            { commitOnSave: bool, autoIngest: bool }
+        dataDir            base data folder (default "data").
+                           Relative -> project root; absolute -> used as-is.
+        chatSavePath       where saved chat transcripts (.txt) are written.
+                           Empty -> <dataDir>/chatlog/agent-text-records
+        ragDbPath          where the RAG store (chroma.sqlite3) lives.
+                           Empty -> <dataDir>/rag_db
+        customModulesPath  external folder containing drop-in .py update
+                           modules (Phase 1 - Dynamic External Module
+                           Loader). Empty -> <dataDir>/custom_modules
+        rag                { commitOnSave: bool, autoIngest: bool }
 
     Per-OS keys (one settings file works on Windows, Linux and macOS):
         <key>Windows / <key>Linux / <key>Mac    e.g. dataDirLinux,
@@ -18366,9 +21091,10 @@ page (config.html), stored in dashboard/config/app_settings.json via
 
     Environment variables (highest precedence - handy on a Chromebook or a
     second machine, no file edits needed):
-        GENESSIS_DATA_DIR        -> dataDir
-        GENESSIS_CHAT_SAVE_PATH  -> chatSavePath
-        GENESSIS_RAG_DB_PATH     -> ragDbPath
+        GENESSIS_DATA_DIR            -> dataDir
+        GENESSIS_CHAT_SAVE_PATH      -> chatSavePath
+        GENESSIS_RAG_DB_PATH         -> ragDbPath
+        GENESSIS_CUSTOM_MODULES_PATH -> customModulesPath
 
 Everything else is derived from these so changing "data folder" moves the
 chatlog, transcripts, history, exports and RAG store together.
@@ -18378,8 +21104,9 @@ agent's own files under engine/agent_library/ - edited from the same
 config.html page, one agent card per agent.
 
 Path config is resolved at import time - save settings in the UI, then
-restart the server for dataDir/ragDbPath/chatSavePath changes to apply.
-`restart_needed()` tells callers when a restart is required.
+restart the server for dataDir/ragDbPath/chatSavePath/customModulesPath
+changes to apply. `restart_needed()` tells callers when a restart is
+required.
 """
 
 import json
@@ -18401,6 +21128,7 @@ _ENV_KEYS = {
     "dataDir": "GENESSIS_DATA_DIR",
     "chatSavePath": "GENESSIS_CHAT_SAVE_PATH",
     "ragDbPath": "GENESSIS_RAG_DB_PATH",
+    "customModulesPath": "GENESSIS_CUSTOM_MODULES_PATH",
 }
 
 # Current platform -> per-OS settings-key suffix.
@@ -18514,7 +21242,7 @@ _cfg = _load_app_settings()
 
 # Snapshot of the stored *path* settings at import. The UI can compare
 # against the live file to tell the user a restart is required.
-_PATH_KEYS = ("dataDir", "chatSavePath", "ragDbPath")
+_PATH_KEYS = ("dataDir", "chatSavePath", "ragDbPath", "customModulesPath")
 _path_keys_at_import = {key: _os_value(_cfg, key) for key in _PATH_KEYS}
 
 # Base data folder (dataDir / dataDirLinux / ... overrides the default "data").
@@ -18528,6 +21256,13 @@ CHAT_RECORDS_DIR = RECORDS_DIR  # alias used by the RAG search tool
 
 # RAG store (ragDbPath overrides <dataDir>/rag_db).
 RAG_DB_DIR = _rooted(_os_value(_cfg, "ragDbPath"), DATA_DIR / "rag_db")
+
+# Custom drop-in modules folder (Phase 1 - Dynamic External Module Loader).
+# customModulesPath overrides <dataDir>/custom_modules. Any .py file placed
+# here that declares UI_MANIFEST / register_routes(app) is auto-discovered
+# by interface/custom_module_manager.py at boot (and on "apply").
+CUSTOM_MODULES_PATH = _os_value(_cfg, "customModulesPath")
+CUSTOM_MODULES_DIR = _rooted(CUSTOM_MODULES_PATH, DATA_DIR / "custom_modules")
 
 # Chat log metadata + active session.
 LOG_FILE = CHATS_DIR / "chatRecord.jsonl"
@@ -18593,13 +21328,16 @@ def about() -> dict:
         "history_file": str(HISTORY_FILE),
         "exports_dir": str(EXPORTS_DIR),
         "rag_db_dir": str(RAG_DB_DIR),
+        "custom_modules_dir": str(CUSTOM_MODULES_DIR),
         "sources": {
             "dataDir": _source("dataDir"),
             "chatSavePath": _source("chatSavePath"),
             "ragDbPath": _source("ragDbPath"),
+            "customModulesPath": _source("customModulesPath"),
         },
         "rag": rag_config(),
     }
+
 ```
 
 ## server/server.py
@@ -18653,6 +21391,13 @@ from interface.interface_dispatcher import (InterfaceDispatcher,
                                             get_dispatcher, TRACE_LOG_FILE)
 from interface.restore_manager import (RestoreManager, get_restore_manager,
                                        DEFAULT_BASELINE, MANIFEST_NAME)
+
+# Wiring layer: connects the two module loaders to the running app - owns
+# custom-module route registration and bridges Phase 1/2/3 drop-in modules
+# (data/custom_modules/) into the update manager's catalog under the virtual
+# 'custom' domain, so core code can call them via the traced dispatcher.
+from interface.custom_module_manager import get_custom_module_manager
+from interface.wiring import WiringManager
 
 # Runs once at startup; scans data/chatlog/agent-text-records/*.txt and records
 # their header info in data/chatlog/chatRecord.jsonl so past chats appear in
@@ -18721,14 +21466,17 @@ async def lifespan(app: FastAPI):
     print("[paths] data      -> " + _boot_paths["data_dir"])
     print("[paths] records   -> " + _boot_paths["chat_records_dir"])
     print("[paths] rag db    -> " + _boot_paths["rag_db_dir"])
+    print("[paths] custom modules -> " + _boot_paths["custom_modules_dir"])
     for key, source in _boot_paths.get("sources", {}).items():
         if source != key:
             print(f"[paths] {key} overridden by {source}")
 
     # Modular interface: discover update modules + traced dispatcher once at
-    # startup (exposed on app.state so request handlers can reach them).
+    # startup (exposed on app.state so request handlers can reach them). Uses
+    # the process singletons so the wiring bridge below mutates the SAME
+    # catalog that execute_action()/get_active_module() read through.
     try:
-        interface_manager = UpdateManager()
+        interface_manager = get_update_manager()
         interface_manager.discover_all_active_modules()
         print("[interface] active update modules: "
               + ", ".join(f"{d}/{', '.join(n) if n else ''}"
@@ -18739,6 +21487,18 @@ async def lifespan(app: FastAPI):
         print(f"[interface] WARNING: update discovery failed: {exc}")
         app.state.update_manager = None
         app.state.interface_dispatcher = None
+
+    # Wiring layer: discover the Phase 1/2/3 custom drop-in modules (flat
+    # CUSTOM_MODULES_DIR folder), auto-register their FastAPI routes (once per
+    # process) and bridge them into the dispatcher's catalog under the
+    # virtual 'custom' domain so core code can call them, trace-logged.
+    try:
+        wiring = WiringManager(update_manager=app.state.update_manager)
+        wiring.wire(app)
+        app.state.wiring = wiring
+    except Exception as exc:   # a broken drop-in module must never block boot
+        print(f"[wiring] WARNING: custom module wiring failed: {exc}")
+        app.state.wiring = None
 
     yield                      # serve requests; code after this runs on shutdown
 
@@ -19168,8 +21928,9 @@ async def get_app_settings():
     """The stored browser defaults; {} when nothing was saved yet.
 
     `restartNeeded` is true when the stored path settings (dataDir,
-    chatSavePath, ragDbPath) changed since the server started - the running
-    process is still using the old resolved folders until a restart.
+    chatSavePath, ragDbPath, customModulesPath) changed since the server
+    started - the running process is still using the old resolved folders
+    until a restart.
     """
     payload = _load_json(APP_SETTINGS_FILE, {})
     return {
@@ -19328,6 +22089,12 @@ def _update_manager():
     return manager if manager is not None else get_update_manager()
 
 
+def _custom_manager():
+    """The process-wide CustomModuleManager (wired into the app by WiringManager)."""
+    manager = getattr(app.state, "custom_module_manager", None)
+    return manager if manager is not None else get_custom_module_manager()
+
+
 def _dispatcher():
     dispatcher = getattr(app.state, "interface_dispatcher", None)
     return dispatcher if dispatcher is not None else get_dispatcher()
@@ -19364,7 +22131,18 @@ class InterfaceToggleRequest(BaseModel):
 def interface_status():
     """Everything the Settings 'Updates / Interface' card needs: the active
     module catalog, the external archive, the trace-log tail and the
-    baseline (current-known-good-copy/) freshness + live drift."""
+    baseline (current-known-good-copy/) freshness + live drift.
+
+    Also exposes the Phase 1/2/3 custom drop-in module layer (wired via
+    interface/wiring/):
+      - catalog:         update-module domains (engine/tools/server)
+      - custom_modules:  {dir, active} - names loaded from CUSTOM_MODULES_DIR
+      - ui_manifests:    every active custom module's UI_MANIFEST dict, used
+                         by dashboard/js/ui/header-nav.js to auto-render
+                         header buttons (Phase 2) without editing index.html.
+      - bridge:          custom modules ALSO callable from core code via
+                         execute_action("custom", <name>, <func>, ...).
+    """
     try:
         manager = _update_manager()
         catalog = {
@@ -19415,6 +22193,26 @@ def interface_status():
     if manifest_path.is_file():
         baseline["manifest"] = _load_json(manifest_path, None)
 
+    wiring = getattr(app.state, "wiring", None)
+    if wiring is not None:
+        wire_registry = wiring.registry()
+        catalog = wire_registry["catalog"]
+        custom_modules = wire_registry["custom_modules"]
+        ui_manifests = wire_registry["ui_manifests"]
+        bridge = wire_registry["bridge"]
+    else:
+        # Fallback (wiring not initialised): report directly from the loader.
+        try:
+            custom_modules = {
+                "dir": str(paths.CUSTOM_MODULES_DIR),
+                "active": _custom_manager().list_modules(),
+            }
+            ui_manifests = _custom_manager().ui_manifests()
+        except Exception as exc:
+            custom_modules = {"dir": str(paths.CUSTOM_MODULES_DIR), "active": [], "error": str(exc)}
+            ui_manifests = []
+        bridge = {"domain": "custom", "active": [], "error": "wiring not initialised"}
+
     return {
         "ok": True,
         "run_enabled": INTERFACE_RUN_ENABLED,
@@ -19425,19 +22223,32 @@ def interface_status():
         "archived": archived,
         "trace_tail": trace_tail,
         "baseline": baseline,
+        "custom_modules": custom_modules,
+        "ui_manifests": ui_manifests,
+        "bridge": bridge,
     }
 
 
 @app.post("/api/interface/apply")
 def interface_apply():
-    """Reload every update module from disk, then regenerate the docs
-    snapshots (docs/APP_STRUCTURE.md + docs/APP_CODE_SNAPSHOT.md)."""
+    """Reload both module loaders through the wiring layer, then regenerate
+    the docs snapshots (docs/APP_STRUCTURE.md + docs/APP_CODE_SNAPSHOT.md).
+
+    Custom drop-in modules' routes are auto-registered for any that are newly
+    discovered (edits to an already-loaded module still need a restart to
+    take effect, since its old route closures stay bound - but a brand NEW
+    module's routes go live here), and the dispatcher bridge is re-asserted.
+    """
     try:
-        manager = _update_manager()
-        catalog = manager.reload_all()
-        print("[interface] apply: reloaded modules per domain:"
-              + ", ".join(f"{d}={len([n for n in ns])}"
-                          for d, ns in sorted(catalog.items())))
+        wiring = getattr(app.state, "wiring", None)
+        if wiring is not None:
+            wiring.rewire(app)
+        else:
+            wiring = WiringManager()
+            wiring.rewire(app)
+        print(
+            "[interface] apply: reloaded update + custom modules and re-bridged."
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"module reload failed: {exc}")
 
@@ -19451,12 +22262,12 @@ def interface_apply():
     else:
         docs_ok = False
 
+    registry = wiring.registry()
     return {
         "ok": True,
-        "catalog": {
-            d: sorted(names)
-            for d, names in sorted(_update_manager().active_modules_catalog.items())
-        },
+        "catalog": registry["catalog"],
+        "custom_modules": registry["custom_modules"]["active"],
+        "bridge": registry["bridge"],
         "docs_regenerated": docs_ok,
     }
 
@@ -20203,4 +23014,4 @@ def search_chat_logs(query: str) -> str:
 
 ```
 
-_74 code file(s)._
+_79 code file(s)._
