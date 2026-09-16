@@ -1,6 +1,6 @@
 # Terminator1 — App Structure
 
-_Auto-generated on 2026-09-14T11:35:34 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-15T19:57:46 by `scripts/update_docs.py`._
 
 
 ```
@@ -47,6 +47,9 @@ genV2_Interface_projectManager/
 |   |   |       |   `-- header-nav.js
 |   |   |       `-- app.js
 |   |   |-- interface
+|   |   |   |-- wiring
+|   |   |   |   |-- __init__.py
+|   |   |   |   `-- bridges.py
 |   |   |   `-- custom_module_manager.py
 |   |   |-- server
 |   |   |   |-- paths.py
@@ -55,6 +58,7 @@ genV2_Interface_projectManager/
 |   |-- APP_CODE_SNAPSHOT.md
 |   |-- APP_STRUCTURE.md
 |   |-- CHANGELOG.md
+|   |-- CUSTOM_MODULE_DEV_GUIDE.md
 |   `-- HOW_TO_USE.md
 |-- engine
 |   |-- agent_library
@@ -125,4 +129,4 @@ genV2_Interface_projectManager/
 `-- requirements.txt
 ```
 
-_81 tracked source file(s)._
+_84 tracked source file(s)._

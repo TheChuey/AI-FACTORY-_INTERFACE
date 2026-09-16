@@ -62,7 +62,19 @@ async function boot() {
         // Phase 2 - Dynamic UI Manifests: mount any header buttons declared
         // by drop-in custom modules (interface/custom_module_manager.py).
         // Fail-soft; adds nothing on a server with no custom modules loaded.
-        renderDynamicHeaderButtons(navSlot, async (btnConfig) => {
+        // Handles: prompt_input, dropdown menus, schema modals and Q&A wizards,
+        // plus the green success-status dot (endpoint returns indicate_success).
+        renderDynamicHeaderButtons(navSlot, async (btnConfig, parentBtn) => {
+            const markSuccessDot = () => {
+                if (parentBtn && !parentBtn.querySelector(".status-dot")) {
+                    const dot = document.createElement("span");
+                    dot.className = "status-dot";
+                    parentBtn.appendChild(dot);
+                }
+            };
+
+            // 1. ACTION: Prompt Input (original; posts { input } generically so
+            //    any module's execute route can read payload.get("input")).
             if (btnConfig.action === "prompt_input") {
                 const userInput = window.prompt(btnConfig.prompt_message || "Enter value:");
                 if (userInput && userInput.trim()) {
@@ -70,14 +82,164 @@ async function boot() {
                         const response = await fetch(btnConfig.api_endpoint, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ project_name: userInput.trim() }),
+                            body: JSON.stringify({ input: userInput.trim() }),
                         });
                         const resData = await response.json();
                         alert(resData.message || "Action completed!");
+                        if (resData.indicate_success) markSuccessDot();
                     } catch (error) {
                         alert(`Action failed: ${error.message}`);
                     }
                 }
+            }
+
+            // 2. ACTION: Open Schema Modal Dialog.
+            else if (btnConfig.action === "open_modal") {
+                try {
+                    const schemaRes = await fetch(btnConfig.schema_endpoint);
+                    const schema = await schemaRes.json();
+                    openModal(schema.title, (modalBody, closeModal) => {
+                        const form = document.createElement("form");
+
+                        (schema.components || []).forEach((item) => {
+                            const field = document.createElement("div");
+                            field.className = "field";
+
+                            if (item.type === "input") {
+                                const label = document.createElement("label");
+                                label.textContent = item.label || "";
+                                const input = document.createElement("input");
+                                input.type = "text";
+                                input.name = item.name;
+                                input.placeholder = item.placeholder || "";
+                                field.append(label, input);
+                            } else if (item.type === "select") {
+                                const label = document.createElement("label");
+                                label.textContent = item.label || "";
+                                const select = document.createElement("select");
+                                select.name = item.name;
+                                (item.options || []).forEach((opt) => {
+                                    const option = document.createElement("option");
+                                    option.value = opt;
+                                    option.textContent = opt;
+                                    select.appendChild(option);
+                                });
+                                field.append(label, select);
+                            } else if (item.type === "checkbox") {
+                                field.className = "field field-toggle";
+                                const span = document.createElement("span");
+                                span.textContent = item.label || "";
+                                const sw = document.createElement("label");
+                                sw.className = "field-switch";
+                                const cb = document.createElement("input");
+                                cb.type = "checkbox";
+                                cb.name = item.name;
+                                if (item.value) cb.checked = true;
+                                sw.appendChild(cb);
+                                field.append(span, sw);
+                            } else if (item.type === "button") {
+                                const submit = document.createElement("button");
+                                submit.type = "submit";
+                                submit.className = "btn btn-primary";
+                                submit.textContent = item.label || "Submit";
+                                field.appendChild(submit);
+                            }
+                            form.appendChild(field);
+                        });
+
+                        form.addEventListener("submit", async (e) => {
+                            e.preventDefault();
+                            const payload = {};
+                            new FormData(form).forEach((val, key) => { payload[key] = val; });
+                            try {
+                                const execRes = await fetch(schema.target_endpoint, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify(payload),
+                                });
+                                const execData = await execRes.json();
+                                closeModal();
+                                alert(execData.message || "Submitted successfully!");
+                                if (execData.indicate_success) markSuccessDot();
+                            } catch (error) {
+                                alert(`Submit failed: ${error.message}`);
+                            }
+                        });
+
+                        modalBody.appendChild(form);
+                    });
+                } catch (error) {
+                    alert(`Could not load dialog schema: ${error.message}`);
+                }
+            }
+
+            // 3. ACTION: Interactive Q&A Wizard (step-by-step choice survey).
+            else if (btnConfig.action === "qa_survey") {
+                let step = 1;
+                const answers = {};
+                openModal("Interactive Q&A Wizard", (modalBody, closeModal) => {
+                    const renderStep = async () => {
+                        modalBody.replaceChildren();
+                        try {
+                            const res = await fetch(btnConfig.qa_endpoint, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ step, answers }),
+                            });
+                            const data = await res.json();
+
+                            if (data.completed) {
+                                const doneWrap = document.createElement("div");
+                                const heading = document.createElement("h3");
+                                heading.textContent = data.message || "Complete!";
+                                const pre = document.createElement("pre");
+                                pre.textContent = data.summary || "";
+                                const doneBtn = document.createElement("button");
+                                doneBtn.className = "btn btn-primary";
+                                doneBtn.textContent = "Done";
+                                doneBtn.onclick = () => {
+                                    closeModal();
+                                    if (data.indicate_success) markSuccessDot();
+                                };
+                                doneWrap.append(heading, pre, doneBtn);
+                                if (data.record_path) {
+                                    const saved = document.createElement("p");
+                                    saved.className = "status-message ok";
+                                    saved.textContent = "Record saved: " + data.record_path;
+                                    doneWrap.appendChild(saved);
+                                }
+                                modalBody.appendChild(doneWrap);
+                                return;
+                            }
+
+                            const qEl = document.createElement("h3");
+                            qEl.textContent = `Step ${data.step}: ${data.question}`;
+                            modalBody.appendChild(qEl);
+
+                            const optionsGrid = document.createElement("div");
+                            optionsGrid.className = "qa-options-grid";
+                            (data.options || []).forEach((opt) => {
+                                const optBtn = document.createElement("button");
+                                optBtn.className = "qa-option-btn";
+                                optBtn.textContent = opt;
+                                optBtn.onclick = () => {
+                                    answers[`step_${step}`] = opt;
+                                    step += 1;
+                                    renderStep();
+                                };
+                                optionsGrid.appendChild(optBtn);
+                            });
+                            modalBody.appendChild(optionsGrid);
+                        } catch (error) {
+                            modalBody.replaceChildren();
+                            const errEl = document.createElement("p");
+                            errEl.className = "status-message error";
+                            errEl.textContent = "Q&A failed: " + error.message;
+                            modalBody.appendChild(errEl);
+                        }
+                    };
+                    renderStep();
+                });
             }
         });
     }
@@ -375,6 +537,51 @@ function handleClearAction(session, chat) {
     session.newChat();
     chat.clearMessages();
     chat.setSaveStatus("Chat cleared.", "ok");
+}
+
+/**
+ * Universal modal launcher for dynamic module actions
+ * ("open_modal" / "qa_survey"). Builds an overlay card and hands the
+ * body + a close() function to `builderFn`.
+ * @returns {{ close: () => void }}
+ */
+function openModal(titleText, builderFn) {
+    const overlay = document.createElement("div");
+    overlay.className = "genessis-modal-overlay";
+
+    const card = document.createElement("div");
+    card.className = "genessis-modal-card";
+
+    const header = document.createElement("div");
+    header.className = "genessis-modal-header";
+    const title = document.createElement("h2");
+    title.textContent = titleText || "";
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "genessis-modal-close";
+    closeBtn.textContent = "\u2715";
+    closeBtn.type = "button";
+    closeBtn.setAttribute("aria-label", "Close");
+    header.append(title, closeBtn);
+
+    const body = document.createElement("div");
+    body.className = "genessis-modal-body";
+
+    card.append(header, body);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const closeModal = () => overlay.remove();
+    closeBtn.onclick = closeModal;
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) {
+            closeModal();
+        }
+    });
+
+    if (typeof builderFn === "function") {
+        builderFn(body, closeModal);
+    }
+    return { close: closeModal };
 }
 
 // ---- go ----

@@ -4,6 +4,11 @@ This is your day-to-day guide for adding new features to the app without
 touching `index.html`, `header-nav.js`, or `server.py` by hand. Every new
 feature is just one `.py` file.
 
+> For the full developer guide — how the HTML, `server.py` and modules talk to
+> each other, plus every UI action type (`dropdown_menu`, `open_modal`,
+> `qa_survey`, `status_dot`) with runnable code — see
+> [`CUSTOM_MODULE_DEV_GUIDE.md`](CUSTOM_MODULE_DEV_GUIDE.md).
+
 ---
 
 ## The 4-step loop

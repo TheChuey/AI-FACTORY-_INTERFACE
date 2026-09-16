@@ -47,15 +47,12 @@ from interface.interface_dispatcher import (InterfaceDispatcher,
 from interface.restore_manager import (RestoreManager, get_restore_manager,
                                        DEFAULT_BASELINE, MANIFEST_NAME)
 
-# Phase 1/2/3 - Dynamic External Module Loader: flat drop-in .py modules
-# under server.paths.CUSTOM_MODULES_DIR, each optionally declaring
-# UI_MANIFEST (Phase 2 - auto-rendered header buttons) and register_routes(app)
-# (Phase 1 - auto-registered FastAPI endpoints). Generated from the terminal
-# via `python about/set_title.py create-module <name>` (Phase 3). This is a
-# separate system from the interface/updates/<domain>/ UpdateManager above -
-# neither one touches the other's catalog.
-from interface.custom_module_manager import (CustomModuleManager,
-                                              get_custom_module_manager)
+# Wiring layer: connects the two module loaders to the running app - owns
+# custom-module route registration and bridges Phase 1/2/3 drop-in modules
+# (data/custom_modules/) into the update manager's catalog under the virtual
+# 'custom' domain, so core code can call them via the traced dispatcher.
+from interface.custom_module_manager import get_custom_module_manager
+from interface.wiring import WiringManager
 
 # Runs once at startup; scans data/chatlog/agent-text-records/*.txt and records
 # their header info in data/chatlog/chatRecord.jsonl so past chats appear in
@@ -109,32 +106,6 @@ def _default_agent() -> str:
         return "basic_chat"
 
 
-# Names of custom drop-in modules (interface/custom_module_manager.py) whose
-# register_routes(app) has already been called for THIS process. FastAPI lets
-# routes be added to app.router at any time, so "apply" can register routes
-# for newly-added modules live, without a full restart - but a module is only
-# ever registered once per process to avoid duplicate route entries.
-_CUSTOM_ROUTES_REGISTERED: set[str] = set()
-
-
-def _register_custom_routes(manager: "CustomModuleManager") -> list[str]:
-    """Call register_routes(app) for every not-yet-registered custom module.
-    Returns the names that were newly registered this call."""
-    newly_registered = []
-    for name, mod in manager.active_modules_catalog.items():
-        if name in _CUSTOM_ROUTES_REGISTERED:
-            continue
-        if hasattr(mod, "register_routes"):
-            try:
-                mod.register_routes(app)
-                _CUSTOM_ROUTES_REGISTERED.add(name)
-                newly_registered.append(name)
-                print(f"[custom-modules] Auto-registered routes for: {name}")
-            except Exception as exc:
-                print(f"[custom-modules] Failed to register routes for {name}: {exc}")
-    return newly_registered
-
-
 # Startup hook: scan Ollama models BEFORE any request is served, and import
 # any existing data/chatlog/agent-text-records/*.txt transcripts into the log
 # (data/chatlog/chatRecord.jsonl) so old chats show up in the frontend
@@ -156,9 +127,11 @@ async def lifespan(app: FastAPI):
             print(f"[paths] {key} overridden by {source}")
 
     # Modular interface: discover update modules + traced dispatcher once at
-    # startup (exposed on app.state so request handlers can reach them).
+    # startup (exposed on app.state so request handlers can reach them). Uses
+    # the process singletons so the wiring bridge below mutates the SAME
+    # catalog that execute_action()/get_active_module() read through.
     try:
-        interface_manager = UpdateManager()
+        interface_manager = get_update_manager()
         interface_manager.discover_all_active_modules()
         print("[interface] active update modules: "
               + ", ".join(f"{d}/{', '.join(n) if n else ''}"
@@ -170,17 +143,17 @@ async def lifespan(app: FastAPI):
         app.state.update_manager = None
         app.state.interface_dispatcher = None
 
-    # Phase 1 - Custom drop-in modules (flat CUSTOM_MODULES_DIR folder):
-    # discover, then auto-register every module's FastAPI routes.
+    # Wiring layer: discover the Phase 1/2/3 custom drop-in modules (flat
+    # CUSTOM_MODULES_DIR folder), auto-register their FastAPI routes (once per
+    # process) and bridge them into the dispatcher's catalog under the
+    # virtual 'custom' domain so core code can call them, trace-logged.
     try:
-        custom_manager = CustomModuleManager()
-        print("[custom-modules] active: "
-              + (", ".join(custom_manager.list_modules()) or "(none)"))
-        app.state.custom_module_manager = custom_manager
-        _register_custom_routes(custom_manager)
+        wiring = WiringManager(update_manager=app.state.update_manager)
+        wiring.wire(app)
+        app.state.wiring = wiring
     except Exception as exc:   # a broken drop-in module must never block boot
-        print(f"[custom-modules] WARNING: discovery failed: {exc}")
-        app.state.custom_module_manager = None
+        print(f"[wiring] WARNING: custom module wiring failed: {exc}")
+        app.state.wiring = None
 
     yield                      # serve requests; code after this runs on shutdown
 
@@ -772,8 +745,7 @@ def _update_manager():
 
 
 def _custom_manager():
-    """The lifespan-created CustomModuleManager, or the process-wide
-    singleton when startup discovery failed."""
+    """The process-wide CustomModuleManager (wired into the app by WiringManager)."""
     manager = getattr(app.state, "custom_module_manager", None)
     return manager if manager is not None else get_custom_module_manager()
 
@@ -816,11 +788,15 @@ def interface_status():
     module catalog, the external archive, the trace-log tail and the
     baseline (current-known-good-copy/) freshness + live drift.
 
-    Also exposes the Phase 1/2 custom drop-in module layer:
-      - custom_modules: {dir, active} - names loaded from CUSTOM_MODULES_DIR
-      - ui_manifests:   every active custom module's UI_MANIFEST dict, used
-                        by dashboard/js/ui/header-nav.js to auto-render
-                        header buttons (Phase 2) without editing index.html.
+    Also exposes the Phase 1/2/3 custom drop-in module layer (wired via
+    interface/wiring/):
+      - catalog:         update-module domains (engine/tools/server)
+      - custom_modules:  {dir, active} - names loaded from CUSTOM_MODULES_DIR
+      - ui_manifests:    every active custom module's UI_MANIFEST dict, used
+                         by dashboard/js/ui/header-nav.js to auto-render
+                         header buttons (Phase 2) without editing index.html.
+      - bridge:          custom modules ALSO callable from core code via
+                         execute_action("custom", <name>, <func>, ...).
     """
     try:
         manager = _update_manager()
@@ -872,16 +848,25 @@ def interface_status():
     if manifest_path.is_file():
         baseline["manifest"] = _load_json(manifest_path, None)
 
-    try:
-        custom_manager = _custom_manager()
-        custom_modules = {
-            "dir": str(paths.CUSTOM_MODULES_DIR),
-            "active": custom_manager.list_modules(),
-        }
-        ui_manifests = custom_manager.ui_manifests()
-    except Exception as exc:
-        custom_modules = {"dir": str(paths.CUSTOM_MODULES_DIR), "active": [], "error": str(exc)}
-        ui_manifests = []
+    wiring = getattr(app.state, "wiring", None)
+    if wiring is not None:
+        wire_registry = wiring.registry()
+        catalog = wire_registry["catalog"]
+        custom_modules = wire_registry["custom_modules"]
+        ui_manifests = wire_registry["ui_manifests"]
+        bridge = wire_registry["bridge"]
+    else:
+        # Fallback (wiring not initialised): report directly from the loader.
+        try:
+            custom_modules = {
+                "dir": str(paths.CUSTOM_MODULES_DIR),
+                "active": _custom_manager().list_modules(),
+            }
+            ui_manifests = _custom_manager().ui_manifests()
+        except Exception as exc:
+            custom_modules = {"dir": str(paths.CUSTOM_MODULES_DIR), "active": [], "error": str(exc)}
+            ui_manifests = []
+        bridge = {"domain": "custom", "active": [], "error": "wiring not initialised"}
 
     return {
         "ok": True,
@@ -895,36 +880,32 @@ def interface_status():
         "baseline": baseline,
         "custom_modules": custom_modules,
         "ui_manifests": ui_manifests,
+        "bridge": bridge,
     }
 
 
 @app.post("/api/interface/apply")
 def interface_apply():
-    """Reload every update module from disk, then regenerate the docs
-    snapshots (docs/APP_STRUCTURE.md + docs/APP_CODE_SNAPSHOT.md).
+    """Reload both module loaders through the wiring layer, then regenerate
+    the docs snapshots (docs/APP_STRUCTURE.md + docs/APP_CODE_SNAPSHOT.md).
 
-    Also reloads the Phase 1 custom drop-in modules and auto-registers
-    routes for any that are newly discovered (edits to an already-loaded
-    module still need a restart to take effect, since its old route
-    closures stay bound - but a brand NEW module's routes go live here).
+    Custom drop-in modules' routes are auto-registered for any that are newly
+    discovered (edits to an already-loaded module still need a restart to
+    take effect, since its old route closures stay bound - but a brand NEW
+    module's routes go live here), and the dispatcher bridge is re-asserted.
     """
     try:
-        manager = _update_manager()
-        catalog = manager.reload_all()
-        print("[interface] apply: reloaded modules per domain:"
-              + ", ".join(f"{d}={len([n for n in ns])}"
-                          for d, ns in sorted(catalog.items())))
+        wiring = getattr(app.state, "wiring", None)
+        if wiring is not None:
+            wiring.rewire(app)
+        else:
+            wiring = WiringManager()
+            wiring.rewire(app)
+        print(
+            "[interface] apply: reloaded update + custom modules and re-bridged."
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"module reload failed: {exc}")
-
-    try:
-        custom_manager = _custom_manager()
-        custom_manager.discover_all_active_modules()
-        newly_registered = _register_custom_routes(custom_manager)
-        if newly_registered:
-            print("[custom-modules] apply: newly registered -> " + ", ".join(newly_registered))
-    except Exception as exc:
-        print(f"[custom-modules] WARNING: apply failed: {exc}")
 
     docs_script = BASE_DIR / "scripts" / "update_docs.py"
     docs_ok = True
@@ -936,13 +917,12 @@ def interface_apply():
     else:
         docs_ok = False
 
+    registry = wiring.registry()
     return {
         "ok": True,
-        "catalog": {
-            d: sorted(names)
-            for d, names in sorted(_update_manager().active_modules_catalog.items())
-        },
-        "custom_modules": _custom_manager().list_modules(),
+        "catalog": registry["catalog"],
+        "custom_modules": registry["custom_modules"]["active"],
+        "bridge": registry["bridge"],
         "docs_regenerated": docs_ok,
     }
 

@@ -1,6 +1,6 @@
 # Terminator1 — App Code Snapshot
 
-_Auto-generated on 2026-09-14T11:35:34 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-15T19:57:46 by `scripts/update_docs.py`._
 
 
 ## README.md
@@ -235,6 +235,8 @@ terminator1/
 ├── docs/
 │   ├── CHANGELOG.md          # Every recent change
 │   ├── HOW_TO_USE.md         # Day-to-day custom modules guide
+│   ├── CUSTOM_MODULE_DEV_GUIDE.md  # Full dev guide: HTML <-> server.py <-> modules,
+│   │                         # all UI action types + wiring bridge (real code)
 │   ├── phase-1-2-3-update/   # Drop-in custom modules install kit (was applied)
 │   ├── APP_STRUCTURE.md      # AUTO-GENERATED folder-tree snapshot
 │   └── APP_CODE_SNAPSHOT.md  # AUTO-GENERATED per-file source snapshot
@@ -474,6 +476,21 @@ A custom module is just a `.py` file declaring a `UI_MANIFEST` and a
   `dashboard/js/ui/header-nav.js`) — no `index.html`, `header-nav.js` or
   `server.py` edits. Clicking prompts for input and POSTs to the module's
   endpoint.
+- **Button actions:** a manifest `buttons[]` entry can declare one of:
+  - `action: "prompt_input"` — legacy: a `window.prompt` whose text is POSTed
+    as `{ "input": ... }` to `api_endpoint`.
+  - `action: "dropdown_menu"` — a flyout button whose `items[]` carry the real
+    actions (any of the below). Selecting an item runs it against the parent
+    button.
+  - `action: "open_modal"` — fetches `schema_endpoint` (a JSON schema of
+    `input` / `select` / `checkbox` / `button` components) and builds a modal
+    form; on submit it POSTs to the schema's `target_endpoint`.
+  - `action: "qa_survey"` — a step-by-step wizard that POSTs
+    `{ step, answers }` to `qa_endpoint` until `completed: true`.
+  - `status_dot` — when any executed action returns `indicate_success: true`,
+    a green `status-dot` appears on the trigger button. See the bundled
+    `interactive_manager` module in your Custom Modules Path for a full
+    reference impl of all four.
 - **Where files live:** blank path = `<dataDir>/custom_modules`; relative
   paths resolve from the project root; absolute paths are used as-is;
   `GENESSIS_CUSTOM_MODULES_PATH` overrides everything. Path changes apply after
@@ -518,16 +535,21 @@ your own risk — it runs arbitrary functions from `interface/updates/`.
 ## Recent changes
 
 See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for the full history. The most
-recent entry covers the **drop-in custom modules** system (Phase 1/2/3): drop a
-`.py` file with a `UI_MANIFEST` + `register_routes(app)` into **Custom Modules
-Path** (default `data/custom_modules/`) and its header button + FastAPI routes
-go live automatically — scaffold one with `python about/set_title.py
-create-module <name>`. Earlier entries cover the cross-platform path system
-(per-OS keys + `GENESSIS_*` overrides), the "Settings saved" response window,
-resilient model selection, and the Modular Interface wiring
-(`/api/interface/*` + the Settings card). Older entries cover the Agent Monitor
-removal, and the recovery of `engine/core/agent.py` + `server/server.py` to
-their working originals.
+recent entry covers the **dynamic module UI actions + developer guide**: a
+manifest button can now be a `dropdown_menu` (flyout), `open_modal`
+(schema-driven form), `qa_survey` (step wizard) or `prompt_input`, any response
+with `indicate_success: true` lights a green status-dot, and the new
+[`docs/CUSTOM_MODULE_DEV_GUIDE.md`](docs/CUSTOM_MODULE_DEV_GUIDE.md) documents
+all of it with copy-paste code. Earlier entries cover the **drop-in custom
+modules** system (Phase 1/2/3): drop a `.py` file with a `UI_MANIFEST` +
+`register_routes(app)` into **Custom Modules Path** (default
+`data/custom_modules/`) and its header button + FastAPI routes go live
+automatically — scaffold one with `python about/set_title.py create-module
+<name>`. Before that: the cross-platform path system (per-OS keys +
+`GENESSIS_*` overrides), the "Settings saved" response window, resilient model
+selection, and the Modular Interface wiring (`/api/interface/*` + the Settings
+card). Older entries cover the Agent Monitor removal, and the recovery of
+`engine/core/agent.py` + `server/server.py` to their working originals.
 
 Recovery artifacts to be aware of:
 
@@ -7492,6 +7514,140 @@ code {
 
 
 ---------------------------------------------------------------------------
+/* ================================================================
+   SECTION 9: DYNAMIC UI MANIFESTS (modals, dropdowns, status dots,
+              Q&A wizards - dashboard/js/ui/header-nav.js + app.js)
+   ================================================================ */
+
+/* Status dot - green success indicator appended to a header button. */
+.header-nav-link .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 6px;
+    background-color: var(--color-success, #2dd4a7);
+    box-shadow: 0 0 6px var(--color-success, #2dd4a7);
+}
+
+/* Header dropdown menu (button "action": "dropdown_menu"). */
+.nav-dropdown-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.nav-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 220px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-pop);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 0;
+}
+
+.nav-dropdown-item {
+    padding: 8px 14px;
+    background: transparent;
+    border: 0;
+    text-align: left;
+    color: var(--color-text);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.nav-dropdown-item:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-accent);
+}
+
+/* Modal overlay & dialog box ("action": "open_modal" / "qa_survey"). */
+.genessis-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(3px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.genessis-modal-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-large, 16px);
+    box-shadow: var(--shadow-modal);
+    width: min(90vw, 540px);
+    padding: 24px;
+    position: relative;
+}
+
+.genessis-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 10px;
+}
+
+.genessis-modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.genessis-modal-close {
+    background: transparent;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    color: var(--color-text-muted);
+}
+
+.genessis-modal-body .field {
+    margin-bottom: 14px;
+}
+
+.genessis-modal-body pre {
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+    padding: 12px;
+    white-space: pre-wrap;
+}
+
+/* Q&A option buttons ("action": "qa_survey"). */
+.qa-options-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.qa-option-btn {
+    padding: 12px 16px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.qa-option-btn:hover {
+    border-color: var(--color-accent);
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+}
 
 ```
 
@@ -7900,7 +8056,19 @@ async function boot() {
         // Phase 2 - Dynamic UI Manifests: mount any header buttons declared
         // by drop-in custom modules (interface/custom_module_manager.py).
         // Fail-soft; adds nothing on a server with no custom modules loaded.
-        renderDynamicHeaderButtons(navSlot, async (btnConfig) => {
+        // Handles: prompt_input, dropdown menus, schema modals and Q&A wizards,
+        // plus the green success-status dot (endpoint returns indicate_success).
+        renderDynamicHeaderButtons(navSlot, async (btnConfig, parentBtn) => {
+            const markSuccessDot = () => {
+                if (parentBtn && !parentBtn.querySelector(".status-dot")) {
+                    const dot = document.createElement("span");
+                    dot.className = "status-dot";
+                    parentBtn.appendChild(dot);
+                }
+            };
+
+            // 1. ACTION: Prompt Input (original; posts { input } generically so
+            //    any module's execute route can read payload.get("input")).
             if (btnConfig.action === "prompt_input") {
                 const userInput = window.prompt(btnConfig.prompt_message || "Enter value:");
                 if (userInput && userInput.trim()) {
@@ -7908,14 +8076,164 @@ async function boot() {
                         const response = await fetch(btnConfig.api_endpoint, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ project_name: userInput.trim() }),
+                            body: JSON.stringify({ input: userInput.trim() }),
                         });
                         const resData = await response.json();
                         alert(resData.message || "Action completed!");
+                        if (resData.indicate_success) markSuccessDot();
                     } catch (error) {
                         alert(`Action failed: ${error.message}`);
                     }
                 }
+            }
+
+            // 2. ACTION: Open Schema Modal Dialog.
+            else if (btnConfig.action === "open_modal") {
+                try {
+                    const schemaRes = await fetch(btnConfig.schema_endpoint);
+                    const schema = await schemaRes.json();
+                    openModal(schema.title, (modalBody, closeModal) => {
+                        const form = document.createElement("form");
+
+                        (schema.components || []).forEach((item) => {
+                            const field = document.createElement("div");
+                            field.className = "field";
+
+                            if (item.type === "input") {
+                                const label = document.createElement("label");
+                                label.textContent = item.label || "";
+                                const input = document.createElement("input");
+                                input.type = "text";
+                                input.name = item.name;
+                                input.placeholder = item.placeholder || "";
+                                field.append(label, input);
+                            } else if (item.type === "select") {
+                                const label = document.createElement("label");
+                                label.textContent = item.label || "";
+                                const select = document.createElement("select");
+                                select.name = item.name;
+                                (item.options || []).forEach((opt) => {
+                                    const option = document.createElement("option");
+                                    option.value = opt;
+                                    option.textContent = opt;
+                                    select.appendChild(option);
+                                });
+                                field.append(label, select);
+                            } else if (item.type === "checkbox") {
+                                field.className = "field field-toggle";
+                                const span = document.createElement("span");
+                                span.textContent = item.label || "";
+                                const sw = document.createElement("label");
+                                sw.className = "field-switch";
+                                const cb = document.createElement("input");
+                                cb.type = "checkbox";
+                                cb.name = item.name;
+                                if (item.value) cb.checked = true;
+                                sw.appendChild(cb);
+                                field.append(span, sw);
+                            } else if (item.type === "button") {
+                                const submit = document.createElement("button");
+                                submit.type = "submit";
+                                submit.className = "btn btn-primary";
+                                submit.textContent = item.label || "Submit";
+                                field.appendChild(submit);
+                            }
+                            form.appendChild(field);
+                        });
+
+                        form.addEventListener("submit", async (e) => {
+                            e.preventDefault();
+                            const payload = {};
+                            new FormData(form).forEach((val, key) => { payload[key] = val; });
+                            try {
+                                const execRes = await fetch(schema.target_endpoint, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify(payload),
+                                });
+                                const execData = await execRes.json();
+                                closeModal();
+                                alert(execData.message || "Submitted successfully!");
+                                if (execData.indicate_success) markSuccessDot();
+                            } catch (error) {
+                                alert(`Submit failed: ${error.message}`);
+                            }
+                        });
+
+                        modalBody.appendChild(form);
+                    });
+                } catch (error) {
+                    alert(`Could not load dialog schema: ${error.message}`);
+                }
+            }
+
+            // 3. ACTION: Interactive Q&A Wizard (step-by-step choice survey).
+            else if (btnConfig.action === "qa_survey") {
+                let step = 1;
+                const answers = {};
+                openModal("Interactive Q&A Wizard", (modalBody, closeModal) => {
+                    const renderStep = async () => {
+                        modalBody.replaceChildren();
+                        try {
+                            const res = await fetch(btnConfig.qa_endpoint, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ step, answers }),
+                            });
+                            const data = await res.json();
+
+                            if (data.completed) {
+                                const doneWrap = document.createElement("div");
+                                const heading = document.createElement("h3");
+                                heading.textContent = data.message || "Complete!";
+                                const pre = document.createElement("pre");
+                                pre.textContent = data.summary || "";
+                                const doneBtn = document.createElement("button");
+                                doneBtn.className = "btn btn-primary";
+                                doneBtn.textContent = "Done";
+                                doneBtn.onclick = () => {
+                                    closeModal();
+                                    if (data.indicate_success) markSuccessDot();
+                                };
+                                doneWrap.append(heading, pre, doneBtn);
+                                if (data.record_path) {
+                                    const saved = document.createElement("p");
+                                    saved.className = "status-message ok";
+                                    saved.textContent = "Record saved: " + data.record_path;
+                                    doneWrap.appendChild(saved);
+                                }
+                                modalBody.appendChild(doneWrap);
+                                return;
+                            }
+
+                            const qEl = document.createElement("h3");
+                            qEl.textContent = `Step ${data.step}: ${data.question}`;
+                            modalBody.appendChild(qEl);
+
+                            const optionsGrid = document.createElement("div");
+                            optionsGrid.className = "qa-options-grid";
+                            (data.options || []).forEach((opt) => {
+                                const optBtn = document.createElement("button");
+                                optBtn.className = "qa-option-btn";
+                                optBtn.textContent = opt;
+                                optBtn.onclick = () => {
+                                    answers[`step_${step}`] = opt;
+                                    step += 1;
+                                    renderStep();
+                                };
+                                optionsGrid.appendChild(optBtn);
+                            });
+                            modalBody.appendChild(optionsGrid);
+                        } catch (error) {
+                            modalBody.replaceChildren();
+                            const errEl = document.createElement("p");
+                            errEl.className = "status-message error";
+                            errEl.textContent = "Q&A failed: " + error.message;
+                            modalBody.appendChild(errEl);
+                        }
+                    };
+                    renderStep();
+                });
             }
         });
     }
@@ -8213,6 +8531,51 @@ function handleClearAction(session, chat) {
     session.newChat();
     chat.clearMessages();
     chat.setSaveStatus("Chat cleared.", "ok");
+}
+
+/**
+ * Universal modal launcher for dynamic module actions
+ * ("open_modal" / "qa_survey"). Builds an overlay card and hands the
+ * body + a close() function to `builderFn`.
+ * @returns {{ close: () => void }}
+ */
+function openModal(titleText, builderFn) {
+    const overlay = document.createElement("div");
+    overlay.className = "genessis-modal-overlay";
+
+    const card = document.createElement("div");
+    card.className = "genessis-modal-card";
+
+    const header = document.createElement("div");
+    header.className = "genessis-modal-header";
+    const title = document.createElement("h2");
+    title.textContent = titleText || "";
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "genessis-modal-close";
+    closeBtn.textContent = "\u2715";
+    closeBtn.type = "button";
+    closeBtn.setAttribute("aria-label", "Close");
+    header.append(title, closeBtn);
+
+    const body = document.createElement("div");
+    body.className = "genessis-modal-body";
+
+    card.append(header, body);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const closeModal = () => overlay.remove();
+    closeBtn.onclick = closeModal;
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) {
+            closeModal();
+        }
+    });
+
+    if (typeof builderFn === "function") {
+        builderFn(body, closeModal);
+    }
+    return { close: closeModal };
 }
 
 // ---- go ----
@@ -11923,10 +12286,15 @@ export function renderHeaderNav(currentId = "") {
  * Fetch /api/interface/status and mount every registered custom module's
  * UI_MANIFEST buttons into `container` (Phase 2 - Dynamic UI Manifests).
  *
+ * A manifest button with `action: "dropdown_menu"` is rendered as a flyout:
+ * its `items` become sub-buttons, and each one is handed to
+ * `onActionTriggered` (with the parent button, so a status dot can attach).
+ *
  * @param {HTMLElement} container       - element to append buttons into
  *                                         (e.g. the #app-nav slot)
- * @param {(btnConfig: object) => void} onActionTriggered - called with the
- *                                         button's manifest entry on click
+ * @param {(btnConfig: object, parentBtn?: HTMLElement) => void} onActionTriggered
+ *                                         - called with the trigger config (and
+ *                                         parent button for dropdown items) on click
  *
  * Fail-soft by design: a server without /api/interface/status (or with no
  * custom modules loaded) simply renders nothing extra.
@@ -11939,10 +12307,62 @@ export async function renderDynamicHeaderButtons(container, onActionTriggered) {
         const status = await getInterfaceStatus();
         const manifests = status.ui_manifests || [];
 
+        // One delegated listener closes any open dropdown on an outside click,
+        // instead of binding a per-dropdown global handler on every render.
+        document.addEventListener("click", () => {
+            document.querySelectorAll(".nav-dropdown-menu").forEach(
+                (menu) => menu.classList.add("hidden")
+            );
+        });
+
         manifests.forEach((manifest) => {
             (manifest.buttons || []).forEach((btnConfig) => {
                 if (document.getElementById(btnConfig.id)) return; // avoid duplicates
 
+                if (btnConfig.action === "dropdown_menu") {
+                    const wrapper = document.createElement("div");
+                    wrapper.className = "nav-dropdown-wrapper";
+
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.id = btnConfig.id;
+                    btn.className = "header-nav-link";
+                    btn.textContent = (btnConfig.label || "Menu") + " \u25be";
+                    btn.title = btnConfig.title || "";
+                    btn.style.cursor = "pointer";
+
+                    const menu = document.createElement("div");
+                    menu.className = "nav-dropdown-menu hidden";
+
+                    (btnConfig.items || []).forEach((subItem) => {
+                        const itemBtn = document.createElement("button");
+                        itemBtn.type = "button";
+                        itemBtn.className = "nav-dropdown-item";
+                        itemBtn.textContent = subItem.label;
+                        itemBtn.onclick = () => {
+                            menu.classList.add("hidden");
+                            if (onActionTriggered) {
+                                onActionTriggered(subItem, btn);
+                            }
+                        };
+                        menu.appendChild(itemBtn);
+                    });
+
+                    btn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        document.querySelectorAll(".nav-dropdown-menu").forEach(
+                            (m) => m.classList.add("hidden")
+                        );
+                        menu.classList.toggle("hidden");
+                    });
+
+                    wrapper.appendChild(btn);
+                    wrapper.appendChild(menu);
+                    container.appendChild(wrapper);
+                    return;
+                }
+
+                // Regular header button (prompt_input / open_modal / qa_survey...).
                 const btn = document.createElement("button");
                 btn.type = "button";
                 btn.id = btnConfig.id;
@@ -11953,7 +12373,7 @@ export async function renderDynamicHeaderButtons(container, onActionTriggered) {
 
                 btn.addEventListener("click", () => {
                     if (onActionTriggered) {
-                        onActionTriggered(btnConfig);
+                        onActionTriggered(btnConfig, btn);
                     }
                 });
 
@@ -12548,7 +12968,7 @@ function buildInlineNode(tag, groups) {
 ```markdown
 # Terminator1 — App Structure
 
-_Auto-generated on 2026-09-14T11:35:34 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-15T19:57:46 by `scripts/update_docs.py`._
 
 
 ```
@@ -12595,6 +13015,9 @@ genV2_Interface_projectManager/
 |   |   |       |   `-- header-nav.js
 |   |   |       `-- app.js
 |   |   |-- interface
+|   |   |   |-- wiring
+|   |   |   |   |-- __init__.py
+|   |   |   |   `-- bridges.py
 |   |   |   `-- custom_module_manager.py
 |   |   |-- server
 |   |   |   |-- paths.py
@@ -12603,6 +13026,7 @@ genV2_Interface_projectManager/
 |   |-- APP_CODE_SNAPSHOT.md
 |   |-- APP_STRUCTURE.md
 |   |-- CHANGELOG.md
+|   |-- CUSTOM_MODULE_DEV_GUIDE.md
 |   `-- HOW_TO_USE.md
 |-- engine
 |   |-- agent_library
@@ -12673,7 +13097,7 @@ genV2_Interface_projectManager/
 `-- requirements.txt
 ```
 
-_81 tracked source file(s)._
+_84 tracked source file(s)._
 
 ```
 
@@ -12684,6 +13108,61 @@ _81 tracked source file(s)._
 
 All notable changes to this project. Format based on Keep a Changelog
 (https://keepachangelog.com/), grouped by date.
+
+## 2026-09-15 — Dynamic module UI actions + developer guide
+
+The drop-in custom module system (Phase 1/2/3) grew from a single
+`prompt_input` button into four full UI action types, backed by a new
+copy-paste developer guide. A module's `UI_MANIFEST["buttons"]` can now open a
+schema-driven modal, a multi-step Q&A wizard, or a dropdown of sub-actions, and
+any executor can light a green status-dot when it succeeds.
+
+### Added — UI action types (frontend)
+
+- `dropdown_menu` — `dashboard/js/ui/header-nav.js`: a manifest button with
+  `action: "dropdown_menu"` renders a flyout whose `items[]` are handed to the
+  same click handler (each item can be any of the action types). One delegated
+  `document` listener closes any open menu on an outside click; the status dot
+  attaches to the parent button.
+- `open_modal` — `dashboard/js/app.js` fetches `schema_endpoint` (a JSON schema
+  of `input` / `select` / `checkbox` / `button` components) and builds a modal
+  form; on submit it POSTs the filled values to `schema.target_endpoint`.
+- `qa_survey` — a step-by-step wizard modal that POSTs `{step, answers}` to
+  `qa_endpoint` until the server returns `completed: true` (an optional
+  `record_path` is shown in the modal). Answers are keyed `step_1`, `step_2`, …
+- `status_dot` — any executed action whose response includes
+  `indicate_success: true` gets a green `.status-dot` appended to its trigger
+  button.
+- `dashboard/js/app.js` — new shared `openModal(title, builderFn)` helper
+  (overlay card + close), and the `renderDynamicHeaderButtons` callback now
+  receives `(btnConfig, parentBtn)`. `prompt_input` now POSTs `{"input": ...}`
+  (generically, so any module route can read `payload.get("input")`;
+  `project_name` is still accepted for compatibility).
+- `dashboard/css/styles.css` — SECTION 9: header dropdown, modal overlay/card
+  and `.status-dot` styles (reuses the `--shadow-modal` variable).
+
+### Added — docs
+
+- `docs/CUSTOM_MODULE_DEV_GUIDE.md` — full developer guide: the
+  browser ↔ server ↔ module pipeline, module lifecycle, a minimal working
+  module, all four action types with runnable backend code, dict-vs-pydantic
+  endpoints, the `interface/wiring/` bridge (`execute_action("custom", ...)`),
+  a frontend file map, curl + TestClient testing, troubleshooting and a quick
+  reference. `README.md` and `docs/HOW_TO_USE.md` link to it, and README's
+  custom-modules section now lists the button action types.
+
+### Reference implementations
+
+- `interactive_manager.py` and `project_manager.py` in the Custom Modules Path
+  (`E:\data\moduels` on this machine) demonstrate all four action types end to
+  end, including the Q&A record saver.
+
+### Verified
+
+- `python -m py_compile` clean on `server/server.py`, `server/paths.py`,
+  `about/set_title.py`, `interface/custom_module_manager.py` and
+  `interface/wiring/*.py`; `node --check` clean on `dashboard/js/app.js` and
+  `dashboard/js/ui/header-nav.js`.
 
 ## 2026-09-13 — Phase 1/2/3: drop-in custom modules (Dynamic External Module Loader)
 
@@ -13097,6 +13576,478 @@ project root), and `venv\Scripts\python -m uvicorn server.server:app` (root).
   launch-anywhere noted.
 ```
 
+## docs/CUSTOM_MODULE_DEV_GUIDE.md
+
+```markdown
+# Custom Module Developer Guide
+
+How the dashboard HTML, `server/server.py`, and a drop-in Python module talk to
+each other — with complete, copy-paste code for every capability. This guide is
+for people building modules AND for AI coding assistants extending the app.
+
+If you just want the 4-step "make a button" loop, use
+[`HOW_TO_USE.md`](HOW_TO_USE.md). This guide explains *why* it works and how to
+build every UI pattern.
+
+---
+
+## 1. The pipeline, one picture
+
+```
+BROWSER  (dashboard/index.html)
+  header-nav.js  ->  GET /api/interface/status  ->  ui_manifests[]  ->  draw button
+  click button   ->  app.js action handler       ->  fetch(<endpoint>)
+                                                          |
+                                                          v
+SERVER  (server/server.py)
+  lifespan -> interface/wiring/bridges.py -> calls YOUR register_routes(app)
+                                             => YOUR routes are LIVE on `app`
+  <endpoint> handler runs you function -> returns { status, message, ... }
+                                                          |
+                                                          v
+BROWSER  -> alert / modal / Q&A step / green status-dot
+```
+
+There are exactly **two ways anything can reach your module**:
+
+| Channel | How | When to use |
+|---|---|---|
+| **1. HTTP routes** | `register_routes(app)` adds FastAPI routes at boot (or `apply`). The browser (or any client) calls them. | UI buttons, external callers, `curl`. |
+| **2. In-process call** | the wiring bridge mirrors your module into the update catalog under the virtual domain `"custom"`, so `InterfaceDispatcher().execute_action("custom", <module>, <func>, ...)` runs it from Python. | Core code calling your module — see §6. |
+
+---
+
+## 2. Module lifecycle
+
+### Where files live
+- **Configured Custom Modules Path** (Settings → App defaults → *Custom Modules
+  Path>), default `<dataDir>/custom_modules`.
+- On this machine it is `E:\data\moduels` (see `dashboard/config/app_settings.json`
+  → `customModulesPath`). Put modules there.
+- Relative paths resolve from the project root; absolute paths are used as-is;
+- `GENESSIS_CUSTOM_MODULES_PATH` env var overrides everything. Path changes
+  need a **server restart**.
+
+Instead of writing the file by hand you can scaffold one:
+
+```bash
+python about/set_title.py create-module my_feature
+```
+
+### What the loader does (`interface/custom_module_manager.py`)
+- Scans the folder for `*.py`, **ignoring names starting with `_` or `.`**
+  (rename a module to `_old.py` to disable it without deleting).
+- Imports each file and keeps it in `active_modules_catalog`.
+- One broken file is logged and skipped — it never takes the app down.
+
+### When modules (re)load
+| You just… | Do this |
+|---|---|
+| Created a **brand-new** module file | `python about/set_title.py apply` — or Settings → Updates/Interface → Apply — or `POST /api/interface/apply`. Routes get registered live. |
+| **Edited** an already-loaded module | **Restart the server** (`python server.py`). Routes are registered once per process, so an edit to a loaded module isn't picked up by `apply`. |
+
+Check what's loaded at any time:
+
+```bash
+curl http://127.0.0.1:8000/api/interface/status
+# -> { "custom_modules": { "dir": "...", "active": ["my_feature", ...] },
+#      "ui_manifests": [ ... ], "bridge": { ... } }
+```
+
+If a module you wrote isn't in `active`, look for this line in the server
+console:
+
+```
+[custom-modules] Failed to load my_feature.py: <the Python error>
+```
+
+---
+
+## 3. Minimal working module
+
+Drop this into your Custom Modules Path as `hello_folder.py`. It shows a
+header button ("✚ New Folder") that prompts for a name, POSTs it to the
+server, and the server creates a folder inside your data directory.
+
+```python
+"""Minimal drop-in module: a header button that creates a folder."""
+from pathlib import Path
+
+from server.paths import DATA_DIR
+
+UI_MANIFEST = {
+    "module_id": "hello_folder",
+    "buttons": [
+        {
+            "id": "btn-hello_folder",
+            "label": "✚ New Folder",
+            "target": "header",
+            "action": "prompt_input",                 # prompt -> POST -> alert
+            "prompt_message": "Enter folder name:",
+            "api_endpoint": "/api/hello_folder/create",
+            "title": "Creates a folder under <dataDir>/made_by_module",
+        }
+    ],
+}
+
+
+def register_routes(app):
+    """Called once at boot; registers this module's HTTP routes on `app`."""
+    @app.post("/api/hello_folder/create")
+    def create_folder(payload: dict):
+        # The frontend sends {"input": "the text the user typed"}.
+        name = (payload.get("input") or payload.get("project_name") or "untitled").strip()
+        target = DATA_DIR / "made_by_module" / name
+        target.mkdir(parents=True, exist_ok=True)
+        return {
+            "status": "success",
+            "message": f"Created folder: {target}",
+        }
+```
+
+The contract:
+- **`UI_MANIFEST`** — read by `GET /api/interface/status` → `ui_manifests`;
+  `dashboard/js/ui/header-nav.js` draws it. `target: "header"` means the
+  dashboard header.
+- **`register_routes(app)`** — the wiring bridge calls it once per process
+  (`interface/wiring/bridges.py`). Inside, `@app.post(...)` etc. are normal
+  FastAPI decorators.
+- **Every endpoint returns `{"status": ..., "message": ...}`**. `message` is
+  what the frontend shows. Optional `"indicate_success": true` turns the green
+  status-dot on (see §4.5).
+
+Activate: restart server (or `apply` for a first-time module), reload the page,
+click the button.
+
+---
+
+## 4. The five action types
+
+A manifest `buttons[]` entry picks an `action`. The frontend dispatch lives in
+`dashboard/js/app.js` (the `renderDynamicHeaderButtons` callback) and
+`dashboard/js/ui/header-nav.js` (rendering).
+
+### 4.1 `prompt_input` — the simple one
+
+Button click → `window.prompt(prompt_message)` → `POST api_endpoint` with
+`{"input": "<typed text>"}` → `alert(message)`.
+
+```python
+{
+  "id": "btn-hello_folder",
+  "label": "✚ New Folder",
+  "target": "header",
+  "action": "prompt_input",
+  "prompt_message": "Enter folder name:",
+  "api_endpoint": "/api/hello_folder/create",
+}
+```
+
+Handler reads the typed value with `payload.get("input")`
+(or `payload.get("project_name")` for agents that use that field).
+
+### 4.2 `dropdown_menu` — several actions under one button
+
+Button renders a flyout; each `items[]` entry is a real action handed to the
+same handler (and the status-dot attaches to the parent button).
+
+```python
+{
+  "id": "btn-tools",
+  "label": "⚡ Tools",
+  "target": "header",
+  "action": "dropdown_menu",
+  "title": "A menu of sub-actions",
+  "items": [
+      { "id": "item-newfolder", "label": "✚ New Folder",
+        "action": "prompt_input", "prompt_message": "Folder name:",
+        "api_endpoint": "/api/hello_folder/create" },
+      { "id": "item-configure", "label": "⚙ Configure",
+        "action": "open_modal", "schema_endpoint": "/api/my_feature/schema" },
+  ],
+}
+```
+
+### 4.3 `open_modal` — a form built from a JSON schema
+
+The frontend fetches `schema_endpoint`, renders the `components`, and on submit
+POSTs the filled values to `target_endpoint`.
+
+Backend (module):
+
+```python
+from fastapi import FastAPI
+
+def register_routes(app: FastAPI):
+    @app.get("/api/my_feature/schema")
+    def dialog_schema():
+        return {
+            "title": "My Feature Configuration",
+            "target_endpoint": "/api/my_feature/execute",
+            "components": [
+                {"type": "input", "name": "item_name", "label": "Item name",
+                 "placeholder": "e.g. Alpha-1"},
+                {"type": "select", "name": "priority", "label": "Priority",
+                 "options": ["Low", "Medium", "High"]},
+                {"type": "checkbox", "name": "notify", "label": "Notify team",
+                 "value": True},
+                {"type": "button", "label": "Save", "action": "submit"},
+            ],
+        }
+
+    @app.post("/api/my_feature/execute")
+    def execute_dialog(payload: dict):
+        name = payload.get("item_name", "untitled")
+        return {
+            "status": "success",
+            "message": f"Butler configured for '{name}'",
+            "indicate_success": True,
+        }
+```
+
+Component types the frontend understands: `input`, `select`, `checkbox`,
+`button` (the `action: "submit"` row). Any other key is ignored.
+
+### 4.4 `qa_survey` — step-by-step option wizard
+
+The frontend opens a modal and repeatedly POSTs
+`{"step": N, "answers": {...}}` to `qa_endpoint` until `completed: true`.
+`answers` is keyed `step_1`, `step_2`, … (frontend-managed).
+
+```python
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+from server.paths import EXPORTS_DIR
+
+
+class QARequest(BaseModel):
+    step: int
+    answers: dict = {}
+
+
+def register_routes(app: FastAPI):
+    @app.post("/api/my_feature/qa_step")
+    def handle_qa_step(req: QARequest):
+        if req.step == 1:
+            return {
+                "step": 1,
+                "completed": False,
+                "question": "Which objective?",
+                "type": "choice",
+                "options": ["AI Training", "Data Pipeline", "RAG Indexing"],
+            }
+        if req.step == 2:
+            prev = req.answers.get("step_1", "?")
+            return {
+                "step": 2,
+                "completed": False,
+                "question": f"Got it: '{prev}'. Execution environment?",
+                "type": "choice",
+                "options": ["Local Ollama", "FastAPI Server", "Worker"],
+            }
+        # Final step -> completion. Optional: save a record.
+        summary = (
+            f"Objective: {req.answers.get('step_1')}\n"
+            f"Environment: {req.answers.get('step_2')}"
+        )
+        EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        record = EXPORTS_DIR / f"qa_{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+        record.write_text(
+            '{"answers": ' + __import__("json").dumps(req.answers) + "}",
+            encoding="utf-8",
+        )
+        return {
+            "step": 3,
+            "completed": True,
+            "summary": summary,
+            "message": "Setup complete!",
+            "indicate_success": True,
+            "record_path": str(record),
+        }
+```
+
+Manifest entry:
+
+```python
+{ "id": "item-qa", "label": "❓ Q&A Wizard",
+  "action": "qa_survey", "qa_endpoint": "/api/my_feature/qa_step" }
+```
+
+### 4.5 `status_dot` — the green success indicator
+
+Any of the above may return `"indicate_success": true`. The frontend adds a
+green `.status-dot` to the trigger button (the parent button for a dropdown
+item). No manifest flag needed — just return the key:
+
+```python
+return {"status": "success", "message": "Done!", "indicate_success": True}
+```
+
+---
+
+## 5. Backend patterns
+
+### `payload: dict` vs a pydantic model
+- Quick endpoints just take `payload: dict` and read keys. Fine for
+  `prompt_input`, modals and ad-hoc calls.
+- Use a `pydantic.BaseModel` subclass when you want validation (e.g. the Q&A
+  step contract). FastAPI validates the body automatically and returns 422 on
+  bad input.
+
+### The response you should return
+```python
+{
+  "status": "success",                 # "success" | "error"
+  "message": "Human-readable result",  # shown in alert / modal
+  "indicate_success": True,            # optional -> green dot
+}
+```
+
+### Referring to the app's internals
+Import paths (from `server.paths`): `DATA_DIR`, `CHATS_DIR`, `RECORDS_DIR`,
+`EXPORTS_DIR`, `RAG_DB_DIR`, `CUSTOM_MODULES_DIR`. See `server/paths.py`.
+
+### Streaming / long tasks
+This system is request → response for module routes. If a module does slow
+work, it should return quickly with a status object and (optionally) write
+progress to a file or log the UI reads. (A console/SSE feed can be layered on
+later — see the console-window ideas.)
+
+---
+
+## 6. Calling a module's functions from core Python
+
+The wiring bridge (`interface/wiring/__init__.py` + `bridges.py`) mirrors every
+loaded custom module into the update manager's catalog under the virtual domain
+**`"custom"`**, so core code can run module functions through the traced
+dispatcher used by update modules:
+
+```python
+from interface.interface_dispatcher import InterfaceDispatcher
+
+out = InterfaceDispatcher().execute_action(
+    "custom",                     # domain: the bridge's virtual domain
+    "my_feature",                # module name (file stem)
+    "some_function",             # any public function on the module
+    arg1,                        # positional args...
+    kwarg="value",              # and/or keyword args...
+)
+```
+
+Every call is written to `data/interface_trace.log`. If the module isn't loaded
+you get a `KeyError` — the bridge only exposes active modules.
+
+The module just needs a normal function:
+
+```python
+def some_function(name: str, make_upper: bool = False) -> str:
+    return name.upper() if make_upper else name
+```
+
+---
+
+## 7. Frontend files (usually you never touch these)
+
+| File | Role |
+|---|---|
+| `dashboard/js/ui/header-nav.js` | `renderDynamicHeaderButtons()` fetches `ui_manifests`, draws regular buttons + `dropdown_menu`. |
+| `dashboard/js/app.js` | The action dispatch: `prompt_input`, `open_modal`, `qa_survey`, the status-dot helper, and the shared `openModal(title, builder)` helper. |
+| `dashboard/js/api/api.js` | Thin HTTP wrappers (`getInterfaceStatus`, `runInterface`, …). |
+
+**To add a brand-new action type** (advanced): the three-file recipe —
+1. Give a module button that action name in its `UI_MANIFEST`.
+2. Add a rendering branch in `header-nav.jsrenderDynamicHeaderButtons()` if the
+   action needs new DOM.
+3. Add an `else if (btnConfig.action === "<name>")` branch in the
+   `renderDynamicHeaderButtons(navSlot, async (btnConfig, parentBtn) => {...})`
+   callback in `app.js`. Return `indicate_success` from your endpoint to reuse
+   the green dot.
+
+---
+
+## 8. Testing without a browser
+
+### `GET /api/interface/status` — is my module loaded, and does its manifest look right?
+
+```bash
+curl http://127.0.0.1:8000/api/interface/status
+```
+
+### Direct endpoint calls
+
+```bash
+# prompt-style action
+curl -X POST http://127.0.0.1:8000/api/hello_folder/create ^
+  -H "Content-Type: application/json" ^
+  -d "{\"input\": \"my_folder\"}"
+
+# schema (open_modal)
+curl http://127.0.0.1:8000/api/my_feature/schema
+
+# Q&A step
+curl -X POST http://127.0.0.1:8000/api/my_feature/qa_step ^
+  -H "Content-Type: application/json" ^
+  -d "{\"step\": 1, \"answers\": {}}"
+```
+
+(PowerShell: `^` is the line continuation; in bash use `\`.)
+
+### FastAPI TestClient (no browser, no running server)
+
+```python
+from fastapi.testclient import TestClient
+
+import server.server as srv
+
+with TestClient(srv.app) as client:          # `with` runs lifespan -> routes registered
+    status = client.get("/api/interface/status").json()
+    assert "hello_folder" in status["custom_modules"]["active"]
+
+    r = client.post("/api/hello_folder/create", json={"input": "test_dir"})
+    assert r.json()["status"] == "success"
+```
+
+---
+
+## 9. Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Button not in the header | Not loaded. Check `custom_modules.active` via `GET /api/interface/status`; look for `Failed to load <name>.py: …` in the server console. |
+| Module in `active` but endpoint 404s | The module has no `register_routes(app)`, or the route path/label don't match. Remember registration is **once per process** — after editing an already-loaded module, **restart**. |
+| Edited the module, `apply` didn't change anything | Expected: `apply` wires brand-new modules; edits to loaded ones need a restart (the old function is still bound to the route in memory). |
+| 422 error on a pydantic endpoint | Body doesn't match the model — check field names/types (e.g. `step` must be an int). |
+| Typed text didn't arrive | `prompt_input` posts `{"input": ...}` — read `payload.get("input")` (many modules also accept `project_name`). |
+| Put the file in `data/custom_modules` but nothing loads | On this machine the **Custom Modules Path is `E:\data\moduels`** (Settings → App defaults). Put the file there, or change the path and restart. |
+| Function callable in Python but not over HTTP | Only functions bound to routes inside `register_routes(app)` are HTTP-reachable; plain functions are reachable via `execute_action("custom", ...)`. |
+
+---
+
+## 10. Quick reference
+
+| I want to… | Do this |
+|---|---|
+| Scaffold a module | `python about/set_title.py create-module <name>` |
+| Add a simple input button | `prompt_input` + a `POST` route reading `payload.get("input")` |
+| Group actions under one button | `dropdown_menu` + `items[]` |
+| Render a schema-driven form | `open_modal` + a `GET` schema endpoint with `components` |
+| Run a multi-step choice wizard | `qa_survey` + a POST `qa_endpoint` (`{step, answers}` → `completed`) |
+| Show a green status dot | Return `"indicate_success": true` |
+| Call a module from Python | `InterfaceDispatcher().execute_action("custom", "<module>", "<func>", ...)` |
+| See load + manifests | `GET /api/interface/status` |
+| See what's running per rule | See **§2 — When modules (re)load** |
+
+**Reference implementations on this machine:** `interactive_manager.py`
+(demonstrates `dropdown_menu`, `open_modal`, `qa_survey`, `status_dot`, plus a
+Q&A record saver) and `project_manager.py` (real project provisioning), both in
+the configured Custom Modules Path (`E:\data\moduels`). Read those to see every
+pattern above in production.
+```
+
 ## docs/HOW_TO_USE.md
 
 ```markdown
@@ -13105,6 +14056,11 @@ project root), and `venv\Scripts\python -m uvicorn server.server:app` (root).
 This is your day-to-day guide for adding new features to the app without
 touching `index.html`, `header-nav.js`, or `server.py` by hand. Every new
 feature is just one `.py` file.
+
+> For the full developer guide — how the HTML, `server.py` and modules talk to
+> each other, plus every UI action type (`dropdown_menu`, `open_modal`,
+> `qa_survey`, `status_dot`) with runnable code — see
+> [`CUSTOM_MODULE_DEV_GUIDE.md`](CUSTOM_MODULE_DEV_GUIDE.md).
 
 ---
 
@@ -13331,6 +14287,16 @@ What you get, end to end:
   or `server.py` by hand.
 - `python about/set_title.py create-module <name>` scaffolds that `.py` file
   for you, pre-wired and ready to edit.
+- A manifest `buttons[]` entry picks one `action`: `prompt_input`,
+  `dropdown_menu` (flyout), `open_modal` (schema-driven form) or `qa_survey`
+  (step wizard). Any response returning `indicate_success: true` lights a
+  green status-dot on the trigger button.
+- The **wiring bridge** (new in this refresh) also exposes every loaded module
+  to core Python: `InterfaceDispatcher().execute_action("custom", <module>,
+  <func>, ...)`.
+
+This kit is a snapshot of the running implementation — the files below are
+byte-for-byte the live ones plus the wiring layer.
 
 ---
 
@@ -13349,16 +14315,23 @@ Every one of these is your original file with the Phase 1/2/3 additions
 inserted — nothing else was rewritten. Diff-review them if you want to be
 sure, then just overwrite.
 
-## 2. Files to ADD (new — don't exist in your project yet)
+## 2. Files to ADD (new — don't exist in an un-modified project yet)
 
 | New file | Goes at |
 |---|---|
 | `interface/custom_module_manager.py` | `interface/custom_module_manager.py` |
+| `interface/wiring/__init__.py` | `interface/wiring/__init__.py` |
+| `interface/wiring/bridges.py` | `interface/wiring/bridges.py` |
 
-That's the only brand-new source file. Everything else is a folder that
-gets created **automatically** the first time the server boots (see below) —
-you don't need to make it by hand, but you can if you want it to exist ahead
-of time.
+- `custom_module_manager.py` is the flat-folder loader.
+- `interface/wiring/` is the **connection layer**: it calls each module's
+  `register_routes(app)` once per process and mirrors the modules into the
+  update manager's catalog under the virtual domain `"custom"` so core code
+  can call them through the traced dispatcher.
+
+Everything else is a folder that gets created **automatically** the first time
+the server boots (see below) — you don't need to make it by hand, but you can
+if you want it to exist ahead of time.
 
 ## 3. Folder created automatically at runtime
 
@@ -13374,6 +14347,11 @@ after you install this and set it there — it works exactly like the
 existing Data folder / RAG database path fields. Leave it blank to keep the
 default (`data/custom_modules/`).
 
+> Reference implementations: in the running app, `interactive_manager.py`
+> (demonstrates `dropdown_menu`, `open_modal`, `qa_survey`, `status_dot`)
+> and `project_manager.py` live in the configured Custom Modules Path. They
+> are per-machine data, not part of this kit.
+
 ---
 
 ## Updated project tree (only the touched/added paths are marked)
@@ -13381,28 +14359,31 @@ default (`data/custom_modules/`).
 ```
 genV2_Interface_projectManager/
 ├── about/
-│   └── set_title.py                       ← REPLACE (adds `create-module`)
+│   └── set_title.py                       ← REPLACE (adds `create-module`; `apply` via wiring)
 ├── dashboard/
 │   ├── config/
 │   │   └── app_settings.json              (unchanged — gains "customModulesPath" key
 │   │                                         automatically the first time you save Settings)
 │   └── js/
-│       ├── app.js                         ← REPLACE (wires dynamic header buttons)
+│       ├── app.js                         ← REPLACE (dispatches all four action types)
 │       └── ui/
 │           ├── config-form.js             ← REPLACE (adds "Custom Modules Path" field)
-│           └── header-nav.js              ← REPLACE (adds renderDynamicHeaderButtons)
+│           └── header-nav.js              ← REPLACE (renders buttons + dropdown menus)
 ├── data/
 │   └── custom_modules/                    ← NEW FOLDER (auto-created at boot)
 │       └── <your-generated-modules>.py    ← where `create-module` writes files
 ├── interface/
-│   ├── custom_module_manager.py           ← ADD (new file)
+│   ├── custom_module_manager.py           ← ADD (the flat custom drop-in loader)
+│   ├── wiring/                            ← ADD (new folder — the connection layer)
+│   │   ├── __init__.py                    ←     WiringManager: wire / rewire / registry
+│   │   └── bridges.py                     ←     CustomModuleBridge: routes + "custom" domain
 │   ├── update_manager.py                  (unchanged — your existing domain system)
 │   ├── interface_dispatcher.py            (unchanged)
 │   ├── restore_manager.py                 (unchanged)
 │   └── updates/                           (unchanged)
 └── server/
     ├── paths.py                           ← REPLACE (adds CUSTOM_MODULES_DIR)
-    └── server.py                          ← REPLACE (loads + registers custom modules)
+    └── server.py                          ← REPLACE (loads custom modules + wires them)
 ```
 
 ---
@@ -13423,6 +14404,22 @@ Custom Modules Path points), pre-filled with:
 
 Open that file and put your real logic inside `execute_module_action`.
 
+### The four button action types
+
+A manifest `buttons[]` entry picks exactly one `action` (see
+`docs/CUSTOM_MODULE_DEV_GUIDE.md` for runnable backend code for each):
+
+| `action` | What the frontend does |
+|---|---|
+| `prompt_input` | `window.prompt(prompt_message)` → `POST api_endpoint` with `{"input": ...}` → `alert(message)` |
+| `dropdown_menu` | renders a flyout; each `items[]` entry is a real action, run against the parent button |
+| `open_modal` | fetches `schema_endpoint` (a JSON schema of `input` / `select` / `checkbox` / `button` components), builds a modal form, POSTs the filled values to `schema.target_endpoint` |
+| `qa_survey` | a step wizard that POSTs `{step, answers}` to `qa_endpoint` until the server returns `completed: true` |
+
+Plus `status_dot` — not an action but a response flag: return
+`indicate_success: true` from any endpoint and a green `.status-dot` appears
+on the trigger button.
+
 ### Activate it
 
 Two ways:
@@ -13438,8 +14435,27 @@ Two ways:
 ### See it in the UI
 
 Reload the dashboard (`index.html`). A new button appears in the header nav
-automatically — no template or JS edits needed. Clicking it prompts for
-input (per `prompt_message`) and POSTs to the module's `api_endpoint`.
+automatically — no template or JS edits needed. Clicking it follows its
+`action` (prompt → modal → dropdown → wizard) and POSTs to the module's
+endpoint.
+
+### Call it from core Python (the wiring bridge)
+
+Any public function on a loaded module is callable from anywhere in the app
+through the same traced dispatcher used for update modules:
+
+```python
+from interface.interface_dispatcher import InterfaceDispatcher
+
+result = InterfaceDispatcher().execute_action(
+    "custom",            # domain — the bridge's virtual domain
+    "analytics_builder", # module name (file stem)
+    "some_function",     # any public function on the module
+    "some input",
+)
+```
+
+Calls are logged to `data/interface_trace.log`.
 
 ### Change where modules are read from
 
@@ -13461,29 +14477,39 @@ the existing "restart needed" banner).
   files, imports each with `importlib.util` (they're standalone files, not a
   Python package), and exposes `active_modules_catalog`, `ui_manifests()`,
   and `get_active_module(name)`.
-- **`server/server.py`** — at startup (`lifespan`), creates a
-  `CustomModuleManager`, calls `register_routes(app)` once per module, and
-  remembers which ones are already registered (`_CUSTOM_ROUTES_REGISTERED`)
-  so `apply` can register new ones live without double-registering old ones.
-  `GET /api/interface/status` now also returns `custom_modules` (folder +
-  active names) and `ui_manifests` (every active module's manifest, for the
-  frontend to render buttons from).
-- **`dashboard/js/ui/header-nav.js`** — new export
-  `renderDynamicHeaderButtons(container, onClick)` fetches
-  `/api/interface/status`, reads `ui_manifests`, and appends one button per
-  manifest entry into `container`, wired to `onClick`.
-- **`dashboard/js/app.js`** — calls that function right after mounting the
-  normal nav row, with a click handler that follows each button's
-  `action: "prompt_input"` contract (prompt → POST `api_endpoint` → alert
-  the response).
+- **`interface/wiring/`** — the connection layer (all new):
+  - `__init__.py` — `WiringManager`: `wire(app)` at boot, `rewire(app)` on
+    `apply`, `registry()` for `/api/interface/status`, `summary()` for the
+    CLI/boot log. Loads both managers as singletons when none are passed.
+  - `bridges.py` — `CustomModuleBridge`: calls `register_routes(app)` for
+    every module **at most once per process** (`_REGISTERED` set), and
+    `activate()` mirrors all active modules into the update manager's catalog
+    under the virtual domain `"custom"` (re-injected after every reload).
+- **`server/server.py`** — at startup (`lifespan`) creates the loader **and**
+  `WiringManager`, wires them, and exposes them on `app.state` (`update_manager`,
+  `custom_module_manager`, `wiring`). Route registration and the bridge now
+  happen inside `interface/wiring` (previously hand-rolled in server.py).
+  `GET /api/interface/status` returns `catalog` (per domain), `custom_modules`
+  (folder + active names), `ui_manifests` (for the frontend) and `bridge`
+  (domain + reachable names).
+- **`dashboard/js/ui/header-nav.js`** — `renderDynamicHeaderButtons(container,
+  onClick)` fetches `/api/interface/status`, reads `ui_manifests`, and appends
+  one button per manifest entry; `action: "dropdown_menu"` renders a flyout of
+  `items` (outside-click closes it). Regular buttons and dropdown items hand
+  `(btnConfig, parentBtn)` to the click handler.
+- **`dashboard/js/app.js`** — dispatches all four actions:
+  `prompt_input` (prompt → POST → alert), `open_modal` (schema fetch → modal
+  form → POST to `target_endpoint`), `qa_survey` (step wizard modal) and the
+  `status_dot` helper (green dot on `indicate_success: true`). Adds the shared
+  `openModal(title, builderFn)` overlay helper.
 - **`dashboard/js/ui/config-form.js`** — adds the "Custom Modules Path" text
   field to the Settings form, saved through the existing generic
   `saveAppSettings()` call (no server change needed for that part — it
   already merges whatever keys you send it).
 - **`about/set_title.py`** — adds the `create-module` CLI command and its
-  boilerplate template (module name → `UI_MANIFEST` + `register_routes`),
-  plus a summary line for the custom-module catalog in `apply`.
-
+  boilerplate template (module name → `UI_MANIFEST` + `register_routes`);
+  `apply` now reloads update + custom modules through `WiringManager().rewire()`
+  and prints a combined summary (catalog + custom modules + bridge).
 ```
 
 ## docs/phase-1-2-3-update/about/set_title.py
@@ -13526,23 +14552,19 @@ def _load_about() -> dict:
 
 
 def cmd_apply(argv):
-    """Reload all active update modules and regenerate the docs snapshots."""
-    from interface.update_manager import UpdateManager
-    from interface.restore_manager import RestoreManager
-
-    manager = UpdateManager()
-    manager.reload_all()
-    print(manager.summary())
+    """Reload update + custom modules through the wiring layer and regenerate
+    the docs snapshots. New custom modules register their routes via
+    POST /api/interface/apply (or a server restart); edits to an already
+    loaded module's route logic still need a restart."""
+    from interface.wiring import WiringManager
 
     try:
-        from interface.custom_module_manager import CustomModuleManager
-        custom_manager = CustomModuleManager()
-        print(custom_manager.summary())
-        print("Note: NEW custom modules register their routes live via "
-              "POST /api/interface/apply (or restart the server). Edits to "
-              "an already-loaded module's route logic still need a restart.")
+        wiring = WiringManager()
+        wiring.rewire()
+        print(wiring.summary())
     except Exception as exc:
-        print(f"WARNING: custom module discovery failed: {exc}")
+        print(f"WARNING: module reload failed: {exc}")
+        return 1
 
     script = _PROJECT_ROOT / "scripts" / "update_docs.py"
     result = subprocess.run([sys.executable, str(script)], cwd=str(_PROJECT_ROOT))
@@ -13556,6 +14578,7 @@ def cmd_apply(argv):
         # snapshots (documents the ordering bug fix - previously the baseline
         # was published with pre-regen docs, making restore --dry-run report
         # the two doc files as modified).
+        from interface.restore_manager import RestoreManager
         count = RestoreManager().snapshot_baseline()
         print(f"Baseline refreshed: {count} file(s) -> current-known-good-copy/")
 
@@ -13791,7 +14814,19 @@ async function boot() {
         // Phase 2 - Dynamic UI Manifests: mount any header buttons declared
         // by drop-in custom modules (interface/custom_module_manager.py).
         // Fail-soft; adds nothing on a server with no custom modules loaded.
-        renderDynamicHeaderButtons(navSlot, async (btnConfig) => {
+        // Handles: prompt_input, dropdown menus, schema modals and Q&A wizards,
+        // plus the green success-status dot (endpoint returns indicate_success).
+        renderDynamicHeaderButtons(navSlot, async (btnConfig, parentBtn) => {
+            const markSuccessDot = () => {
+                if (parentBtn && !parentBtn.querySelector(".status-dot")) {
+                    const dot = document.createElement("span");
+                    dot.className = "status-dot";
+                    parentBtn.appendChild(dot);
+                }
+            };
+
+            // 1. ACTION: Prompt Input (original; posts { input } generically so
+            //    any module's execute route can read payload.get("input")).
             if (btnConfig.action === "prompt_input") {
                 const userInput = window.prompt(btnConfig.prompt_message || "Enter value:");
                 if (userInput && userInput.trim()) {
@@ -13799,14 +14834,164 @@ async function boot() {
                         const response = await fetch(btnConfig.api_endpoint, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ project_name: userInput.trim() }),
+                            body: JSON.stringify({ input: userInput.trim() }),
                         });
                         const resData = await response.json();
                         alert(resData.message || "Action completed!");
+                        if (resData.indicate_success) markSuccessDot();
                     } catch (error) {
                         alert(`Action failed: ${error.message}`);
                     }
                 }
+            }
+
+            // 2. ACTION: Open Schema Modal Dialog.
+            else if (btnConfig.action === "open_modal") {
+                try {
+                    const schemaRes = await fetch(btnConfig.schema_endpoint);
+                    const schema = await schemaRes.json();
+                    openModal(schema.title, (modalBody, closeModal) => {
+                        const form = document.createElement("form");
+
+                        (schema.components || []).forEach((item) => {
+                            const field = document.createElement("div");
+                            field.className = "field";
+
+                            if (item.type === "input") {
+                                const label = document.createElement("label");
+                                label.textContent = item.label || "";
+                                const input = document.createElement("input");
+                                input.type = "text";
+                                input.name = item.name;
+                                input.placeholder = item.placeholder || "";
+                                field.append(label, input);
+                            } else if (item.type === "select") {
+                                const label = document.createElement("label");
+                                label.textContent = item.label || "";
+                                const select = document.createElement("select");
+                                select.name = item.name;
+                                (item.options || []).forEach((opt) => {
+                                    const option = document.createElement("option");
+                                    option.value = opt;
+                                    option.textContent = opt;
+                                    select.appendChild(option);
+                                });
+                                field.append(label, select);
+                            } else if (item.type === "checkbox") {
+                                field.className = "field field-toggle";
+                                const span = document.createElement("span");
+                                span.textContent = item.label || "";
+                                const sw = document.createElement("label");
+                                sw.className = "field-switch";
+                                const cb = document.createElement("input");
+                                cb.type = "checkbox";
+                                cb.name = item.name;
+                                if (item.value) cb.checked = true;
+                                sw.appendChild(cb);
+                                field.append(span, sw);
+                            } else if (item.type === "button") {
+                                const submit = document.createElement("button");
+                                submit.type = "submit";
+                                submit.className = "btn btn-primary";
+                                submit.textContent = item.label || "Submit";
+                                field.appendChild(submit);
+                            }
+                            form.appendChild(field);
+                        });
+
+                        form.addEventListener("submit", async (e) => {
+                            e.preventDefault();
+                            const payload = {};
+                            new FormData(form).forEach((val, key) => { payload[key] = val; });
+                            try {
+                                const execRes = await fetch(schema.target_endpoint, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify(payload),
+                                });
+                                const execData = await execRes.json();
+                                closeModal();
+                                alert(execData.message || "Submitted successfully!");
+                                if (execData.indicate_success) markSuccessDot();
+                            } catch (error) {
+                                alert(`Submit failed: ${error.message}`);
+                            }
+                        });
+
+                        modalBody.appendChild(form);
+                    });
+                } catch (error) {
+                    alert(`Could not load dialog schema: ${error.message}`);
+                }
+            }
+
+            // 3. ACTION: Interactive Q&A Wizard (step-by-step choice survey).
+            else if (btnConfig.action === "qa_survey") {
+                let step = 1;
+                const answers = {};
+                openModal("Interactive Q&A Wizard", (modalBody, closeModal) => {
+                    const renderStep = async () => {
+                        modalBody.replaceChildren();
+                        try {
+                            const res = await fetch(btnConfig.qa_endpoint, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ step, answers }),
+                            });
+                            const data = await res.json();
+
+                            if (data.completed) {
+                                const doneWrap = document.createElement("div");
+                                const heading = document.createElement("h3");
+                                heading.textContent = data.message || "Complete!";
+                                const pre = document.createElement("pre");
+                                pre.textContent = data.summary || "";
+                                const doneBtn = document.createElement("button");
+                                doneBtn.className = "btn btn-primary";
+                                doneBtn.textContent = "Done";
+                                doneBtn.onclick = () => {
+                                    closeModal();
+                                    if (data.indicate_success) markSuccessDot();
+                                };
+                                doneWrap.append(heading, pre, doneBtn);
+                                if (data.record_path) {
+                                    const saved = document.createElement("p");
+                                    saved.className = "status-message ok";
+                                    saved.textContent = "Record saved: " + data.record_path;
+                                    doneWrap.appendChild(saved);
+                                }
+                                modalBody.appendChild(doneWrap);
+                                return;
+                            }
+
+                            const qEl = document.createElement("h3");
+                            qEl.textContent = `Step ${data.step}: ${data.question}`;
+                            modalBody.appendChild(qEl);
+
+                            const optionsGrid = document.createElement("div");
+                            optionsGrid.className = "qa-options-grid";
+                            (data.options || []).forEach((opt) => {
+                                const optBtn = document.createElement("button");
+                                optBtn.className = "qa-option-btn";
+                                optBtn.textContent = opt;
+                                optBtn.onclick = () => {
+                                    answers[`step_${step}`] = opt;
+                                    step += 1;
+                                    renderStep();
+                                };
+                                optionsGrid.appendChild(optBtn);
+                            });
+                            modalBody.appendChild(optionsGrid);
+                        } catch (error) {
+                            modalBody.replaceChildren();
+                            const errEl = document.createElement("p");
+                            errEl.className = "status-message error";
+                            errEl.textContent = "Q&A failed: " + error.message;
+                            modalBody.appendChild(errEl);
+                        }
+                    };
+                    renderStep();
+                });
             }
         });
     }
@@ -14104,6 +15289,51 @@ function handleClearAction(session, chat) {
     session.newChat();
     chat.clearMessages();
     chat.setSaveStatus("Chat cleared.", "ok");
+}
+
+/**
+ * Universal modal launcher for dynamic module actions
+ * ("open_modal" / "qa_survey"). Builds an overlay card and hands the
+ * body + a close() function to `builderFn`.
+ * @returns {{ close: () => void }}
+ */
+function openModal(titleText, builderFn) {
+    const overlay = document.createElement("div");
+    overlay.className = "genessis-modal-overlay";
+
+    const card = document.createElement("div");
+    card.className = "genessis-modal-card";
+
+    const header = document.createElement("div");
+    header.className = "genessis-modal-header";
+    const title = document.createElement("h2");
+    title.textContent = titleText || "";
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "genessis-modal-close";
+    closeBtn.textContent = "\u2715";
+    closeBtn.type = "button";
+    closeBtn.setAttribute("aria-label", "Close");
+    header.append(title, closeBtn);
+
+    const body = document.createElement("div");
+    body.className = "genessis-modal-body";
+
+    card.append(header, body);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const closeModal = () => overlay.remove();
+    closeBtn.onclick = closeModal;
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) {
+            closeModal();
+        }
+    });
+
+    if (typeof builderFn === "function") {
+        builderFn(body, closeModal);
+    }
+    return { close: closeModal };
 }
 
 // ---- go ----
@@ -14498,10 +15728,15 @@ export function renderHeaderNav(currentId = "") {
  * Fetch /api/interface/status and mount every registered custom module's
  * UI_MANIFEST buttons into `container` (Phase 2 - Dynamic UI Manifests).
  *
+ * A manifest button with `action: "dropdown_menu"` is rendered as a flyout:
+ * its `items` become sub-buttons, and each one is handed to
+ * `onActionTriggered` (with the parent button, so a status dot can attach).
+ *
  * @param {HTMLElement} container       - element to append buttons into
  *                                         (e.g. the #app-nav slot)
- * @param {(btnConfig: object) => void} onActionTriggered - called with the
- *                                         button's manifest entry on click
+ * @param {(btnConfig: object, parentBtn?: HTMLElement) => void} onActionTriggered
+ *                                         - called with the trigger config (and
+ *                                         parent button for dropdown items) on click
  *
  * Fail-soft by design: a server without /api/interface/status (or with no
  * custom modules loaded) simply renders nothing extra.
@@ -14514,10 +15749,62 @@ export async function renderDynamicHeaderButtons(container, onActionTriggered) {
         const status = await getInterfaceStatus();
         const manifests = status.ui_manifests || [];
 
+        // One delegated listener closes any open dropdown on an outside click,
+        // instead of binding a per-dropdown global handler on every render.
+        document.addEventListener("click", () => {
+            document.querySelectorAll(".nav-dropdown-menu").forEach(
+                (menu) => menu.classList.add("hidden")
+            );
+        });
+
         manifests.forEach((manifest) => {
             (manifest.buttons || []).forEach((btnConfig) => {
                 if (document.getElementById(btnConfig.id)) return; // avoid duplicates
 
+                if (btnConfig.action === "dropdown_menu") {
+                    const wrapper = document.createElement("div");
+                    wrapper.className = "nav-dropdown-wrapper";
+
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.id = btnConfig.id;
+                    btn.className = "header-nav-link";
+                    btn.textContent = (btnConfig.label || "Menu") + " \u25be";
+                    btn.title = btnConfig.title || "";
+                    btn.style.cursor = "pointer";
+
+                    const menu = document.createElement("div");
+                    menu.className = "nav-dropdown-menu hidden";
+
+                    (btnConfig.items || []).forEach((subItem) => {
+                        const itemBtn = document.createElement("button");
+                        itemBtn.type = "button";
+                        itemBtn.className = "nav-dropdown-item";
+                        itemBtn.textContent = subItem.label;
+                        itemBtn.onclick = () => {
+                            menu.classList.add("hidden");
+                            if (onActionTriggered) {
+                                onActionTriggered(subItem, btn);
+                            }
+                        };
+                        menu.appendChild(itemBtn);
+                    });
+
+                    btn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        document.querySelectorAll(".nav-dropdown-menu").forEach(
+                            (m) => m.classList.add("hidden")
+                        );
+                        menu.classList.toggle("hidden");
+                    });
+
+                    wrapper.appendChild(btn);
+                    wrapper.appendChild(menu);
+                    container.appendChild(wrapper);
+                    return;
+                }
+
+                // Regular header button (prompt_input / open_modal / qa_survey...).
                 const btn = document.createElement("button");
                 btn.type = "button";
                 btn.id = btnConfig.id;
@@ -14528,7 +15815,7 @@ export async function renderDynamicHeaderButtons(container, onActionTriggered) {
 
                 btn.addEventListener("click", () => {
                     if (onActionTriggered) {
-                        onActionTriggered(btnConfig);
+                        onActionTriggered(btnConfig, btn);
                     }
                 });
 
@@ -14690,6 +15977,215 @@ def get_custom_module_manager() -> CustomModuleManager:
         _manager = CustomModuleManager()
     return _manager
 
+```
+
+## docs/phase-1-2-3-update/interface/wiring/__init__.py
+
+```python
+"""interface/wiring/
+====================
+
+The connection layer between the module loaders and the running app.
+
+- `UpdateManager` discovers `interface/updates/<domain>/*.py` - callable
+  natively from core code, traced by `InterfaceDispatcher`.
+- `CustomModuleManager` discovers flat `data/custom_modules/*.py` - each with
+  a `UI_MANIFEST` (header button) and `register_routes(app)` (FastAPI route).
+
+This package joins the two worlds:
+
+- route registration for custom modules lives here (previously hand-rolled in
+  `server/server.py`), still idempotent per process;
+- custom modules are bridged into the update manager's catalog under the
+  virtual domain `custom`, so their functions are ALSO callable from core
+  code through the same traced dispatcher:
+
+      InterfaceDispatcher().execute_action("custom", <module>, <func>, ...)
+
+`WiringManager` is the front door: `wire(app)` at boot, `rewire(app)` on
+`apply`, `registry()` for `/api/interface/status`. Nothing here replaces the
+loaders - it only connects them to the app.
+"""
+
+from __future__ import annotations
+
+from interface.wiring.bridges import BRIDGE_DOMAIN, CustomModuleBridge
+
+__all__ = ["WiringManager", "CustomModuleBridge", "BRIDGE_DOMAIN"]
+
+
+class WiringManager:
+    """Front door for wiring loaded modules into the running app."""
+
+    def __init__(self, update_manager=None, custom_manager=None) -> None:
+        if update_manager is None:
+            from interface.update_manager import get_update_manager
+            update_manager = get_update_manager()
+        if custom_manager is None:
+            from interface.custom_module_manager import get_custom_module_manager
+            custom_manager = get_custom_module_manager()
+        self.update_manager = update_manager
+        self.custom_manager = custom_manager
+        self.bridge = CustomModuleBridge(update_manager, custom_manager)
+
+    # ------------------------------------------------------------------ wiring
+
+    def wire(self, app=None) -> None:
+        """Scan custom modules, register their routes once per process and
+        bridge them into the dispatcher's catalog.
+
+        `app` may be None (CLI usage) - then discovery + bridging still run
+        but route registration needs an app and is skipped.
+        """
+        self.custom_manager.discover_all_active_modules()
+        if app is not None:
+            self.bridge.register_routes(app)
+        self.bridge.activate()
+        if app is not None:
+            app.state.wiring = self
+
+    def rewire(self, app=None) -> None:
+        """Reload BOTH loaders from disk, then wire() again (the `apply`
+        trigger). The bridge is re-injected because reload_all() rebuilds the
+        update catalog from scratch."""
+        self.update_manager.reload_all()
+        self.wire(app)
+
+    # ----------------------------------------------------------------- registry
+
+    def registry(self) -> dict:
+        """Consolidated view of both layers, for /api/interface/status."""
+        from server.paths import CUSTOM_MODULES_DIR
+
+        if self.custom_manager is not None:
+            active = self.custom_manager.list_modules()
+            ui_manifests = self.custom_manager.ui_manifests()
+        else:
+            active, ui_manifests = [], []
+
+        catalog: dict[str, list[str]] = {}
+        if self.update_manager is not None:
+            for domain, names in sorted(self.update_manager.active_modules_catalog.items()):
+                if domain == BRIDGE_DOMAIN:
+                    continue
+                catalog[domain] = sorted(names)
+
+        return {
+            "catalog": catalog,
+            "custom_modules": {"dir": str(CUSTOM_MODULES_DIR), "active": active},
+            "ui_manifests": ui_manifests,
+            "bridge": {
+                "domain": BRIDGE_DOMAIN,
+                "active": self.bridge.reachable_names(),
+            },
+        }
+
+    # ------------------------------------------------------------------ summary
+
+    def summary(self) -> str:
+        """Human-readable catalog + bridge listing for boot / CLI."""
+        lines = []
+        if self.update_manager is not None:
+            lines.append(self.update_manager.summary(exclude=BRIDGE_DOMAIN))
+        if self.custom_manager is not None:
+            lines.append(self.custom_manager.summary())
+        lines.append(self.bridge.summary())
+        return "\n".join(lines)
+```
+
+## docs/phase-1-2-3-update/interface/wiring/bridges.py
+
+```python
+"""interface/wiring/bridges.py
+==============================
+
+The concrete connections between the module loaders and the running app:
+
+  - Route registration: calls `register_routes(app)` for every custom drop-in
+    module, at most once per process. FastAPI allows adding routes at any
+    time, so brand-new modules can go live via `apply` without a restart.
+  - The dispatcher bridge: custom modules are mirrored into the update
+    manager's catalog under the virtual domain `BRIDGE_DOMAIN`, making them
+    reachable from core code through the SAME traced dispatcher used for
+    update modules:
+
+        InterfaceDispatcher().execute_action("custom", "analytics_builder",
+                                             "my_logic", arg)
+
+    The bridge is re-injected after every reload because
+    UpdateManager.reload_all() rebuilds its catalog from scratch.
+"""
+
+from __future__ import annotations
+
+BRIDGE_DOMAIN = "custom"
+
+# Custom drop-in modules whose register_routes(app) has already been called
+# for THIS process (see CustomModuleBridge.register_routes).
+_REGISTERED: set[str] = set()
+
+
+class CustomModuleBridge:
+    """Joins the flat custom drop-ins to the domain-based update world."""
+
+    def __init__(self, update_manager=None, custom_manager=None) -> None:
+        self.update_manager = update_manager
+        self.custom_manager = custom_manager
+
+    # ------------------------------------------------------------------ routes
+
+    def register_routes(self, app) -> list[str]:
+        """Call register_routes(app) for every not-yet-registered custom
+        module. Returns the names newly registered this call."""
+        newly_registered: list[str] = []
+        if self.custom_manager is None:
+            return newly_registered
+        for name, mod in self.custom_manager.active_modules_catalog.items():
+            if name in _REGISTERED:
+                continue
+            if hasattr(mod, "register_routes"):
+                try:
+                    mod.register_routes(app)
+                    _REGISTERED.add(name)
+                    newly_registered.append(name)
+                    print(f"[custom-modules] Auto-registered routes for: {name}")
+                except Exception as exc:
+                    print(f"[custom-modules] Failed to register routes for {name}: {exc}")
+        return newly_registered
+
+    # ------------------------------------------------------------------ bridge
+
+    def activate(self) -> None:
+        """Mirror every active custom module into the update manager's catalog
+        under BRIDGE_DOMAIN so execute_action("custom", ...) can reach it."""
+        self.deactivate()
+        if self.custom_manager is None or self.update_manager is None:
+            return
+        catalog = dict(self.custom_manager.active_modules_catalog)
+        if catalog:
+            self.update_manager.active_modules_catalog[BRIDGE_DOMAIN] = catalog
+        names = ", ".join(sorted(catalog)) if catalog else "(none)"
+        print(f"[wiring] bridge: custom modules -> domain '{BRIDGE_DOMAIN}': {names}")
+
+    def deactivate(self) -> None:
+        """Drop the bridge domain (used before re-injecting after a reload)."""
+        if self.update_manager is not None:
+            self.update_manager.active_modules_catalog.pop(BRIDGE_DOMAIN, None)
+
+    def reachable_names(self) -> list[str]:
+        """Names of custom modules callable via execute_action(BRIDGE_DOMAIN,
+        <name>, <func>, ...)."""
+        if self.update_manager is None:
+            return []
+        return sorted(self.update_manager.active_modules_catalog.get(BRIDGE_DOMAIN, {}))
+
+    # ------------------------------------------------------------------ summary
+
+    def summary(self) -> str:
+        names = self.reachable_names()
+        return ("Custom modules reachable via execute_action"
+                f"('{BRIDGE_DOMAIN}', <name>, <func>): "
+                + (", ".join(names) if names else "(none)"))
 ```
 
 ## docs/phase-1-2-3-update/server/paths.py
@@ -15030,15 +16526,12 @@ from interface.interface_dispatcher import (InterfaceDispatcher,
 from interface.restore_manager import (RestoreManager, get_restore_manager,
                                        DEFAULT_BASELINE, MANIFEST_NAME)
 
-# Phase 1/2/3 - Dynamic External Module Loader: flat drop-in .py modules
-# under server.paths.CUSTOM_MODULES_DIR, each optionally declaring
-# UI_MANIFEST (Phase 2 - auto-rendered header buttons) and register_routes(app)
-# (Phase 1 - auto-registered FastAPI endpoints). Generated from the terminal
-# via `python about/set_title.py create-module <name>` (Phase 3). This is a
-# separate system from the interface/updates/<domain>/ UpdateManager above -
-# neither one touches the other's catalog.
-from interface.custom_module_manager import (CustomModuleManager,
-                                              get_custom_module_manager)
+# Wiring layer: connects the two module loaders to the running app - owns
+# custom-module route registration and bridges Phase 1/2/3 drop-in modules
+# (data/custom_modules/) into the update manager's catalog under the virtual
+# 'custom' domain, so core code can call them via the traced dispatcher.
+from interface.custom_module_manager import get_custom_module_manager
+from interface.wiring import WiringManager
 
 # Runs once at startup; scans data/chatlog/agent-text-records/*.txt and records
 # their header info in data/chatlog/chatRecord.jsonl so past chats appear in
@@ -15092,32 +16585,6 @@ def _default_agent() -> str:
         return "basic_chat"
 
 
-# Names of custom drop-in modules (interface/custom_module_manager.py) whose
-# register_routes(app) has already been called for THIS process. FastAPI lets
-# routes be added to app.router at any time, so "apply" can register routes
-# for newly-added modules live, without a full restart - but a module is only
-# ever registered once per process to avoid duplicate route entries.
-_CUSTOM_ROUTES_REGISTERED: set[str] = set()
-
-
-def _register_custom_routes(manager: "CustomModuleManager") -> list[str]:
-    """Call register_routes(app) for every not-yet-registered custom module.
-    Returns the names that were newly registered this call."""
-    newly_registered = []
-    for name, mod in manager.active_modules_catalog.items():
-        if name in _CUSTOM_ROUTES_REGISTERED:
-            continue
-        if hasattr(mod, "register_routes"):
-            try:
-                mod.register_routes(app)
-                _CUSTOM_ROUTES_REGISTERED.add(name)
-                newly_registered.append(name)
-                print(f"[custom-modules] Auto-registered routes for: {name}")
-            except Exception as exc:
-                print(f"[custom-modules] Failed to register routes for {name}: {exc}")
-    return newly_registered
-
-
 # Startup hook: scan Ollama models BEFORE any request is served, and import
 # any existing data/chatlog/agent-text-records/*.txt transcripts into the log
 # (data/chatlog/chatRecord.jsonl) so old chats show up in the frontend
@@ -15139,9 +16606,11 @@ async def lifespan(app: FastAPI):
             print(f"[paths] {key} overridden by {source}")
 
     # Modular interface: discover update modules + traced dispatcher once at
-    # startup (exposed on app.state so request handlers can reach them).
+    # startup (exposed on app.state so request handlers can reach them). Uses
+    # the process singletons so the wiring bridge below mutates the SAME
+    # catalog that execute_action()/get_active_module() read through.
     try:
-        interface_manager = UpdateManager()
+        interface_manager = get_update_manager()
         interface_manager.discover_all_active_modules()
         print("[interface] active update modules: "
               + ", ".join(f"{d}/{', '.join(n) if n else ''}"
@@ -15153,17 +16622,17 @@ async def lifespan(app: FastAPI):
         app.state.update_manager = None
         app.state.interface_dispatcher = None
 
-    # Phase 1 - Custom drop-in modules (flat CUSTOM_MODULES_DIR folder):
-    # discover, then auto-register every module's FastAPI routes.
+    # Wiring layer: discover the Phase 1/2/3 custom drop-in modules (flat
+    # CUSTOM_MODULES_DIR folder), auto-register their FastAPI routes (once per
+    # process) and bridge them into the dispatcher's catalog under the
+    # virtual 'custom' domain so core code can call them, trace-logged.
     try:
-        custom_manager = CustomModuleManager()
-        print("[custom-modules] active: "
-              + (", ".join(custom_manager.list_modules()) or "(none)"))
-        app.state.custom_module_manager = custom_manager
-        _register_custom_routes(custom_manager)
+        wiring = WiringManager(update_manager=app.state.update_manager)
+        wiring.wire(app)
+        app.state.wiring = wiring
     except Exception as exc:   # a broken drop-in module must never block boot
-        print(f"[custom-modules] WARNING: discovery failed: {exc}")
-        app.state.custom_module_manager = None
+        print(f"[wiring] WARNING: custom module wiring failed: {exc}")
+        app.state.wiring = None
 
     yield                      # serve requests; code after this runs on shutdown
 
@@ -15755,8 +17224,7 @@ def _update_manager():
 
 
 def _custom_manager():
-    """The lifespan-created CustomModuleManager, or the process-wide
-    singleton when startup discovery failed."""
+    """The process-wide CustomModuleManager (wired into the app by WiringManager)."""
     manager = getattr(app.state, "custom_module_manager", None)
     return manager if manager is not None else get_custom_module_manager()
 
@@ -15799,11 +17267,15 @@ def interface_status():
     module catalog, the external archive, the trace-log tail and the
     baseline (current-known-good-copy/) freshness + live drift.
 
-    Also exposes the Phase 1/2 custom drop-in module layer:
-      - custom_modules: {dir, active} - names loaded from CUSTOM_MODULES_DIR
-      - ui_manifests:   every active custom module's UI_MANIFEST dict, used
-                        by dashboard/js/ui/header-nav.js to auto-render
-                        header buttons (Phase 2) without editing index.html.
+    Also exposes the Phase 1/2/3 custom drop-in module layer (wired via
+    interface/wiring/):
+      - catalog:         update-module domains (engine/tools/server)
+      - custom_modules:  {dir, active} - names loaded from CUSTOM_MODULES_DIR
+      - ui_manifests:    every active custom module's UI_MANIFEST dict, used
+                         by dashboard/js/ui/header-nav.js to auto-render
+                         header buttons (Phase 2) without editing index.html.
+      - bridge:          custom modules ALSO callable from core code via
+                         execute_action("custom", <name>, <func>, ...).
     """
     try:
         manager = _update_manager()
@@ -15855,16 +17327,25 @@ def interface_status():
     if manifest_path.is_file():
         baseline["manifest"] = _load_json(manifest_path, None)
 
-    try:
-        custom_manager = _custom_manager()
-        custom_modules = {
-            "dir": str(paths.CUSTOM_MODULES_DIR),
-            "active": custom_manager.list_modules(),
-        }
-        ui_manifests = custom_manager.ui_manifests()
-    except Exception as exc:
-        custom_modules = {"dir": str(paths.CUSTOM_MODULES_DIR), "active": [], "error": str(exc)}
-        ui_manifests = []
+    wiring = getattr(app.state, "wiring", None)
+    if wiring is not None:
+        wire_registry = wiring.registry()
+        catalog = wire_registry["catalog"]
+        custom_modules = wire_registry["custom_modules"]
+        ui_manifests = wire_registry["ui_manifests"]
+        bridge = wire_registry["bridge"]
+    else:
+        # Fallback (wiring not initialised): report directly from the loader.
+        try:
+            custom_modules = {
+                "dir": str(paths.CUSTOM_MODULES_DIR),
+                "active": _custom_manager().list_modules(),
+            }
+            ui_manifests = _custom_manager().ui_manifests()
+        except Exception as exc:
+            custom_modules = {"dir": str(paths.CUSTOM_MODULES_DIR), "active": [], "error": str(exc)}
+            ui_manifests = []
+        bridge = {"domain": "custom", "active": [], "error": "wiring not initialised"}
 
     return {
         "ok": True,
@@ -15878,36 +17359,32 @@ def interface_status():
         "baseline": baseline,
         "custom_modules": custom_modules,
         "ui_manifests": ui_manifests,
+        "bridge": bridge,
     }
 
 
 @app.post("/api/interface/apply")
 def interface_apply():
-    """Reload every update module from disk, then regenerate the docs
-    snapshots (docs/APP_STRUCTURE.md + docs/APP_CODE_SNAPSHOT.md).
+    """Reload both module loaders through the wiring layer, then regenerate
+    the docs snapshots (docs/APP_STRUCTURE.md + docs/APP_CODE_SNAPSHOT.md).
 
-    Also reloads the Phase 1 custom drop-in modules and auto-registers
-    routes for any that are newly discovered (edits to an already-loaded
-    module still need a restart to take effect, since its old route
-    closures stay bound - but a brand NEW module's routes go live here).
+    Custom drop-in modules' routes are auto-registered for any that are newly
+    discovered (edits to an already-loaded module still need a restart to
+    take effect, since its old route closures stay bound - but a brand NEW
+    module's routes go live here), and the dispatcher bridge is re-asserted.
     """
     try:
-        manager = _update_manager()
-        catalog = manager.reload_all()
-        print("[interface] apply: reloaded modules per domain:"
-              + ", ".join(f"{d}={len([n for n in ns])}"
-                          for d, ns in sorted(catalog.items())))
+        wiring = getattr(app.state, "wiring", None)
+        if wiring is not None:
+            wiring.rewire(app)
+        else:
+            wiring = WiringManager()
+            wiring.rewire(app)
+        print(
+            "[interface] apply: reloaded update + custom modules and re-bridged."
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"module reload failed: {exc}")
-
-    try:
-        custom_manager = _custom_manager()
-        custom_manager.discover_all_active_modules()
-        newly_registered = _register_custom_routes(custom_manager)
-        if newly_registered:
-            print("[custom-modules] apply: newly registered -> " + ", ".join(newly_registered))
-    except Exception as exc:
-        print(f"[custom-modules] WARNING: apply failed: {exc}")
 
     docs_script = BASE_DIR / "scripts" / "update_docs.py"
     docs_ok = True
@@ -15919,13 +17396,12 @@ def interface_apply():
     else:
         docs_ok = False
 
+    registry = wiring.registry()
     return {
         "ok": True,
-        "catalog": {
-            d: sorted(names)
-            for d, names in sorted(_update_manager().active_modules_catalog.items())
-        },
-        "custom_modules": _custom_manager().list_modules(),
+        "catalog": registry["catalog"],
+        "custom_modules": registry["custom_modules"]["active"],
+        "bridge": registry["bridge"],
         "docs_regenerated": docs_ok,
     }
 
@@ -23014,4 +24490,4 @@ def search_chat_logs(query: str) -> str:
 
 ```
 
-_79 code file(s)._
+_82 code file(s)._

@@ -3,6 +3,61 @@
 All notable changes to this project. Format based on Keep a Changelog
 (https://keepachangelog.com/), grouped by date.
 
+## 2026-09-15 — Dynamic module UI actions + developer guide
+
+The drop-in custom module system (Phase 1/2/3) grew from a single
+`prompt_input` button into four full UI action types, backed by a new
+copy-paste developer guide. A module's `UI_MANIFEST["buttons"]` can now open a
+schema-driven modal, a multi-step Q&A wizard, or a dropdown of sub-actions, and
+any executor can light a green status-dot when it succeeds.
+
+### Added — UI action types (frontend)
+
+- `dropdown_menu` — `dashboard/js/ui/header-nav.js`: a manifest button with
+  `action: "dropdown_menu"` renders a flyout whose `items[]` are handed to the
+  same click handler (each item can be any of the action types). One delegated
+  `document` listener closes any open menu on an outside click; the status dot
+  attaches to the parent button.
+- `open_modal` — `dashboard/js/app.js` fetches `schema_endpoint` (a JSON schema
+  of `input` / `select` / `checkbox` / `button` components) and builds a modal
+  form; on submit it POSTs the filled values to `schema.target_endpoint`.
+- `qa_survey` — a step-by-step wizard modal that POSTs `{step, answers}` to
+  `qa_endpoint` until the server returns `completed: true` (an optional
+  `record_path` is shown in the modal). Answers are keyed `step_1`, `step_2`, …
+- `status_dot` — any executed action whose response includes
+  `indicate_success: true` gets a green `.status-dot` appended to its trigger
+  button.
+- `dashboard/js/app.js` — new shared `openModal(title, builderFn)` helper
+  (overlay card + close), and the `renderDynamicHeaderButtons` callback now
+  receives `(btnConfig, parentBtn)`. `prompt_input` now POSTs `{"input": ...}`
+  (generically, so any module route can read `payload.get("input")`;
+  `project_name` is still accepted for compatibility).
+- `dashboard/css/styles.css` — SECTION 9: header dropdown, modal overlay/card
+  and `.status-dot` styles (reuses the `--shadow-modal` variable).
+
+### Added — docs
+
+- `docs/CUSTOM_MODULE_DEV_GUIDE.md` — full developer guide: the
+  browser ↔ server ↔ module pipeline, module lifecycle, a minimal working
+  module, all four action types with runnable backend code, dict-vs-pydantic
+  endpoints, the `interface/wiring/` bridge (`execute_action("custom", ...)`),
+  a frontend file map, curl + TestClient testing, troubleshooting and a quick
+  reference. `README.md` and `docs/HOW_TO_USE.md` link to it, and README's
+  custom-modules section now lists the button action types.
+
+### Reference implementations
+
+- `interactive_manager.py` and `project_manager.py` in the Custom Modules Path
+  (`E:\data\moduels` on this machine) demonstrate all four action types end to
+  end, including the Q&A record saver.
+
+### Verified
+
+- `python -m py_compile` clean on `server/server.py`, `server/paths.py`,
+  `about/set_title.py`, `interface/custom_module_manager.py` and
+  `interface/wiring/*.py`; `node --check` clean on `dashboard/js/app.js` and
+  `dashboard/js/ui/header-nav.js`.
+
 ## 2026-09-13 — Phase 1/2/3: drop-in custom modules (Dynamic External Module Loader)
 
 Installed the three-phase "drop a `.py` file in and it just works" extension

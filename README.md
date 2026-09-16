@@ -227,6 +227,8 @@ terminator1/
 ├── docs/
 │   ├── CHANGELOG.md          # Every recent change
 │   ├── HOW_TO_USE.md         # Day-to-day custom modules guide
+│   ├── CUSTOM_MODULE_DEV_GUIDE.md  # Full dev guide: HTML <-> server.py <-> modules,
+│   │                         # all UI action types + wiring bridge (real code)
 │   ├── phase-1-2-3-update/   # Drop-in custom modules install kit (was applied)
 │   ├── APP_STRUCTURE.md      # AUTO-GENERATED folder-tree snapshot
 │   └── APP_CODE_SNAPSHOT.md  # AUTO-GENERATED per-file source snapshot
@@ -466,6 +468,21 @@ A custom module is just a `.py` file declaring a `UI_MANIFEST` and a
   `dashboard/js/ui/header-nav.js`) — no `index.html`, `header-nav.js` or
   `server.py` edits. Clicking prompts for input and POSTs to the module's
   endpoint.
+- **Button actions:** a manifest `buttons[]` entry can declare one of:
+  - `action: "prompt_input"` — legacy: a `window.prompt` whose text is POSTed
+    as `{ "input": ... }` to `api_endpoint`.
+  - `action: "dropdown_menu"` — a flyout button whose `items[]` carry the real
+    actions (any of the below). Selecting an item runs it against the parent
+    button.
+  - `action: "open_modal"` — fetches `schema_endpoint` (a JSON schema of
+    `input` / `select` / `checkbox` / `button` components) and builds a modal
+    form; on submit it POSTs to the schema's `target_endpoint`.
+  - `action: "qa_survey"` — a step-by-step wizard that POSTs
+    `{ step, answers }` to `qa_endpoint` until `completed: true`.
+  - `status_dot` — when any executed action returns `indicate_success: true`,
+    a green `status-dot` appears on the trigger button. See the bundled
+    `interactive_manager` module in your Custom Modules Path for a full
+    reference impl of all four.
 - **Where files live:** blank path = `<dataDir>/custom_modules`; relative
   paths resolve from the project root; absolute paths are used as-is;
   `GENESSIS_CUSTOM_MODULES_PATH` overrides everything. Path changes apply after
@@ -510,16 +527,21 @@ your own risk — it runs arbitrary functions from `interface/updates/`.
 ## Recent changes
 
 See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for the full history. The most
-recent entry covers the **drop-in custom modules** system (Phase 1/2/3): drop a
-`.py` file with a `UI_MANIFEST` + `register_routes(app)` into **Custom Modules
-Path** (default `data/custom_modules/`) and its header button + FastAPI routes
-go live automatically — scaffold one with `python about/set_title.py
-create-module <name>`. Earlier entries cover the cross-platform path system
-(per-OS keys + `GENESSIS_*` overrides), the "Settings saved" response window,
-resilient model selection, and the Modular Interface wiring
-(`/api/interface/*` + the Settings card). Older entries cover the Agent Monitor
-removal, and the recovery of `engine/core/agent.py` + `server/server.py` to
-their working originals.
+recent entry covers the **dynamic module UI actions + developer guide**: a
+manifest button can now be a `dropdown_menu` (flyout), `open_modal`
+(schema-driven form), `qa_survey` (step wizard) or `prompt_input`, any response
+with `indicate_success: true` lights a green status-dot, and the new
+[`docs/CUSTOM_MODULE_DEV_GUIDE.md`](docs/CUSTOM_MODULE_DEV_GUIDE.md) documents
+all of it with copy-paste code. Earlier entries cover the **drop-in custom
+modules** system (Phase 1/2/3): drop a `.py` file with a `UI_MANIFEST` +
+`register_routes(app)` into **Custom Modules Path** (default
+`data/custom_modules/`) and its header button + FastAPI routes go live
+automatically — scaffold one with `python about/set_title.py create-module
+<name>`. Before that: the cross-platform path system (per-OS keys +
+`GENESSIS_*` overrides), the "Settings saved" response window, resilient model
+selection, and the Modular Interface wiring (`/api/interface/*` + the Settings
+card). Older entries cover the Agent Monitor removal, and the recovery of
+`engine/core/agent.py` + `server/server.py` to their working originals.
 
 Recovery artifacts to be aware of:
 
