@@ -14,6 +14,7 @@ Its behavior comes entirely from its AgentProfile and the tools it was given.
 import inspect
 import json
 import re
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Callable, List
 
@@ -81,6 +82,7 @@ class Agent:
         self.tools = {f.__name__: f for f in tools}
         self.messages: List[dict] = []
         self.session = session or FileSession()
+        self.tool_events: List[dict] = []  # structured tool-execution log for this turn
 
     def _extract_text_tool_calls(self, content: str) -> List[dict]:
         """Find tool calls that a model wrote as plain-text JSON instead of using
@@ -333,15 +335,36 @@ class Agent:
         """Run one tool that the LLM asked for, using the name and args it chose."""
         name = tool_call.get("function", {}).get("name")
         args = self._normalize_args(name, tool_call.get("function", {}).get("arguments", {}))
+        timestamp = datetime.now().strftime("%H:%M:%S")
         if name in self.tools:
             try:
                 result = str(self.tools[name](**args))
                 print(f"[Agent.act] Executed {name} -> {result[:100]}...")
+                self.tool_events.append({
+                    "time": timestamp,
+                    "tool": name,
+                    "args": args,
+                    "result_preview": result[:200],
+                    "status": "success",
+                })
                 return result
             except Exception as e:
                 print(f"[Agent.act] Error executing {name}: {e}")
+                self.tool_events.append({
+                    "time": timestamp,
+                    "tool": name,
+                    "args": args,
+                    "error": str(e),
+                    "status": "error",
+                })
                 return f"Error executing tool: {e}"
         print(f"[Agent.act] Missing tool requested: {name}")
+        self.tool_events.append({
+            "time": timestamp,
+            "tool": name,
+            "args": args,
+            "status": "missing",
+        })
         return f"Error: {name} missing"
 
     def observe(self, name: str, result: str) -> None:

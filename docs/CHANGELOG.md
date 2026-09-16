@@ -3,6 +3,122 @@
 All notable changes to this project. Format based on Keep a Changelog
 (https://keepachangelog.com/), grouped by date.
 
+## 2026-09-15 — Chat console output (tool logs + captured startup logs)
+
+The tool calls an agent makes during a chat now surface in a console drawer
+inside the floating chat window's MAIN BODY container (never as chat bubbles),
+along with a filtered capture of the server's boot/dev output. A "Pop out"
+button opens the same log stream in a standalone full-page viewer.
+
+### Added — backend
+
+- `server/console_log.py` — a small ring-buffer capture (500 lines) that tees
+  `sys.stdout`/`sys.stderr` and installs a root-logger handler at import time.
+  The uvicorn access/startup lines and every module `print()` (e.g. `[llm]`,
+  `[paths]`, `[interface]`, `[wiring]`, `[custom-modules]`, `[Agent.act]`,
+  `[SERVER]`) are therefore captured and served.
+- `server/server.py` — new `GET /api/logs/console?limit=` endpoint returning
+  `{logs, captured}`; `POST /api/chat` now also returns `tool_events`
+  (the structured tool-execution log for that request).
+- `engine/core/agent.py` — `Agent.tool_events` collects one entry per
+  `act()` call while preserving the existing return contract and prints:
+  `{time, tool, args, result_preview, status:"success"}`,
+  `{time, tool, args, error, status:"error"}` and
+  `{time, tool, args, status:"missing"}`.
+
+### Added — frontend
+
+- `dashboard/js/classes/chat-window.js` — lazy console drawer
+  (`_ensureConsole`) docked below the message feed with collapse, Clear and
+  Pop out controls; public `appendConsoleBlock` / `clearConsole` /
+  `openConsolePage` methods, plus a `sendText(text)` method that pushes
+  pre-written text through the normal send pipeline.
+- Console toolbar now adds `Send to agent` (posts the console text as a user
+  message via `sendConsoleToAgent`) and `Ask in input` (loads the console
+  text into the composer so you can append your own query via
+  `loadConsoleIntoInput`). `Pop out` opens `/static/logs.html` in its own
+  independent fixed-size window (`console_logs`) instead of a new tab.
+- Console drawer is now **resizable**: a `.cw-console-grip` strip sits on the
+  drawer's top edge - drag it up to grow the console over the message feed
+  (clamped 140px-85%, pointer-capture driven, `.cw-resizing` cursor).
+- The drawer lists the active agents as **clickable chips**
+  (`.cw-console-agent-chip`) in a `.cw-console-agents` strip below the
+  header; the current chat agent is highlighted (`.cw-active`) and clicking a
+  chip switches the chat to that agent (wired through
+  `setConsoleAgents` / `setActiveConsoleAgent` / `onConsoleAgent`). The
+  collapsed header shows a `· N agents` badge. The drawer is created on load
+  (collapsed) and still auto-expands when the first logs arrive.
+- The flyout widget is wider by default (`--cw-widget-width` = 920px instead
+  of 380px in flyout mode), so the console reads comfortably; the small-screen
+  full-screen fallback is unchanged.
+- Console size presets now default taller: `Large` is 75% of the window body
+  (was 60%) and `Compact` 60% (was 45%), so a full batch of log lines fits in
+  `.cw-console-body` without scrolling; the un-configured CSS fallback matches
+  at 75%. The drag grip still lets you pull it up to ~97%.
+- The pop-out viewer (`/static/logs.html`) now uses larger text: it sets
+  `--cw-console-font-size` pre-paint from the saved Appearance console-size
+  preset (14px large / 12.5px compact) and its fallback is 14px instead of
+  12px, so logs opened in the pop-out window read as big as in the drawer.
+- Console log text no longer looks washed out on the dark background: the
+  `.cw-console-body` color is brightened from `#b6c2cf` to `#e6edf3` (~14:1
+  contrast), the CONSOLE OUTPUT toggle label, agent chips, and the whole
+  pop-out page (`logs.html` body + `.logs-page-body`) were brightened to the
+  same readable greys. The console log text itself is now `#ffffff`.
+- Fixed the chat composer input showing BLACK text on the dark background
+  (form controls don't inherit `color`, so `.cw-input` fell back to the
+  browser default): `.cw-input` now sets `color` + `caret-color` to
+  `var(--color-text)` and `.cw-input::placeholder` to `var(--color-text-soft)`,
+  so typed text stays readable in both themes.
+- The chat window header now has a **Fill the window** button (between the
+  side-panel/Observe buttons and Minimize). It expands the chat to cover the
+  whole browser viewport (`.cw-fullscreen`, inset 0 / 100vw / 100vh, no
+  border-radius, above the regular z-index) and back. Works in both flyout
+  and panel modes; Esc restores; header-drag, edge-resize and
+  keep-in-viewport are all disabled while maximized; Minimize and Close
+  restore first, and a fresh open always starts non-fullscreen.
+- `dashboard/js/ui/appearance.js` — the Appearance config (the existing base
+  font-size "size" feature) gains a 2-option **Console size** level (`compact`
+  45%/12.5px, `large` 60%/14px, default `large`), persisted via
+  `appearance.consoleSize` and applied to `--cw-console-height` /
+  `--cw-console-font-size` - so the drawer (and matched logs page) resize per
+  system without editing CSS.
+- `dashboard/js/classes/terminal-window-out.js` — decoupled log
+  formatting/filtering: `pushToolLogs(chat, toolEvents)`,
+  `pushStartupLogs(chat, logs)` and the shared `filterConsoleLines()`.
+- `dashboard/js/api/api.js` — `sendChat` returns `tool_events`; new
+  `getConsoleLogs(limit)`.
+- `dashboard/js/app.js` — boots by pushing captured startup logs into the
+  chat window's console drawer (fail-soft), and pushes tool logs after every
+  send.
+- `dashboard/logs.html` + `dashboard/js/logs-page.js` — standalone pop-out
+  terminal viewer: polls `/api/logs/console` every 2s, pause / clear / copy,
+  and applies the same `filterConsoleLines()` so the drawer and the page
+  agree on what counts as noise.
+- `dashboard/css/styles.css` — console drawer styles in SECTION 8 and a new
+  SECTION 10 for the standalone console page (both keep an always-dark
+  terminal look in light and dark themes).
+
+### Behavior notes
+
+- The drawer stays collapsed until content arrives, so ordinary chats are
+  visually unchanged; the "Clear" button clears the drawer, "Pop out" opens
+  `/static/logs.html`. The widget drain toggle resets each session.
+- Terminal ANSI color codes from uvicorn's colored log lines are stripped at
+  capture time (`server/console_log.py`) and again defensively in
+  `filterConsoleLines()`, so the drawer and logs page always render plain
+  text (and `INFO:`/access lines still qualify as filterable noise even when
+  a server captured them with escape prefixes).
+
+### Verified
+
+- `python -m py_compile` clean on `engine/core/agent.py`, `server/server.py`,
+  `server/console_log.py`; `node --check` clean on `dashboard/js/app.js`,
+  `dashboard/js/api/api.js`, `dashboard/js/classes/chat-window.js`,
+  `dashboard/js/classes/terminal-window-out.js`, `dashboard/js/logs-page.js`.
+- TestClient smoke test: `GET /api/logs/console` returns the captured boot
+  lines, and an Agent with fake tools records success / error / missing
+  `tool_events`.
+
 ## 2026-09-15 — Dynamic module UI actions + developer guide
 
 The drop-in custom module system (Phase 1/2/3) grew from a single

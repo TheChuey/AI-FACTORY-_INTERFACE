@@ -23,6 +23,7 @@ import { applyAppearance } from "./ui/appearance.js";
 import { renderHeaderNav, renderDynamicHeaderButtons } from "./ui/header-nav.js";
 import { ChatSession } from "./classes/ChatSession.js";
 import { ChatFactory } from "./classes/chat-window.js";
+import { pushToolLogs, pushStartupLogs } from "./classes/terminal-window-out.js";
 import { renderMarkdown } from "./ui/markdown.js";
 import { renderInterfaceIndicator } from "./ui/interface-indicator.js";
 import * as api from "./api/api.js";
@@ -272,6 +273,19 @@ async function boot() {
     if (agents.length > 0) {
         buildWidget();
     }
+
+    // 4. Console drawer: surface the captured boot metadata ([llm], [paths],
+    //    [interface], [wiring], [custom-modules]) filter-logged to the chat
+    //    window's main body. Fail-soft - an older server without the endpoint
+    //    simply leaves the drawer absent until real tool logs arrive.
+    if (widget) {
+        try {
+            const consoleLog = await api.getConsoleLogs();
+            pushStartupLogs(widget, consoleLog.logs);
+        } catch (_) {
+            /* no /api/logs/console -> nothing extra to show */
+        }
+    }
 }
 
 /** Update the header H1 + tagline (fall back to the current text when a
@@ -295,14 +309,27 @@ function buildWidget() {
     const defaultAgent = agents[0];
     const config = buildAgentConfig(defaultAgent);
     config.layout.flyout = true;
+    // Wider flyout so the console drawer reads comfortably (was 780).
+    config.layout.width = 920;
 
     widget = ChatFactory.create(config);
 
     // Feed the switcher with all selectable agents.
     widget.setAgents(agents);
 
+    // Console drawer: list the discovered agents as clickable chips. Clicking
+    // one switches the chat to that agent (kept in sync by switchToAgent).
+    widget.setConsoleAgents(agents, activeAgentId);
+    widget.onConsoleAgent((agentId) => {
+        const agent = agents.find((a) => String(a.id) === String(agentId));
+        if (agent) {
+            switchToAgent(agent, false);
+        }
+    });
+
     // Present the default agent (fresh session, no auto-hi on startup).
     selectSession(defaultAgent, false);
+    widget.setActiveConsoleAgent(defaultAgent.id);
 
     // Route sends to the active session.
     widget.onSend((text) => {
@@ -356,6 +383,7 @@ function switchToAgent(agent, autoHi = true) {
         return;
     }
     widget.setActiveAgent(agent.id);
+    widget.setActiveConsoleAgent(agent.id);
     selectSession(agent, autoHi);
 }
 
@@ -471,6 +499,9 @@ async function handleSend(session, chat, text) {
             newChat: !session.sessionId,
             rag: Boolean(panelValues.ragCommit),
         });
+
+        // Console drawer: tool-execution logs from this request (no bubbles).
+        pushToolLogs(chat, result.tool_events);
 
         session.addAssistantMessage(result.reply);
         chat.addAssistantMessage(result.reply, session.agentName);

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Console Logs</title>
+
+    <!-- Apply the stored theme (dark/light) before first paint so dark-mode
+         users never see a light flash (same snippet as index.html). -->
+    <script>
+        (function () {
+            var s = "system";
+            try { s = localStorage.getItem("appearance-theme") || "system"; } catch (e) {}
+            var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+            document.documentElement.dataset.theme =
+                s === "dark" || s === "light" ? s : (dark ? "dark" : "light");
+
+            // Match the console font-size preset chosen in the dashboard's
+            // Appearance settings (compact 12.5px / large 14px).
+            try {
+                var a = JSON.parse(localStorage.getItem("appearance") || "{}");
+                var size = a && a.consoleSize === "compact" ? "12.5px" : "14px";
+                document.documentElement.style.setProperty("--cw-console-font-size", size);
+            } catch (e) {}
+        })();
+    </script>
+
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+
+<body class="logs-page">
+
+    <header class="logs-page-header">
+        <div class="logs-page-title">
+            <a href="/static/index.html" class="logs-page-back">&#8592; Dashboard</a>
+            <h1>Console Logs</h1>
+        </div>
+        <div class="logs-page-actions">
+            <span id="logs-status" class="logs-page-status">connecting&#8230;</span>
+            <button id="logs-pause" class="cw-console-btn" type="button">Pause</button>
+            <button id="logs-clear" class="cw-console-btn" type="button">Clear</button>
+            <button id="logs-copy" class="cw-console-btn" type="button">Copy</button>
+        </div>
+    </header>
+
+    <main class="logs-page-main">
+        <pre id="logs-body" class="logs-page-body" aria-live="polite"></pre>
+    </main>
+
+    <script type="module" src="/static/js/logs-page.js"></script>
+
+</body>
+
+</html>

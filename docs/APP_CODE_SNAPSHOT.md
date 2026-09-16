@@ -1,6 +1,6 @@
 # Terminator1 — App Code Snapshot
 
-_Auto-generated on 2026-09-15T19:57:46 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-15T22:47:40 by `scripts/update_docs.py`._
 
 
 ## README.md
@@ -6882,6 +6882,188 @@ code {
     background: var(--cw-chat-bg);
 }
 
+/* ---------- console drawer (chat window MAIN BODY, not bubbles) ----------
+   Created lazily by chat-window.js (_ensureConsole), sits directly under
+   the message feed. Deliberately an always-dark terminal look in BOTH
+   themes so log output is readable the same way a dev console is. */
+
+.cw-console {
+    display: flex;
+    flex: 0 1 var(--cw-console-height, 75%);
+    flex-direction: column;
+    min-height: 140px;
+    border-top: 1px solid var(--cw-border);
+    background: #0d1117;
+}
+
+.cw-console.cw-collapsed {
+    flex: 0 0 auto;
+    min-height: 0;
+}
+
+.cw-console.cw-collapsed .cw-console-body {
+    display: none;
+}
+
+.cw-console.cw-collapsed .cw-console-grip {
+    display: none;
+}
+
+.cw-console.cw-collapsed .cw-console-agents {
+    display: none;
+}
+
+/* Draggable top edge - move it up to grow the console over the message feed. */
+.cw-console-grip {
+    flex: 0 0 auto;
+    height: 7px;
+    margin: 0;
+    cursor: ns-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    touch-action: none;
+}
+
+.cw-console-grip:hover,
+.cw-console.cw-resizing .cw-console-grip {
+    background: rgba(76, 154, 255, 0.35);
+}
+
+body.cw-resizing {
+    cursor: ns-resize !important;
+    user-select: none !important;
+}
+
+/* Active-agent count shown in the collapsed header. */
+.cw-console-badge {
+    color: #58a6ff;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+/* Clickable agent chips - switch the chat's active agent. */
+.cw-console-agents {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #21262d;
+    background: #0d1117;
+}
+
+.cw-console-agent-chip {
+    padding: 2px 10px;
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.4;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.cw-console-agent-chip:hover {
+    color: #e6edf3;
+    border-color: #58a6ff;
+}
+
+.cw-console-agent-chip.cw-active {
+    color: #040d04;
+    background: #56d364;
+    border-color: #2ea043;
+    font-weight: 600;
+}
+
+.cw-console-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 10px;
+    background: #161b22;
+    border-bottom: 1px solid var(--cw-border);
+}
+
+.cw-console-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+    background: none;
+    border: none;
+    color: #c9d1d9;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.cw-console-toggle .cw-console-title {
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+.cw-console-toggle svg {
+    transition: transform 0.15s ease;
+}
+
+.cw-console.cw-collapsed .cw-console-toggle svg {
+    transform: rotate(-90deg);
+}
+
+.cw-console-toggle:hover {
+    color: #e6edf3;
+}
+
+.cw-console-actions {
+    display: inline-flex;
+    gap: 6px;
+}
+
+.cw-console-btn {
+    padding: 2px 8px;
+    background: transparent;
+    color: #9fadbd;
+    border: 1px solid var(--cw-border);
+    border-radius: 5px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.cw-console-btn:hover {
+    color: #e6edf3;
+    border-color: var(--cw-accent);
+}
+
+.cw-console-btn.cw-console-send {
+    color: #7ee787;
+    border-color: #2ea043;
+}
+
+.cw-console-btn.cw-console-send:hover {
+    color: #aff5b4;
+    border-color: #3fb950;
+}
+
+.cw-console-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 8px 10px;
+    overflow: auto;
+    font-family: "Cascadia Code", "Consolas", "Menlo", monospace;
+    font-size: var(--cw-console-font-size, 13px);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #ffffff;
+    background: #0d1117;
+}
+
 /* ---------- bubbles ---------- */
 
 .cw-bubble {
@@ -7272,11 +7454,18 @@ code {
     border: 1px solid var(--cw-border-strong);
     border-radius: var(--radius-small);
     background: var(--color-input-bg);
+    color: var(--color-text);
+    caret-color: var(--color-text);
     resize: none;
     overflow-y: auto;
     outline: none;
     font: inherit;
     line-height: 1.5;
+}
+
+.cw-input::placeholder {
+    color: var(--color-text-soft);
+    opacity: 1;
 }
 
 .cw-input:focus {
@@ -7338,7 +7527,7 @@ code {
     z-index: var(--cw-z-index);
     display: flex;
     flex-direction: column;
-    width: 380px;
+    width: var(--cw-widget-width, 380px);
     height: 560px;
     max-width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
@@ -7471,6 +7660,34 @@ code {
 .chat-window.cw-minimized .cw-window-body,
 .chat-window.cw-minimized .cw-composer {
     display: none;
+}
+
+/* ---------- fullscreen (chat fills the whole browser window) ----------
+   "Fill the window" button in the header. !important beats both the base
+   geometry and the small-screen media-query full-screen state below. */
+
+.chat-window.cw-fullscreen {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    border-radius: 0 !important;
+    z-index: calc(var(--cw-z-index) + 1);
+}
+
+.chat-window.cw-fullscreen .cw-resize {
+    display: none;
+}
+
+.chat-window.cw-fullscreen .cw-window-header {
+    cursor: default;
 }
 
 /* ---------- small screens ---------- */
@@ -7647,6 +7864,92 @@ code {
     border-color: var(--color-accent);
     background: var(--color-accent-soft);
     color: var(--color-accent-strong);
+}
+
+/* ==========================================
+   ===  SECTION 10: STANDALONE CONSOLE PAGE (logs.html)
+   ========================================== */
+/* Full-page viewer for the captured server console, opened in its own tab
+   via the chat drawer's "Pop out" button (see wordy-console CTA below).
+   Reuses the .cw-console-btn chip style from SECTION 8. */
+
+body.logs-page {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    overflow: hidden;
+    background: #0d1117;
+    color: #ffffff;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+}
+
+.logs-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    flex: 0 0 auto;
+}
+
+.logs-page-title {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.logs-page-title h1 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #e6edf3;
+}
+
+.logs-page-back {
+    text-decoration: none;
+    color: #9fadbd;
+    font-size: 12px;
+}
+
+.logs-page-back:hover {
+    color: #4c9aff;
+}
+
+.logs-page-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.logs-page-status {
+    font-size: 12px;
+}
+
+.logs-page-status.ok { color: #3fb950; }
+.logs-page-status.warn { color: #d29922; }
+.logs-page-status.error { color: #f85149; }
+
+.logs-page-main {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.logs-page-body {
+    margin: 0;
+    height: 100%;
+    padding: 12px 16px;
+    overflow: auto;
+    font-family: "Cascadia Code", "Consolas", "Menlo", monospace;
+    font-size: var(--cw-console-font-size, 14px);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #ffffff;
+    background: #0d1117;
 }
 
 ```
@@ -7885,7 +8188,13 @@ export async function sendChat({ message, agentId = "", model = "", history = []
             rag,
         }),
     });
-    return { reply: data.reply, session_id: data.session_id, title: data.title, events: data.events || [] };
+    return { reply: data.reply, session_id: data.session_id, title: data.title, events: data.events || [], tool_events: data.tool_events || [] };
+}
+
+/** Tail of the captured server console (boot prints + uvicorn output). */
+export async function getConsoleLogs(limit = 300) {
+    const data = await request(`/api/logs/console?limit=${limit}`);
+    return { logs: data.logs || [], captured: Boolean(data.captured) };
 }
 
 /** Header rows for every saved chat + the active one, newest first. */
@@ -8017,6 +8326,7 @@ import { applyAppearance } from "./ui/appearance.js";
 import { renderHeaderNav, renderDynamicHeaderButtons } from "./ui/header-nav.js";
 import { ChatSession } from "./classes/ChatSession.js";
 import { ChatFactory } from "./classes/chat-window.js";
+import { pushToolLogs, pushStartupLogs } from "./classes/terminal-window-out.js";
 import { renderMarkdown } from "./ui/markdown.js";
 import { renderInterfaceIndicator } from "./ui/interface-indicator.js";
 import * as api from "./api/api.js";
@@ -8266,6 +8576,19 @@ async function boot() {
     if (agents.length > 0) {
         buildWidget();
     }
+
+    // 4. Console drawer: surface the captured boot metadata ([llm], [paths],
+    //    [interface], [wiring], [custom-modules]) filter-logged to the chat
+    //    window's main body. Fail-soft - an older server without the endpoint
+    //    simply leaves the drawer absent until real tool logs arrive.
+    if (widget) {
+        try {
+            const consoleLog = await api.getConsoleLogs();
+            pushStartupLogs(widget, consoleLog.logs);
+        } catch (_) {
+            /* no /api/logs/console -> nothing extra to show */
+        }
+    }
 }
 
 /** Update the header H1 + tagline (fall back to the current text when a
@@ -8289,14 +8612,27 @@ function buildWidget() {
     const defaultAgent = agents[0];
     const config = buildAgentConfig(defaultAgent);
     config.layout.flyout = true;
+    // Wider flyout so the console drawer reads comfortably (was 780).
+    config.layout.width = 920;
 
     widget = ChatFactory.create(config);
 
     // Feed the switcher with all selectable agents.
     widget.setAgents(agents);
 
+    // Console drawer: list the discovered agents as clickable chips. Clicking
+    // one switches the chat to that agent (kept in sync by switchToAgent).
+    widget.setConsoleAgents(agents, activeAgentId);
+    widget.onConsoleAgent((agentId) => {
+        const agent = agents.find((a) => String(a.id) === String(agentId));
+        if (agent) {
+            switchToAgent(agent, false);
+        }
+    });
+
     // Present the default agent (fresh session, no auto-hi on startup).
     selectSession(defaultAgent, false);
+    widget.setActiveConsoleAgent(defaultAgent.id);
 
     // Route sends to the active session.
     widget.onSend((text) => {
@@ -8350,6 +8686,7 @@ function switchToAgent(agent, autoHi = true) {
         return;
     }
     widget.setActiveAgent(agent.id);
+    widget.setActiveConsoleAgent(agent.id);
     selectSession(agent, autoHi);
 }
 
@@ -8465,6 +8802,9 @@ async function handleSend(session, chat, text) {
             newChat: !session.sessionId,
             rag: Boolean(panelValues.ragCommit),
         });
+
+        // Console drawer: tool-execution logs from this request (no bubbles).
+        pushToolLogs(chat, result.tool_events);
 
         session.addAssistantMessage(result.reply);
         chat.addAssistantMessage(result.reply, session.agentName);
@@ -8876,6 +9216,8 @@ const ICON_PATHS = {
     chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
     monitor: '<rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>',
     message: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>',
+    fullscreen: '<polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line>',
+    restore: '<polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line>',
 };
 
 function createIcon(name, size = 14) {
@@ -9214,6 +9556,11 @@ class ChatWindow {
         this.actionHandlers = {};
         this.sendHandler = null;
         this.toggleHandler = null;
+
+        // Console drawer: agent chips (active-agent list) + click handler.
+        this._consoleAgents = [];
+        this._consoleAgentActiveId = null;
+        this._consoleAgentHandler = null;
         this.renderMarkdown =
             typeof config.renderMarkdown === "function"
                 ? config.renderMarkdown
@@ -9230,12 +9577,15 @@ class ChatWindow {
         this._saveStatus = null;
         this._panelBtn = null;
         this._minBtn = null;
+        this._maxBtn = null;
         this._agentSelect = null;
         this._headerToggle = null;
         this._widgetLauncher = null;
         this._typingEl = null;
         this._welcomeEl = null;
         this._sizeBeforeMinimize = null;
+        this.isMaximized = false;
+        this._sizeBeforeMaximize = null;
 
         this._build();
     }
@@ -9248,6 +9598,7 @@ class ChatWindow {
                 ? "chat-window cw-widget cw-collapsed"
                 : "chat-window cw-hidden",
         });
+        root.style.setProperty("--cw-widget-width", `${this.layout.width}px`);
         if (!this._flyout) {
             root.style.width = `${this.layout.width}px`;
             root.style.height = `${this.layout.height}px`;
@@ -9342,6 +9693,15 @@ class ChatWindow {
             });
             actions.appendChild(observeBtn);
         }
+
+        this._maxBtn = createElement("button", {
+            className: "cw-icon-btn",
+            title: "Fill the window",
+            ariaLabel: "Fill the window",
+        });
+        this._maxBtn.type = "button";
+        this._maxBtn.appendChild(createIcon("fullscreen"));
+        actions.appendChild(this._maxBtn);
 
         this._minBtn = createElement("button", {
             className: "cw-icon-btn",
@@ -9529,6 +9889,14 @@ class ChatWindow {
     close() {
         this.isOpen = false;
         this.isMinimized = false;
+        if (this.isMaximized) {
+            this.isMaximized = false;
+            this._sizeBeforeMaximize = null;
+            if (this.element) {
+                this.element.classList.remove("cw-fullscreen");
+            }
+            this._syncMaxBtn();
+        }
 
         if (this._flyout) {
             // Collapse back to the persistent corner button.
@@ -9554,6 +9922,12 @@ class ChatWindow {
 
     /** Minimize to a header bar, or restore the previous size. */
     minimize() {
+        if (this.isMaximized) {
+            // Fullscreen has no smaller state to go to - restore first.
+            this.toggleFullscreen(false);
+            return;
+        }
+
         // In flyout mode "minimize" collapses the widget back to the button.
         if (this._flyout) {
             if (this.isMinimized) {
@@ -9602,6 +9976,60 @@ class ChatWindow {
                 this._minBtn.title = "Restore";
             }
         }
+    }
+
+    /** Expand the chat window to fill the whole browser viewport. */
+    toggleFullscreen(force) {
+        if (this.element && typeof force === "boolean" && this.isMaximized === force) {
+            return;
+        }
+        this.isMaximized = !this.isMaximized;
+
+        if (this.isMaximized) {
+            const rect = this.element.getBoundingClientRect();
+            this._sizeBeforeMaximize = {
+                width: rect.width,
+                height: rect.height,
+                left: rect.left,
+                top: rect.top,
+            };
+            this.element.classList.add("cw-fullscreen");
+        } else {
+            this.element.classList.remove("cw-fullscreen");
+            if (this._sizeBeforeMaximize && !this._flyout) {
+                const s = this._sizeBeforeMaximize;
+                this.element.style.width = `${s.width}px`;
+                this.element.style.height = `${s.height}px`;
+                this.element.style.left = `${s.left}px`;
+                this.element.style.top = `${s.top}px`;
+            } else {
+                // Flyout: the normal geometry is CSS-driven (bottom-right);
+                // clear any inline leftovers so the widget returns home.
+                this.element.style.width = "";
+                this.element.style.height = "";
+                this.element.style.left = "";
+                this.element.style.top = "";
+            }
+            this._sizeBeforeMaximize = null;
+        }
+        this._syncMaxBtn();
+        if (this.isMaximized && this._input) {
+            this._input.focus();
+        }
+    }
+
+    setFullscreen(enabled) {
+        this.toggleFullscreen(enabled);
+    }
+
+    _syncMaxBtn() {
+        if (!this._maxBtn) {
+            return;
+        }
+        const maximized = this.isMaximized;
+        this._maxBtn.title = maximized ? "Restore window" : "Fill the window";
+        this._maxBtn.setAttribute("aria-label", maximized ? "Restore window" : "Fill the window");
+        this._maxBtn.replaceChildren(createIcon(maximized ? "restore" : "fullscreen"));
     }
 
     /** Show/hide the right panel (chat area fills the freed space). */
@@ -9662,6 +10090,223 @@ class ChatWindow {
             this._messageBody.replaceChildren();
         }
         this._renderWelcome();
+    }
+
+    /* ---------- console output (tool logs + startup logs, no bubbles) ---------- */
+
+    /** Lazy-create a console drawer inside the chat area (the main body
+     * container). It only appears once there is something to show, so
+     * ordinary conversations are never affected. */
+    _ensureConsole() {
+        if (this._console) {
+            return this._console;
+        }
+        const el = createElement("div", { className: "cw-console cw-collapsed" });
+
+        const grip = createElement("div", { className: "cw-console-grip", title: "Drag to resize the console" });
+        el.appendChild(grip);
+
+        const head = createElement("div", { className: "cw-console-head" });
+        const toggle = createElement("button", { className: "cw-console-toggle", type: "button" });
+        toggle.title = "Collapse / expand console output";
+        toggle.appendChild(createElement("span", { className: "cw-console-title", text: "Console output" }));
+        this._consoleAgentsBadge = createElement("span", { className: "cw-console-badge" });
+        toggle.appendChild(this._consoleAgentsBadge);
+        toggle.appendChild(createIcon("chevronDown", 13));
+        toggle.addEventListener("click", () => el.classList.toggle("cw-collapsed"));
+        head.appendChild(toggle);
+
+        const actions = createElement("div", { className: "cw-console-actions" });
+        actions.appendChild(createButton("Send to agent", () => this.sendConsoleToAgent(), "cw-console-btn cw-console-send"));
+        actions.appendChild(createButton("Ask in input", () => this.loadConsoleIntoInput(), "cw-console-btn"));
+        actions.appendChild(createButton("Clear", () => this.clearConsole(), "cw-console-btn"));
+        actions.appendChild(createButton("Pop out", () => this.openConsolePage(), "cw-console-btn"));
+        head.appendChild(actions);
+
+        this._consoleAgentsEl = createElement("div", { className: "cw-console-agents" });
+
+        const bodyEl = createElement("pre", { className: "cw-console-body" });
+        el.appendChild(head);
+        el.appendChild(this._consoleAgentsEl);
+        el.appendChild(bodyEl);
+
+        this._console = el;
+        this._consoleBody = bodyEl;
+        this._consoleGrip = grip;
+        this._initConsoleResize(el, grip);
+        this._renderConsoleAgents();
+        if (this._messageBody && this._messageBody.parentNode) {
+            this._messageBody.parentNode.insertBefore(el, this._messageBody.nextSibling);
+        }
+        return el;
+    }
+
+    /** Render the discovered agents as clickable chips + the count badge. */
+    _renderConsoleAgents() {
+        if (!this._console || !this._consoleAgentsEl) {
+            return;
+        }
+        this._consoleAgentsEl.replaceChildren();
+        this._consoleAgents.forEach((agent) => {
+            const chip = createElement("button", {
+                className: "cw-console-agent-chip",
+                title: `Chat with ${agent.name || agent.id}`,
+                text: (agent.name || agent.id || "?") + (agent.mode ? ` \u00b7 ${agent.mode}` : ""),
+            });
+            chip.type = "button";
+            const isActive = String(agent.id) === String(this._consoleAgentActiveId);
+            if (isActive) {
+                chip.classList.add("cw-active");
+            }
+            chip.addEventListener("click", () => {
+                if (this._consoleAgentActiveId !== agent.id) {
+                    this._consoleAgentActiveId = agent.id;
+                    this._renderConsoleAgents();
+                }
+                if (typeof this._consoleAgentHandler === "function") {
+                    this._consoleAgentHandler(agent.id);
+                }
+            });
+            this._consoleAgentsEl.appendChild(chip);
+        });
+
+        const count = this._consoleAgents.length;
+        this._consoleAgentsBadge.textContent = count > 0 ? `\u00b7 ${count} agents` : "";
+    }
+
+    /** List the active agents + which one the chat is currently talking to. */
+    setConsoleAgents(agents, activeId = null) {
+        this._consoleAgents = Array.isArray(agents) ? agents : [];
+        this._consoleAgentActiveId = activeId;
+        this._ensureConsole();
+        this._renderConsoleAgents();
+    }
+
+    /** Highlight which agent chip is the one being chatted with. */
+    setActiveConsoleAgent(agentId) {
+        this._consoleAgentActiveId = agentId;
+        if (this._console) {
+            this._renderConsoleAgents();
+        }
+    }
+
+    /** Register the handler fired when an agent chip is clicked. */
+    onConsoleAgent(callback) {
+        this._consoleAgentHandler = typeof callback === "function" ? callback : null;
+    }
+
+    /** Drag the grip to grow/shrink the console (overrides the preset var). */
+    _initConsoleResize(consoleEl, grip) {
+        let dragging = null;
+
+        const onMove = (event) => {
+            if (!dragging) {
+                return;
+            }
+            const delta = dragging.startY - event.clientY; // moving up grows it
+            const next = Math.min(
+                Math.max(dragging.startHeight + delta, 140),
+                Math.round(dragging.maxHeight * 0.97)
+            );
+            consoleEl.style.flexBasis = next + "px";
+            if (this._consoleBody) {
+                this._consoleBody.scrollTop = this._consoleBody.scrollHeight;
+            }
+        };
+
+        const onUp = () => {
+            if (!dragging) {
+                return;
+            }
+            dragging = null;
+            grip.releasePointerCapture && grip.releasePointerCapture(event?.pointerId);
+            document.body.classList.remove("cw-resizing");
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+        };
+
+        grip.addEventListener("pointerdown", (event) => {
+            if (!this._console) {
+                return;
+            }
+            event.preventDefault();
+            const bodyHeight = this._console.parentNode
+                ? this._console.parentNode.clientHeight
+                : document.documentElement.clientHeight;
+            dragging = {
+                startY: event.clientY,
+                startHeight: this._console.offsetHeight,
+                maxHeight: Math.max(bodyHeight, 140),
+            };
+            if (grip.setPointerCapture) {
+                grip.setPointerCapture(event.pointerId);
+            }
+            document.body.classList.add("cw-resizing");
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
+        });
+    }
+
+    /** Append a text block to the console drawer and reveal it. */
+    appendConsoleBlock(text) {
+        this._ensureConsole();
+        const content = String(text ?? "").trim();
+        if (!content) {
+            return;
+        }
+        const pre = this._consoleBody;
+        if (pre.textContent) {
+            pre.appendChild(document.createTextNode("\n\n"));
+        }
+        pre.appendChild(document.createTextNode(content));
+        pre.scrollTop = pre.scrollHeight;
+        this._console.classList.remove("cw-collapsed");
+    }
+
+    /** Empty the console drawer (keeps it visible). */
+    clearConsole() {
+        if (this._consoleBody) {
+            this._consoleBody.textContent = "";
+        }
+    }
+
+    /** The current console text (clean of ANSI codes), trimmed. */
+    getConsoleText() {
+        return this._consoleBody ? this._consoleBody.textContent : "";
+    }
+
+    /** Post the console output to the current agent as a user message. */
+    sendConsoleToAgent() {
+        const text = this.getConsoleText().trim();
+        if (!text) {
+            this.addSystemMessage("Console output is empty - nothing to send.");
+            return;
+        }
+        this.sendText(text);
+    }
+
+    /** Load the console output into the composer so the user can append their
+     * own question and send it manually. */
+    loadConsoleIntoInput() {
+        const text = this.getConsoleText().trim();
+        if (!text) {
+            this.addSystemMessage("Console output is empty - nothing to load.");
+            return;
+        }
+        this.setInputValue(text);
+        if (this._input) {
+            this._input.focus();
+        }
+    }
+
+    /** Open the standalone full-page log viewer in its own independent window
+     * (specific dimensions; a stable target name reuses the same window). */
+    openConsolePage() {
+        window.open(
+            "/static/logs.html",
+            "console_logs",
+            "width=1000,height=700,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes"
+        );
     }
 
     /** Enable/disable the composer and show/hide the typing indicator. */
@@ -9842,12 +10487,37 @@ class ChatWindow {
         }
     }
 
+    /** Push pre-written text through the normal send pipeline: shown as a user
+     * bubble, then handed to the registered sendHandler (e.g. the console's
+     * "send output to agent" flow). */
+    sendText(text) {
+        const value = String(text ?? "").trim();
+        if (!value || this.isWaiting) {
+            return;
+        }
+        this.addUserMessage(value);
+        if (typeof this.sendHandler === "function") {
+            this.sendHandler(value, this);
+        } else {
+            this.addSystemMessage("No send handler is registered for this chat window.");
+        }
+    }
+
     /* ---------- internal wiring ---------- */
 
     _bindWindow() {
         window.addEventListener("resize", () => {
-            if (this.isOpen) {
+            if (this.isOpen && !this.isMaximized) {
                 this._keepInViewport();
+            }
+        });
+
+        if (this._maxBtn) {
+            this._maxBtn.addEventListener("click", () => this.toggleFullscreen());
+        }
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && this.isMaximized) {
+                this.toggleFullscreen(false);
             }
         });
 
@@ -9893,6 +10563,9 @@ class ChatWindow {
     _bindDragHeader(header) {
         header.style.touchAction = "none";
         header.addEventListener("pointerdown", (event) => {
+            if (this.isMaximized) {
+                return; // fullscreen windows don't get dragged
+            }
             if (event.target.closest(".cw-window-actions")) {
                 return; // let the buttons work normally
             }
@@ -9939,6 +10612,9 @@ class ChatWindow {
      * is also nudged back if it would slide off-screen.
      */
     _beginResize(edge, event) {
+        if (this.isMaximized) {
+            return; // no edge-resizing while fullscreen
+        }
         event.preventDefault();
 
         const hasN = edge.includes("n");
@@ -9999,7 +10675,7 @@ class ChatWindow {
 
     /** Keep the window fully inside the viewport (after open/resize). */
     _keepInViewport() {
-        if (!this.element) {
+        if (!this.element || this.isMaximized) {
             return;
         }
         const rect = this.element.getBoundingClientRect();
@@ -10208,6 +10884,123 @@ const CHAT_CONFIG_EXAMPLES = {
 
 export { ChatFactory, ChatWindow, CHAT_CONFIG_EXAMPLES };
 
+```
+
+## dashboard/js/classes/terminal-window-out.js
+
+```javascript
+// ==========================================
+// classes/terminal-window-out.js
+// ==========================================
+// Formats server-side log payloads into plain-text console blocks for the
+// ChatWindow's console drawer (dashboard/js/classes/chat-window.js). The
+// drawer lives in the chat window's MAIN BODY container - never chat bubbles.
+//
+//   1. pushToolLogs(...)    - structured tool_events from POST /api/chat
+//   2. pushStartupLogs(...) - captured boot output from GET /api/logs/console
+//   3. filterConsoleLines() - shared pure filter used by BOTH the drawer and
+//                             the standalone pop-out page (logs.html) so they
+//                             always agree on what counts as noise.
+//
+// Keeping the formatting here (instead of inside chat-window.js) means it can
+// grow into full stdout/stderr streaming later without touching the window.
+
+function cleanPreview(text) {
+    return String(text ?? "").replace(/[\r\n]+/g, " ").slice(0, 200);
+}
+
+// CSI escape codes from uvicorn's colored logs. Stripped here as a fallback
+// for captures taken before server/console_log.py began sanitizing the buffer
+// (a long-running server may still hold dirty lines until it restarts).
+const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
+
+function stripAnsi(line) {
+    return line.replace(ANSI_RE, "");
+}
+
+function formatArgs(args) {
+    try {
+        const str = JSON.stringify(args || {});
+        return str.length > 240 ? str.slice(0, 237) + "..." : str;
+    } catch {
+        return "";
+    }
+}
+
+/**
+ * Strip uvicorn/server noise from raw console lines. Used identically by the
+ * chat drawer and the pop-out logs page.
+ * @param {string | string[]} rawLogs - raw log text or array of lines
+ * @returns {string[]} cleaned, non-empty lines
+ */
+export function filterConsoleLines(rawLogs) {
+    const lines = Array.isArray(rawLogs)
+        ? rawLogs
+        : String(rawLogs ?? "").split("\n");
+
+    return lines
+        .map((line) => stripAnsi(String(line).trim()))
+        .filter((line) => {
+            if (!line) {
+                return false;
+            }
+            // Uvicorn "INFO:" startup / access lines.
+            if (/^INFO:/.test(line)) {
+                return false;
+            }
+            // Access-log entries that slipped through without an INFO prefix,
+            // e.g. '127.0.0.1 - "GET / HTTP/1.1" 200 OK'.
+            if (/\b(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+\/[^\s"]* HTTP/i.test(line)) {
+                return false;
+            }
+            return true;
+        });
+}
+
+/**
+ * Render structured tool events (from POST /api/chat -> tool_events) into the
+ * chat window's console drawer.
+ * @param {import("./chat-window.js").ChatWindow} chat - target ChatWindow
+ * @param {Array<Object>} toolEvents - event list from the backend
+ */
+export function pushToolLogs(chat, toolEvents = []) {
+    if (!Array.isArray(toolEvents) || toolEvents.length === 0) {
+        return;
+    }
+    const lines = ["[TOOL OUTPUT]"];
+    toolEvents.forEach((evt) => {
+        const time = evt.time || "--:--:--";
+        const tool = evt.tool || "?";
+        const argStr = formatArgs(evt.args);
+        if (evt.status === "error") {
+            lines.push(`[${time}] [ERR]  ${tool}(${argStr})`);
+            lines.push(`    ERROR: ${cleanPreview(evt.error)}`);
+        } else if (evt.status === "missing") {
+            lines.push(`[${time}] [MISS] ${tool}(${argStr}) - not available`);
+        } else {
+            lines.push(`[${time}] [OK]   ${tool}(${argStr})`);
+            if (evt.result_preview) {
+                lines.push(`    -> ${cleanPreview(evt.result_preview)}`);
+            }
+        }
+    });
+    chat.appendConsoleBlock(lines.join("\n"));
+}
+
+/**
+ * Publish captured boot output (GET /api/logs/console) into the chat window's
+ * console drawer, filtered to the meaningful startup metadata ([llm], [paths],
+ * [interface], [wiring], [custom-modules]).
+ * @param {import("./chat-window.js").ChatWindow} chat - target ChatWindow
+ * @param {string | string[]} rawLogs - captured console output
+ */
+export function pushStartupLogs(chat, rawLogs = []) {
+    const kept = filterConsoleLines(rawLogs);
+    if (kept.length === 0) {
+        return;
+    }
+    chat.appendConsoleBlock(["[SYSTEM STARTUP LOGS]", ...kept].join("\n"));
+}
 ```
 
 ## dashboard/js/config-page.js
@@ -10723,6 +11516,100 @@ export function slugify(value) {
         .slice(0, 60);
 }
 
+```
+
+## dashboard/js/logs-page.js
+
+```javascript
+// ==========================================
+// js/logs-page.js - standalone console viewer for logs.html
+// ==========================================
+// Full-page terminal for the captured server console (GET /api/logs/console):
+// the same data streamed into the chat widget's console drawer, but in its
+// own tab. Polls every 2s, applies the SAME shared filter as the drawer
+// (classes/terminal-window-out.js), and only appends lines it has not shown
+// yet so copied output is a clean chronological stream.
+
+import { filterConsoleLines } from "./classes/terminal-window-out.js";
+
+const PRE_ELEMENT = document.getElementById("logs-body");
+const STATUS = document.getElementById("logs-status");
+const PAUSE_BTN = document.getElementById("logs-pause");
+const CLEAR_BTN = document.getElementById("logs-clear");
+const COPY_BTN = document.getElementById("logs-copy");
+const POLL_MS = 2000;
+const MAX_LINES = 4000;
+
+let paused = false;
+let shownCount = 0;
+let rows = [];
+
+function setStatus(kind, text) {
+    STATUS.textContent = text;
+    STATUS.className = "logs-page-status " + kind;
+}
+
+function render() {
+    PRE_ELEMENT.textContent = rows.join("\n");
+    if (!paused) {
+        PRE_ELEMENT.scrollTop = PRE_ELEMENT.scrollHeight;
+    }
+}
+
+async function pollOnce() {
+    try {
+        const res = await fetch("/api/logs/console?limit=1000");
+        if (!res.ok) {
+            throw new Error(res.statusText);
+        }
+        const data = await res.json();
+        const lines = filterConsoleLines(data.logs || []);
+
+        if (lines.length > shownCount) {
+            const fresh = lines.slice(shownCount);
+            rows.push(...fresh);
+            if (rows.length > MAX_LINES) {
+                rows = rows.slice(rows.length - MAX_LINES);
+                shownCount = lines.length - MAX_LINES;
+            }
+            shownCount = lines.length;
+            render();
+        }
+
+        if (!data.captured) {
+            setStatus("warn", "no capture running - start the server fresh");
+        } else {
+            setStatus("ok", paused ? "paused" : "live - " + lines.length + " lines");
+        }
+    } catch (error) {
+        setStatus("error", "cannot reach server: " + error.message);
+    }
+}
+
+PAUSE_BTN.addEventListener("click", () => {
+    paused = !paused;
+    PAUSE_BTN.textContent = paused ? "Resume" : "Pause";
+    setStatus("ok", paused ? "paused" : "live - " + rows.length + " lines");
+});
+
+CLEAR_BTN.addEventListener("click", () => {
+    rows = [];
+    shownCount = 0;
+    render();
+});
+
+COPY_BTN.addEventListener("click", async () => {
+    try {
+        await navigator.clipboard.writeText(PRE_ELEMENT.textContent || "");
+        COPY_BTN.textContent = "Copied!";
+        setTimeout(() => (COPY_BTN.textContent = "Copy"), 1200);
+    } catch {
+        setStatus("error", "copy blocked - select and copy manually");
+    }
+});
+
+pollOnce();
+setInterval(pollOnce, POLL_MS);
 ```
 
 ## dashboard/js/ui/agent-editor.js
@@ -11696,6 +12583,19 @@ const FONT_OPTIONS = [
 
 const SIZE_OPTIONS = [13, 14, 15, 16, 17, 18];
 
+// Console drawer size presets - "the size feature, plus a 2-option console
+// level". Values land on --cw-console-height / --cw-console-font-size and can
+// be tuned per system (see .cw-console / .cw-console-body in styles.css).
+const CONSOLE_SIZE_OPTIONS = [
+    { value: "compact", label: "Compact (60% height)" },
+    { value: "large", label: "Large (75% height) - default" },
+];
+
+const CONSOLE_SIZE_STYLES = {
+    compact: { height: "60%", fontSize: "12.5px" },
+    large: { height: "75%", fontSize: "14px" },
+};
+
 const FONT_SIZE_LABELS = {
     13: "13px (small)",
     14: "14px",
@@ -11754,6 +12654,13 @@ export function applyAppearance(appearance) {
     } else {
         root.style.removeProperty("--app-font-size");
     }
+
+    // Console drawer size (from the Console size picker; "large" default).
+    const consoleStyle =
+        CONSOLE_SIZE_STYLES[(appearance && appearance.consoleSize) || "large"] ||
+        CONSOLE_SIZE_STYLES.large;
+    root.style.setProperty("--cw-console-height", consoleStyle.height);
+    root.style.setProperty("--cw-console-font-size", consoleStyle.fontSize);
 }
 
 /**
@@ -11829,6 +12736,23 @@ export function renderAppearance({ mountEl, settings = {}, onSave }) {
     sizeField.appendChild(sizeSelect);
     panel.appendChild(sizeField);
 
+    // ---- Console size (2-option level of the size feature) ----
+    const consoleSizeField = document.createElement("label");
+    consoleSizeField.className = "field";
+    consoleSizeField.appendChild(document.createElement("span")).textContent = "Console size";
+    const consoleSizeSelect = document.createElement("select");
+    consoleSizeSelect.id = "appearance-console-size";
+    const currentConsoleSize = (appearance.consoleSize === "compact" || appearance.consoleSize === "large")
+        ? appearance.consoleSize
+        : "large";
+    CONSOLE_SIZE_OPTIONS.forEach((opt) => {
+        const option = new Option(opt.label, opt.value);
+        if (opt.value === currentConsoleSize) option.selected = true;
+        consoleSizeSelect.appendChild(option);
+    });
+    consoleSizeField.appendChild(consoleSizeSelect);
+    panel.appendChild(consoleSizeField);
+
     // ---- Live preview ----
     const preview = el(
         "div",
@@ -11861,6 +12785,7 @@ export function renderAppearance({ mountEl, settings = {}, onSave }) {
                 theme: themeSelect.value,
                 fontFamily: familySelect.value.trim(),
                 fontSize: Number(sizeSelect.value) || 0,
+                consoleSize: consoleSizeSelect.value,
             },
         };
         saveBtn.disabled = true;
@@ -11886,6 +12811,7 @@ export function renderAppearance({ mountEl, settings = {}, onSave }) {
             theme: themeSelect.value,
             fontFamily: familySelect.value.trim(),
             fontSize: Number(sizeSelect.value) || 0,
+            consoleSize: consoleSizeSelect.value,
         }),
     };
 }
@@ -12963,12 +13889,72 @@ function buildInlineNode(tag, groups) {
 
 ```
 
+## dashboard/logs.html
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Console Logs</title>
+
+    <!-- Apply the stored theme (dark/light) before first paint so dark-mode
+         users never see a light flash (same snippet as index.html). -->
+    <script>
+        (function () {
+            var s = "system";
+            try { s = localStorage.getItem("appearance-theme") || "system"; } catch (e) {}
+            var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+            document.documentElement.dataset.theme =
+                s === "dark" || s === "light" ? s : (dark ? "dark" : "light");
+
+            // Match the console font-size preset chosen in the dashboard's
+            // Appearance settings (compact 12.5px / large 14px).
+            try {
+                var a = JSON.parse(localStorage.getItem("appearance") || "{}");
+                var size = a && a.consoleSize === "compact" ? "12.5px" : "14px";
+                document.documentElement.style.setProperty("--cw-console-font-size", size);
+            } catch (e) {}
+        })();
+    </script>
+
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+
+<body class="logs-page">
+
+    <header class="logs-page-header">
+        <div class="logs-page-title">
+            <a href="/static/index.html" class="logs-page-back">&#8592; Dashboard</a>
+            <h1>Console Logs</h1>
+        </div>
+        <div class="logs-page-actions">
+            <span id="logs-status" class="logs-page-status">connecting&#8230;</span>
+            <button id="logs-pause" class="cw-console-btn" type="button">Pause</button>
+            <button id="logs-clear" class="cw-console-btn" type="button">Clear</button>
+            <button id="logs-copy" class="cw-console-btn" type="button">Copy</button>
+        </div>
+    </header>
+
+    <main class="logs-page-main">
+        <pre id="logs-body" class="logs-page-body" aria-live="polite"></pre>
+    </main>
+
+    <script type="module" src="/static/js/logs-page.js"></script>
+
+</body>
+
+</html>
+```
+
 ## docs/APP_STRUCTURE.md
 
 ```markdown
 # Terminator1 — App Structure
 
-_Auto-generated on 2026-09-15T19:57:46 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-15T22:47:40 by `scripts/update_docs.py`._
 
 
 ```
@@ -12986,7 +13972,8 @@ genV2_Interface_projectManager/
 |   |   |   `-- api.js
 |   |   |-- classes
 |   |   |   |-- ChatSession.js
-|   |   |   `-- chat-window.js
+|   |   |   |-- chat-window.js
+|   |   |   `-- terminal-window-out.js
 |   |   |-- logic
 |   |   |   |-- chat-formatter.js
 |   |   |   `-- models.js
@@ -13000,10 +13987,12 @@ genV2_Interface_projectManager/
 |   |   |   |-- interface-manager.js
 |   |   |   `-- markdown.js
 |   |   |-- app.js
-|   |   `-- config-page.js
+|   |   |-- config-page.js
+|   |   `-- logs-page.js
 |   |-- chat.html
 |   |-- config.html
-|   `-- index.html
+|   |-- index.html
+|   `-- logs.html
 |-- docs
 |   |-- phase-1-2-3-update
 |   |   |-- about
@@ -13085,6 +14074,7 @@ genV2_Interface_projectManager/
 |   |   |-- __init__.py
 |   |   |-- logger.py
 |   |   `-- store.py
+|   |-- console_log.py
 |   |-- paths.py
 |   `-- server.py
 |-- tools
@@ -13097,7 +14087,7 @@ genV2_Interface_projectManager/
 `-- requirements.txt
 ```
 
-_84 tracked source file(s)._
+_88 tracked source file(s)._
 
 ```
 
@@ -13108,6 +14098,122 @@ _84 tracked source file(s)._
 
 All notable changes to this project. Format based on Keep a Changelog
 (https://keepachangelog.com/), grouped by date.
+
+## 2026-09-15 — Chat console output (tool logs + captured startup logs)
+
+The tool calls an agent makes during a chat now surface in a console drawer
+inside the floating chat window's MAIN BODY container (never as chat bubbles),
+along with a filtered capture of the server's boot/dev output. A "Pop out"
+button opens the same log stream in a standalone full-page viewer.
+
+### Added — backend
+
+- `server/console_log.py` — a small ring-buffer capture (500 lines) that tees
+  `sys.stdout`/`sys.stderr` and installs a root-logger handler at import time.
+  The uvicorn access/startup lines and every module `print()` (e.g. `[llm]`,
+  `[paths]`, `[interface]`, `[wiring]`, `[custom-modules]`, `[Agent.act]`,
+  `[SERVER]`) are therefore captured and served.
+- `server/server.py` — new `GET /api/logs/console?limit=` endpoint returning
+  `{logs, captured}`; `POST /api/chat` now also returns `tool_events`
+  (the structured tool-execution log for that request).
+- `engine/core/agent.py` — `Agent.tool_events` collects one entry per
+  `act()` call while preserving the existing return contract and prints:
+  `{time, tool, args, result_preview, status:"success"}`,
+  `{time, tool, args, error, status:"error"}` and
+  `{time, tool, args, status:"missing"}`.
+
+### Added — frontend
+
+- `dashboard/js/classes/chat-window.js` — lazy console drawer
+  (`_ensureConsole`) docked below the message feed with collapse, Clear and
+  Pop out controls; public `appendConsoleBlock` / `clearConsole` /
+  `openConsolePage` methods, plus a `sendText(text)` method that pushes
+  pre-written text through the normal send pipeline.
+- Console toolbar now adds `Send to agent` (posts the console text as a user
+  message via `sendConsoleToAgent`) and `Ask in input` (loads the console
+  text into the composer so you can append your own query via
+  `loadConsoleIntoInput`). `Pop out` opens `/static/logs.html` in its own
+  independent fixed-size window (`console_logs`) instead of a new tab.
+- Console drawer is now **resizable**: a `.cw-console-grip` strip sits on the
+  drawer's top edge - drag it up to grow the console over the message feed
+  (clamped 140px-85%, pointer-capture driven, `.cw-resizing` cursor).
+- The drawer lists the active agents as **clickable chips**
+  (`.cw-console-agent-chip`) in a `.cw-console-agents` strip below the
+  header; the current chat agent is highlighted (`.cw-active`) and clicking a
+  chip switches the chat to that agent (wired through
+  `setConsoleAgents` / `setActiveConsoleAgent` / `onConsoleAgent`). The
+  collapsed header shows a `· N agents` badge. The drawer is created on load
+  (collapsed) and still auto-expands when the first logs arrive.
+- The flyout widget is wider by default (`--cw-widget-width` = 920px instead
+  of 380px in flyout mode), so the console reads comfortably; the small-screen
+  full-screen fallback is unchanged.
+- Console size presets now default taller: `Large` is 75% of the window body
+  (was 60%) and `Compact` 60% (was 45%), so a full batch of log lines fits in
+  `.cw-console-body` without scrolling; the un-configured CSS fallback matches
+  at 75%. The drag grip still lets you pull it up to ~97%.
+- The pop-out viewer (`/static/logs.html`) now uses larger text: it sets
+  `--cw-console-font-size` pre-paint from the saved Appearance console-size
+  preset (14px large / 12.5px compact) and its fallback is 14px instead of
+  12px, so logs opened in the pop-out window read as big as in the drawer.
+- Console log text no longer looks washed out on the dark background: the
+  `.cw-console-body` color is brightened from `#b6c2cf` to `#e6edf3` (~14:1
+  contrast), the CONSOLE OUTPUT toggle label, agent chips, and the whole
+  pop-out page (`logs.html` body + `.logs-page-body`) were brightened to the
+  same readable greys. The console log text itself is now `#ffffff`.
+- Fixed the chat composer input showing BLACK text on the dark background
+  (form controls don't inherit `color`, so `.cw-input` fell back to the
+  browser default): `.cw-input` now sets `color` + `caret-color` to
+  `var(--color-text)` and `.cw-input::placeholder` to `var(--color-text-soft)`,
+  so typed text stays readable in both themes.
+- The chat window header now has a **Fill the window** button (between the
+  side-panel/Observe buttons and Minimize). It expands the chat to cover the
+  whole browser viewport (`.cw-fullscreen`, inset 0 / 100vw / 100vh, no
+  border-radius, above the regular z-index) and back. Works in both flyout
+  and panel modes; Esc restores; header-drag, edge-resize and
+  keep-in-viewport are all disabled while maximized; Minimize and Close
+  restore first, and a fresh open always starts non-fullscreen.
+- `dashboard/js/ui/appearance.js` — the Appearance config (the existing base
+  font-size "size" feature) gains a 2-option **Console size** level (`compact`
+  45%/12.5px, `large` 60%/14px, default `large`), persisted via
+  `appearance.consoleSize` and applied to `--cw-console-height` /
+  `--cw-console-font-size` - so the drawer (and matched logs page) resize per
+  system without editing CSS.
+- `dashboard/js/classes/terminal-window-out.js` — decoupled log
+  formatting/filtering: `pushToolLogs(chat, toolEvents)`,
+  `pushStartupLogs(chat, logs)` and the shared `filterConsoleLines()`.
+- `dashboard/js/api/api.js` — `sendChat` returns `tool_events`; new
+  `getConsoleLogs(limit)`.
+- `dashboard/js/app.js` — boots by pushing captured startup logs into the
+  chat window's console drawer (fail-soft), and pushes tool logs after every
+  send.
+- `dashboard/logs.html` + `dashboard/js/logs-page.js` — standalone pop-out
+  terminal viewer: polls `/api/logs/console` every 2s, pause / clear / copy,
+  and applies the same `filterConsoleLines()` so the drawer and the page
+  agree on what counts as noise.
+- `dashboard/css/styles.css` — console drawer styles in SECTION 8 and a new
+  SECTION 10 for the standalone console page (both keep an always-dark
+  terminal look in light and dark themes).
+
+### Behavior notes
+
+- The drawer stays collapsed until content arrives, so ordinary chats are
+  visually unchanged; the "Clear" button clears the drawer, "Pop out" opens
+  `/static/logs.html`. The widget drain toggle resets each session.
+- Terminal ANSI color codes from uvicorn's colored log lines are stripped at
+  capture time (`server/console_log.py`) and again defensively in
+  `filterConsoleLines()`, so the drawer and logs page always render plain
+  text (and `INFO:`/access lines still qualify as filterable noise even when
+  a server captured them with escape prefixes).
+
+### Verified
+
+- `python -m py_compile` clean on `engine/core/agent.py`, `server/server.py`,
+  `server/console_log.py`; `node --check` clean on `dashboard/js/app.js`,
+  `dashboard/js/api/api.js`, `dashboard/js/classes/chat-window.js`,
+  `dashboard/js/classes/terminal-window-out.js`, `dashboard/js/logs-page.js`.
+- TestClient smoke test: `GET /api/logs/console` returns the captured boot
+  lines, and an Agent with fake tools records success / error / missing
+  `tool_events`.
 
 ## 2026-09-15 — Dynamic module UI actions + developer guide
 
@@ -17896,12 +19002,12 @@ If no important constraints were identified, write:
   "mode": "agent",
   "model": "gemma4:e2b",
   "tools": [
-    "search_chat_logs",
-    "get_current_date",
     "map_files",
     "read_file",
     "write_text_file",
-    "delete_files"
+    "delete_files",
+    "get_current_date",
+    "search_chat_logs"
   ],
   "tests": [
     {
@@ -18385,6 +19491,7 @@ Its behavior comes entirely from its AgentProfile and the tools it was given.
 import inspect
 import json
 import re
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Callable, List
 
@@ -18452,6 +19559,7 @@ class Agent:
         self.tools = {f.__name__: f for f in tools}
         self.messages: List[dict] = []
         self.session = session or FileSession()
+        self.tool_events: List[dict] = []  # structured tool-execution log for this turn
 
     def _extract_text_tool_calls(self, content: str) -> List[dict]:
         """Find tool calls that a model wrote as plain-text JSON instead of using
@@ -18704,15 +19812,36 @@ class Agent:
         """Run one tool that the LLM asked for, using the name and args it chose."""
         name = tool_call.get("function", {}).get("name")
         args = self._normalize_args(name, tool_call.get("function", {}).get("arguments", {}))
+        timestamp = datetime.now().strftime("%H:%M:%S")
         if name in self.tools:
             try:
                 result = str(self.tools[name](**args))
                 print(f"[Agent.act] Executed {name} -> {result[:100]}...")
+                self.tool_events.append({
+                    "time": timestamp,
+                    "tool": name,
+                    "args": args,
+                    "result_preview": result[:200],
+                    "status": "success",
+                })
                 return result
             except Exception as e:
                 print(f"[Agent.act] Error executing {name}: {e}")
+                self.tool_events.append({
+                    "time": timestamp,
+                    "tool": name,
+                    "args": args,
+                    "error": str(e),
+                    "status": "error",
+                })
                 return f"Error executing tool: {e}"
         print(f"[Agent.act] Missing tool requested: {name}")
+        self.tool_events.append({
+            "time": timestamp,
+            "tool": name,
+            "args": args,
+            "status": "missing",
+        })
         return f"Error: {name} missing"
 
     def observe(self, name: str, result: str) -> None:
@@ -22530,6 +23659,128 @@ __all__ = [
 
 ```
 
+## server/console_log.py
+
+```python
+"""server/console_log.py
+=======================
+
+A process-wide ring buffer that captures console output so the frontend can
+render a clean terminal readout inside the chat window and on the pop-out
+logs page (`dashboard/logs.html`).
+
+It captures BOTH:
+
+- the app's own `print()` calls (``[llm]`` / ``[paths]`` / ``[interface]`` /
+  ``[wiring]`` / ``[custom-modules]`` / ``[Agent.act]`` / ``[SERVER]`` ...),
+- and Python-logging output such as uvicorn's ``INFO:`` startup/access lines
+  (uvicorn creates its StreamHandlers after this module is imported, so they
+  pick up the tee'd ``sys.stderr`` automatically).
+
+Install it at import time (self-installs when the module is loaded), i.e.:
+
+    from server import console_log      # wires the tee + root-logger handler
+
+Read the tail anytime:
+
+    console_log.tail(limit=300)
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import sys
+from collections import deque
+
+_LIMIT = 500
+_BUFFER: deque[str] = deque(maxlen=_LIMIT)
+_INSTALLED = False
+
+# CSI (``ESC [ ...``) sequences - uvicorn's colored log lines. Stripped at
+# capture time so the ring buffer stays plain text (the chat drawer and the
+# logs page render text, not terminal escapes). Matches ``[32m``, ``[1m``,
+# ``[36m``, ``[K``, ``[H``, ... (color/bold/erase/cursor motion).
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
+def _append(text: str) -> None:
+    for line in str(text).splitlines():
+        if line:
+            _BUFFER.append(_ANSI.sub("", line))
+
+
+class _Tee:
+    """A stdout/stderr replacement that mirrors writes to the ring buffer."""
+
+    def __init__(self, original) -> None:
+        self.original = original
+
+    def write(self, text: str) -> int:
+        _append(text)
+        return self.original.write(str(text))
+
+    def flush(self) -> None:
+        try:
+            self.original.flush()
+        except Exception:
+            pass
+
+    def isatty(self) -> bool:
+        try:
+            return self.original.isatty()
+        except Exception:
+            return False
+
+    def fileno(self) -> int:
+        return self.original.fileno()
+
+    def __getattr__(self, name):
+        return getattr(self.original, name)
+
+
+class _CaptureHandler(logging.Handler):
+    """Records every message any propagating logger emits (INFO/access...)."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            _append(self.format(record))
+        except Exception:
+            pass
+
+
+def install(limit: int = _LIMIT) -> None:
+    """Tee stdout/stderr and attach a root-logger handler. Idempotent - a
+    second import never double-wraps the streams."""
+    global _BUFFER, _INSTALLED
+    if _INSTALLED:
+        return
+    _BUFFER = deque(maxlen=max(10, int(limit)))
+    sys.stdout = _Tee(sys.stdout)
+    sys.stderr = _Tee(sys.stderr)
+    handler = _CaptureHandler()
+    handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    logging.getLogger().addHandler(handler)
+    _INSTALLED = True
+
+
+def tail(limit: int | None = None) -> list[str]:
+    """The most recent captured lines, newest last. `limit` trims the tail."""
+    lines = list(_BUFFER)
+    if limit is not None and limit > 0:
+        lines = lines[-int(limit):]
+    return lines
+
+
+def captured() -> bool:
+    """True once any line has been captured in this process."""
+    return _INSTALLED and len(_BUFFER) > 0
+
+
+# Wire immediately on import so uvicorn's startup lines land in the buffer.
+install()
+```
+
 ## server/paths.py
 
 ```python
@@ -22858,6 +24109,7 @@ from engine.agents.registry import list_agents
 from engine.agents.factory import build_agent, replay_history, AgentNotFoundError
 from server.chat_store import store as chat_store
 from server import paths
+from server import console_log
 
 # Modular interface layer (docs/01_IDEA_AND_ARCHITECTURE.md): update modules
 # under interface/updates/<domain>/ are discovered and executed natively.
@@ -23219,7 +24471,25 @@ def chat(data: ChatRequest):
     session = chat_store.append_turn(data.message, reply) or session
     print(f"[SERVER] Reply via {agent.model}: {reply[:120]}...")
 
-    return {"reply": reply, "session_id": session["id"], "title": session.get("title", "")}
+    tool_logs = getattr(agent, "tool_events", [])
+    return {
+        "reply": reply,
+        "session_id": session["id"],
+        "title": session.get("title", ""),
+        "tool_events": tool_logs,
+    }
+
+
+# --- CONSOLE LOG (boot prints + uvicorn output, for the chat drawer + logs.html) ---
+
+@app.get("/api/logs/console")
+async def console_logs(limit: int = 300):
+    """Tail of the captured console output: the app's print() lines ([llm],
+    [paths], [interface], [wiring], [custom-modules], [Agent.act], [SERVER])
+    plus uvicorn INFO/access lines. Feeds the chat window's console drawer and
+    the standalone pop-out page (dashboard/logs.html), which apply their own
+    filtering client-side."""
+    return {"logs": console_log.tail(limit=limit), "captured": console_log.captured()}
 
 
 # --- CHAT SESSIONS (server-side organization) ---
@@ -24490,4 +25760,4 @@ def search_chat_logs(query: str) -> str:
 
 ```
 
-_82 code file(s)._
+_86 code file(s)._

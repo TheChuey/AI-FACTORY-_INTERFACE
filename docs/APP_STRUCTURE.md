@@ -1,6 +1,6 @@
 # Terminator1 — App Structure
 
-_Auto-generated on 2026-09-15T19:57:46 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-15T22:47:40 by `scripts/update_docs.py`._
 
 
 ```
@@ -18,7 +18,8 @@ genV2_Interface_projectManager/
 |   |   |   `-- api.js
 |   |   |-- classes
 |   |   |   |-- ChatSession.js
-|   |   |   `-- chat-window.js
+|   |   |   |-- chat-window.js
+|   |   |   `-- terminal-window-out.js
 |   |   |-- logic
 |   |   |   |-- chat-formatter.js
 |   |   |   `-- models.js
@@ -32,10 +33,12 @@ genV2_Interface_projectManager/
 |   |   |   |-- interface-manager.js
 |   |   |   `-- markdown.js
 |   |   |-- app.js
-|   |   `-- config-page.js
+|   |   |-- config-page.js
+|   |   `-- logs-page.js
 |   |-- chat.html
 |   |-- config.html
-|   `-- index.html
+|   |-- index.html
+|   `-- logs.html
 |-- docs
 |   |-- phase-1-2-3-update
 |   |   |-- about
@@ -117,6 +120,7 @@ genV2_Interface_projectManager/
 |   |   |-- __init__.py
 |   |   |-- logger.py
 |   |   `-- store.py
+|   |-- console_log.py
 |   |-- paths.py
 |   `-- server.py
 |-- tools
@@ -129,4 +133,4 @@ genV2_Interface_projectManager/
 `-- requirements.txt
 ```
 
-_84 tracked source file(s)._
+_88 tracked source file(s)._

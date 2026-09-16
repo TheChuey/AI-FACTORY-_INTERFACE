@@ -37,6 +37,7 @@ from engine.agents.registry import list_agents
 from engine.agents.factory import build_agent, replay_history, AgentNotFoundError
 from server.chat_store import store as chat_store
 from server import paths
+from server import console_log
 
 # Modular interface layer (docs/01_IDEA_AND_ARCHITECTURE.md): update modules
 # under interface/updates/<domain>/ are discovered and executed natively.
@@ -398,7 +399,25 @@ def chat(data: ChatRequest):
     session = chat_store.append_turn(data.message, reply) or session
     print(f"[SERVER] Reply via {agent.model}: {reply[:120]}...")
 
-    return {"reply": reply, "session_id": session["id"], "title": session.get("title", "")}
+    tool_logs = getattr(agent, "tool_events", [])
+    return {
+        "reply": reply,
+        "session_id": session["id"],
+        "title": session.get("title", ""),
+        "tool_events": tool_logs,
+    }
+
+
+# --- CONSOLE LOG (boot prints + uvicorn output, for the chat drawer + logs.html) ---
+
+@app.get("/api/logs/console")
+async def console_logs(limit: int = 300):
+    """Tail of the captured console output: the app's print() lines ([llm],
+    [paths], [interface], [wiring], [custom-modules], [Agent.act], [SERVER])
+    plus uvicorn INFO/access lines. Feeds the chat window's console drawer and
+    the standalone pop-out page (dashboard/logs.html), which apply their own
+    filtering client-side."""
+    return {"logs": console_log.tail(limit=limit), "captured": console_log.captured()}
 
 
 # --- CHAT SESSIONS (server-side organization) ---

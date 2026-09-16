@@ -1265,6 +1265,188 @@ code {
     background: var(--cw-chat-bg);
 }
 
+/* ---------- console drawer (chat window MAIN BODY, not bubbles) ----------
+   Created lazily by chat-window.js (_ensureConsole), sits directly under
+   the message feed. Deliberately an always-dark terminal look in BOTH
+   themes so log output is readable the same way a dev console is. */
+
+.cw-console {
+    display: flex;
+    flex: 0 1 var(--cw-console-height, 75%);
+    flex-direction: column;
+    min-height: 140px;
+    border-top: 1px solid var(--cw-border);
+    background: #0d1117;
+}
+
+.cw-console.cw-collapsed {
+    flex: 0 0 auto;
+    min-height: 0;
+}
+
+.cw-console.cw-collapsed .cw-console-body {
+    display: none;
+}
+
+.cw-console.cw-collapsed .cw-console-grip {
+    display: none;
+}
+
+.cw-console.cw-collapsed .cw-console-agents {
+    display: none;
+}
+
+/* Draggable top edge - move it up to grow the console over the message feed. */
+.cw-console-grip {
+    flex: 0 0 auto;
+    height: 7px;
+    margin: 0;
+    cursor: ns-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    touch-action: none;
+}
+
+.cw-console-grip:hover,
+.cw-console.cw-resizing .cw-console-grip {
+    background: rgba(76, 154, 255, 0.35);
+}
+
+body.cw-resizing {
+    cursor: ns-resize !important;
+    user-select: none !important;
+}
+
+/* Active-agent count shown in the collapsed header. */
+.cw-console-badge {
+    color: #58a6ff;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+/* Clickable agent chips - switch the chat's active agent. */
+.cw-console-agents {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #21262d;
+    background: #0d1117;
+}
+
+.cw-console-agent-chip {
+    padding: 2px 10px;
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.4;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.cw-console-agent-chip:hover {
+    color: #e6edf3;
+    border-color: #58a6ff;
+}
+
+.cw-console-agent-chip.cw-active {
+    color: #040d04;
+    background: #56d364;
+    border-color: #2ea043;
+    font-weight: 600;
+}
+
+.cw-console-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 10px;
+    background: #161b22;
+    border-bottom: 1px solid var(--cw-border);
+}
+
+.cw-console-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+    background: none;
+    border: none;
+    color: #c9d1d9;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.cw-console-toggle .cw-console-title {
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+.cw-console-toggle svg {
+    transition: transform 0.15s ease;
+}
+
+.cw-console.cw-collapsed .cw-console-toggle svg {
+    transform: rotate(-90deg);
+}
+
+.cw-console-toggle:hover {
+    color: #e6edf3;
+}
+
+.cw-console-actions {
+    display: inline-flex;
+    gap: 6px;
+}
+
+.cw-console-btn {
+    padding: 2px 8px;
+    background: transparent;
+    color: #9fadbd;
+    border: 1px solid var(--cw-border);
+    border-radius: 5px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.cw-console-btn:hover {
+    color: #e6edf3;
+    border-color: var(--cw-accent);
+}
+
+.cw-console-btn.cw-console-send {
+    color: #7ee787;
+    border-color: #2ea043;
+}
+
+.cw-console-btn.cw-console-send:hover {
+    color: #aff5b4;
+    border-color: #3fb950;
+}
+
+.cw-console-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 8px 10px;
+    overflow: auto;
+    font-family: "Cascadia Code", "Consolas", "Menlo", monospace;
+    font-size: var(--cw-console-font-size, 13px);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #ffffff;
+    background: #0d1117;
+}
+
 /* ---------- bubbles ---------- */
 
 .cw-bubble {
@@ -1655,11 +1837,18 @@ code {
     border: 1px solid var(--cw-border-strong);
     border-radius: var(--radius-small);
     background: var(--color-input-bg);
+    color: var(--color-text);
+    caret-color: var(--color-text);
     resize: none;
     overflow-y: auto;
     outline: none;
     font: inherit;
     line-height: 1.5;
+}
+
+.cw-input::placeholder {
+    color: var(--color-text-soft);
+    opacity: 1;
 }
 
 .cw-input:focus {
@@ -1721,7 +1910,7 @@ code {
     z-index: var(--cw-z-index);
     display: flex;
     flex-direction: column;
-    width: 380px;
+    width: var(--cw-widget-width, 380px);
     height: 560px;
     max-width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
@@ -1854,6 +2043,34 @@ code {
 .chat-window.cw-minimized .cw-window-body,
 .chat-window.cw-minimized .cw-composer {
     display: none;
+}
+
+/* ---------- fullscreen (chat fills the whole browser window) ----------
+   "Fill the window" button in the header. !important beats both the base
+   geometry and the small-screen media-query full-screen state below. */
+
+.chat-window.cw-fullscreen {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    border-radius: 0 !important;
+    z-index: calc(var(--cw-z-index) + 1);
+}
+
+.chat-window.cw-fullscreen .cw-resize {
+    display: none;
+}
+
+.chat-window.cw-fullscreen .cw-window-header {
+    cursor: default;
 }
 
 /* ---------- small screens ---------- */
@@ -2030,4 +2247,90 @@ code {
     border-color: var(--color-accent);
     background: var(--color-accent-soft);
     color: var(--color-accent-strong);
+}
+
+/* ==========================================
+   ===  SECTION 10: STANDALONE CONSOLE PAGE (logs.html)
+   ========================================== */
+/* Full-page viewer for the captured server console, opened in its own tab
+   via the chat drawer's "Pop out" button (see wordy-console CTA below).
+   Reuses the .cw-console-btn chip style from SECTION 8. */
+
+body.logs-page {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    overflow: hidden;
+    background: #0d1117;
+    color: #ffffff;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+}
+
+.logs-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    flex: 0 0 auto;
+}
+
+.logs-page-title {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.logs-page-title h1 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #e6edf3;
+}
+
+.logs-page-back {
+    text-decoration: none;
+    color: #9fadbd;
+    font-size: 12px;
+}
+
+.logs-page-back:hover {
+    color: #4c9aff;
+}
+
+.logs-page-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.logs-page-status {
+    font-size: 12px;
+}
+
+.logs-page-status.ok { color: #3fb950; }
+.logs-page-status.warn { color: #d29922; }
+.logs-page-status.error { color: #f85149; }
+
+.logs-page-main {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.logs-page-body {
+    margin: 0;
+    height: 100%;
+    padding: 12px 16px;
+    overflow: auto;
+    font-family: "Cascadia Code", "Consolas", "Menlo", monospace;
+    font-size: var(--cw-console-font-size, 14px);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #ffffff;
+    background: #0d1117;
 }

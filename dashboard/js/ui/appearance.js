@@ -31,6 +31,19 @@ const FONT_OPTIONS = [
 
 const SIZE_OPTIONS = [13, 14, 15, 16, 17, 18];
 
+// Console drawer size presets - "the size feature, plus a 2-option console
+// level". Values land on --cw-console-height / --cw-console-font-size and can
+// be tuned per system (see .cw-console / .cw-console-body in styles.css).
+const CONSOLE_SIZE_OPTIONS = [
+    { value: "compact", label: "Compact (60% height)" },
+    { value: "large", label: "Large (75% height) - default" },
+];
+
+const CONSOLE_SIZE_STYLES = {
+    compact: { height: "60%", fontSize: "12.5px" },
+    large: { height: "75%", fontSize: "14px" },
+};
+
 const FONT_SIZE_LABELS = {
     13: "13px (small)",
     14: "14px",
@@ -89,6 +102,13 @@ export function applyAppearance(appearance) {
     } else {
         root.style.removeProperty("--app-font-size");
     }
+
+    // Console drawer size (from the Console size picker; "large" default).
+    const consoleStyle =
+        CONSOLE_SIZE_STYLES[(appearance && appearance.consoleSize) || "large"] ||
+        CONSOLE_SIZE_STYLES.large;
+    root.style.setProperty("--cw-console-height", consoleStyle.height);
+    root.style.setProperty("--cw-console-font-size", consoleStyle.fontSize);
 }
 
 /**
@@ -164,6 +184,23 @@ export function renderAppearance({ mountEl, settings = {}, onSave }) {
     sizeField.appendChild(sizeSelect);
     panel.appendChild(sizeField);
 
+    // ---- Console size (2-option level of the size feature) ----
+    const consoleSizeField = document.createElement("label");
+    consoleSizeField.className = "field";
+    consoleSizeField.appendChild(document.createElement("span")).textContent = "Console size";
+    const consoleSizeSelect = document.createElement("select");
+    consoleSizeSelect.id = "appearance-console-size";
+    const currentConsoleSize = (appearance.consoleSize === "compact" || appearance.consoleSize === "large")
+        ? appearance.consoleSize
+        : "large";
+    CONSOLE_SIZE_OPTIONS.forEach((opt) => {
+        const option = new Option(opt.label, opt.value);
+        if (opt.value === currentConsoleSize) option.selected = true;
+        consoleSizeSelect.appendChild(option);
+    });
+    consoleSizeField.appendChild(consoleSizeSelect);
+    panel.appendChild(consoleSizeField);
+
     // ---- Live preview ----
     const preview = el(
         "div",
@@ -196,6 +233,7 @@ export function renderAppearance({ mountEl, settings = {}, onSave }) {
                 theme: themeSelect.value,
                 fontFamily: familySelect.value.trim(),
                 fontSize: Number(sizeSelect.value) || 0,
+                consoleSize: consoleSizeSelect.value,
             },
         };
         saveBtn.disabled = true;
@@ -221,6 +259,7 @@ export function renderAppearance({ mountEl, settings = {}, onSave }) {
             theme: themeSelect.value,
             fontFamily: familySelect.value.trim(),
             fontSize: Number(sizeSelect.value) || 0,
+            consoleSize: consoleSizeSelect.value,
         }),
     };
 }

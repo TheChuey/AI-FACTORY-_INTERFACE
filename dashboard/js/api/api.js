@@ -147,7 +147,13 @@ export async function sendChat({ message, agentId = "", model = "", history = []
             rag,
         }),
     });
-    return { reply: data.reply, session_id: data.session_id, title: data.title, events: data.events || [] };
+    return { reply: data.reply, session_id: data.session_id, title: data.title, events: data.events || [], tool_events: data.tool_events || [] };
+}
+
+/** Tail of the captured server console (boot prints + uvicorn output). */
+export async function getConsoleLogs(limit = 300) {
+    const data = await request(`/api/logs/console?limit=${limit}`);
+    return { logs: data.logs || [], captured: Boolean(data.captured) };
 }
 
 /** Header rows for every saved chat + the active one, newest first. */

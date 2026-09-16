@@ -153,6 +153,8 @@ const ICON_PATHS = {
     chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
     monitor: '<rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>',
     message: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>',
+    fullscreen: '<polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line>',
+    restore: '<polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line>',
 };
 
 function createIcon(name, size = 14) {
@@ -491,6 +493,11 @@ class ChatWindow {
         this.actionHandlers = {};
         this.sendHandler = null;
         this.toggleHandler = null;
+
+        // Console drawer: agent chips (active-agent list) + click handler.
+        this._consoleAgents = [];
+        this._consoleAgentActiveId = null;
+        this._consoleAgentHandler = null;
         this.renderMarkdown =
             typeof config.renderMarkdown === "function"
                 ? config.renderMarkdown
@@ -507,12 +514,15 @@ class ChatWindow {
         this._saveStatus = null;
         this._panelBtn = null;
         this._minBtn = null;
+        this._maxBtn = null;
         this._agentSelect = null;
         this._headerToggle = null;
         this._widgetLauncher = null;
         this._typingEl = null;
         this._welcomeEl = null;
         this._sizeBeforeMinimize = null;
+        this.isMaximized = false;
+        this._sizeBeforeMaximize = null;
 
         this._build();
     }
@@ -525,6 +535,7 @@ class ChatWindow {
                 ? "chat-window cw-widget cw-collapsed"
                 : "chat-window cw-hidden",
         });
+        root.style.setProperty("--cw-widget-width", `${this.layout.width}px`);
         if (!this._flyout) {
             root.style.width = `${this.layout.width}px`;
             root.style.height = `${this.layout.height}px`;
@@ -619,6 +630,15 @@ class ChatWindow {
             });
             actions.appendChild(observeBtn);
         }
+
+        this._maxBtn = createElement("button", {
+            className: "cw-icon-btn",
+            title: "Fill the window",
+            ariaLabel: "Fill the window",
+        });
+        this._maxBtn.type = "button";
+        this._maxBtn.appendChild(createIcon("fullscreen"));
+        actions.appendChild(this._maxBtn);
 
         this._minBtn = createElement("button", {
             className: "cw-icon-btn",
@@ -806,6 +826,14 @@ class ChatWindow {
     close() {
         this.isOpen = false;
         this.isMinimized = false;
+        if (this.isMaximized) {
+            this.isMaximized = false;
+            this._sizeBeforeMaximize = null;
+            if (this.element) {
+                this.element.classList.remove("cw-fullscreen");
+            }
+            this._syncMaxBtn();
+        }
 
         if (this._flyout) {
             // Collapse back to the persistent corner button.
@@ -831,6 +859,12 @@ class ChatWindow {
 
     /** Minimize to a header bar, or restore the previous size. */
     minimize() {
+        if (this.isMaximized) {
+            // Fullscreen has no smaller state to go to - restore first.
+            this.toggleFullscreen(false);
+            return;
+        }
+
         // In flyout mode "minimize" collapses the widget back to the button.
         if (this._flyout) {
             if (this.isMinimized) {
@@ -879,6 +913,60 @@ class ChatWindow {
                 this._minBtn.title = "Restore";
             }
         }
+    }
+
+    /** Expand the chat window to fill the whole browser viewport. */
+    toggleFullscreen(force) {
+        if (this.element && typeof force === "boolean" && this.isMaximized === force) {
+            return;
+        }
+        this.isMaximized = !this.isMaximized;
+
+        if (this.isMaximized) {
+            const rect = this.element.getBoundingClientRect();
+            this._sizeBeforeMaximize = {
+                width: rect.width,
+                height: rect.height,
+                left: rect.left,
+                top: rect.top,
+            };
+            this.element.classList.add("cw-fullscreen");
+        } else {
+            this.element.classList.remove("cw-fullscreen");
+            if (this._sizeBeforeMaximize && !this._flyout) {
+                const s = this._sizeBeforeMaximize;
+                this.element.style.width = `${s.width}px`;
+                this.element.style.height = `${s.height}px`;
+                this.element.style.left = `${s.left}px`;
+                this.element.style.top = `${s.top}px`;
+            } else {
+                // Flyout: the normal geometry is CSS-driven (bottom-right);
+                // clear any inline leftovers so the widget returns home.
+                this.element.style.width = "";
+                this.element.style.height = "";
+                this.element.style.left = "";
+                this.element.style.top = "";
+            }
+            this._sizeBeforeMaximize = null;
+        }
+        this._syncMaxBtn();
+        if (this.isMaximized && this._input) {
+            this._input.focus();
+        }
+    }
+
+    setFullscreen(enabled) {
+        this.toggleFullscreen(enabled);
+    }
+
+    _syncMaxBtn() {
+        if (!this._maxBtn) {
+            return;
+        }
+        const maximized = this.isMaximized;
+        this._maxBtn.title = maximized ? "Restore window" : "Fill the window";
+        this._maxBtn.setAttribute("aria-label", maximized ? "Restore window" : "Fill the window");
+        this._maxBtn.replaceChildren(createIcon(maximized ? "restore" : "fullscreen"));
     }
 
     /** Show/hide the right panel (chat area fills the freed space). */
@@ -939,6 +1027,223 @@ class ChatWindow {
             this._messageBody.replaceChildren();
         }
         this._renderWelcome();
+    }
+
+    /* ---------- console output (tool logs + startup logs, no bubbles) ---------- */
+
+    /** Lazy-create a console drawer inside the chat area (the main body
+     * container). It only appears once there is something to show, so
+     * ordinary conversations are never affected. */
+    _ensureConsole() {
+        if (this._console) {
+            return this._console;
+        }
+        const el = createElement("div", { className: "cw-console cw-collapsed" });
+
+        const grip = createElement("div", { className: "cw-console-grip", title: "Drag to resize the console" });
+        el.appendChild(grip);
+
+        const head = createElement("div", { className: "cw-console-head" });
+        const toggle = createElement("button", { className: "cw-console-toggle", type: "button" });
+        toggle.title = "Collapse / expand console output";
+        toggle.appendChild(createElement("span", { className: "cw-console-title", text: "Console output" }));
+        this._consoleAgentsBadge = createElement("span", { className: "cw-console-badge" });
+        toggle.appendChild(this._consoleAgentsBadge);
+        toggle.appendChild(createIcon("chevronDown", 13));
+        toggle.addEventListener("click", () => el.classList.toggle("cw-collapsed"));
+        head.appendChild(toggle);
+
+        const actions = createElement("div", { className: "cw-console-actions" });
+        actions.appendChild(createButton("Send to agent", () => this.sendConsoleToAgent(), "cw-console-btn cw-console-send"));
+        actions.appendChild(createButton("Ask in input", () => this.loadConsoleIntoInput(), "cw-console-btn"));
+        actions.appendChild(createButton("Clear", () => this.clearConsole(), "cw-console-btn"));
+        actions.appendChild(createButton("Pop out", () => this.openConsolePage(), "cw-console-btn"));
+        head.appendChild(actions);
+
+        this._consoleAgentsEl = createElement("div", { className: "cw-console-agents" });
+
+        const bodyEl = createElement("pre", { className: "cw-console-body" });
+        el.appendChild(head);
+        el.appendChild(this._consoleAgentsEl);
+        el.appendChild(bodyEl);
+
+        this._console = el;
+        this._consoleBody = bodyEl;
+        this._consoleGrip = grip;
+        this._initConsoleResize(el, grip);
+        this._renderConsoleAgents();
+        if (this._messageBody && this._messageBody.parentNode) {
+            this._messageBody.parentNode.insertBefore(el, this._messageBody.nextSibling);
+        }
+        return el;
+    }
+
+    /** Render the discovered agents as clickable chips + the count badge. */
+    _renderConsoleAgents() {
+        if (!this._console || !this._consoleAgentsEl) {
+            return;
+        }
+        this._consoleAgentsEl.replaceChildren();
+        this._consoleAgents.forEach((agent) => {
+            const chip = createElement("button", {
+                className: "cw-console-agent-chip",
+                title: `Chat with ${agent.name || agent.id}`,
+                text: (agent.name || agent.id || "?") + (agent.mode ? ` \u00b7 ${agent.mode}` : ""),
+            });
+            chip.type = "button";
+            const isActive = String(agent.id) === String(this._consoleAgentActiveId);
+            if (isActive) {
+                chip.classList.add("cw-active");
+            }
+            chip.addEventListener("click", () => {
+                if (this._consoleAgentActiveId !== agent.id) {
+                    this._consoleAgentActiveId = agent.id;
+                    this._renderConsoleAgents();
+                }
+                if (typeof this._consoleAgentHandler === "function") {
+                    this._consoleAgentHandler(agent.id);
+                }
+            });
+            this._consoleAgentsEl.appendChild(chip);
+        });
+
+        const count = this._consoleAgents.length;
+        this._consoleAgentsBadge.textContent = count > 0 ? `\u00b7 ${count} agents` : "";
+    }
+
+    /** List the active agents + which one the chat is currently talking to. */
+    setConsoleAgents(agents, activeId = null) {
+        this._consoleAgents = Array.isArray(agents) ? agents : [];
+        this._consoleAgentActiveId = activeId;
+        this._ensureConsole();
+        this._renderConsoleAgents();
+    }
+
+    /** Highlight which agent chip is the one being chatted with. */
+    setActiveConsoleAgent(agentId) {
+        this._consoleAgentActiveId = agentId;
+        if (this._console) {
+            this._renderConsoleAgents();
+        }
+    }
+
+    /** Register the handler fired when an agent chip is clicked. */
+    onConsoleAgent(callback) {
+        this._consoleAgentHandler = typeof callback === "function" ? callback : null;
+    }
+
+    /** Drag the grip to grow/shrink the console (overrides the preset var). */
+    _initConsoleResize(consoleEl, grip) {
+        let dragging = null;
+
+        const onMove = (event) => {
+            if (!dragging) {
+                return;
+            }
+            const delta = dragging.startY - event.clientY; // moving up grows it
+            const next = Math.min(
+                Math.max(dragging.startHeight + delta, 140),
+                Math.round(dragging.maxHeight * 0.97)
+            );
+            consoleEl.style.flexBasis = next + "px";
+            if (this._consoleBody) {
+                this._consoleBody.scrollTop = this._consoleBody.scrollHeight;
+            }
+        };
+
+        const onUp = () => {
+            if (!dragging) {
+                return;
+            }
+            dragging = null;
+            grip.releasePointerCapture && grip.releasePointerCapture(event?.pointerId);
+            document.body.classList.remove("cw-resizing");
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+        };
+
+        grip.addEventListener("pointerdown", (event) => {
+            if (!this._console) {
+                return;
+            }
+            event.preventDefault();
+            const bodyHeight = this._console.parentNode
+                ? this._console.parentNode.clientHeight
+                : document.documentElement.clientHeight;
+            dragging = {
+                startY: event.clientY,
+                startHeight: this._console.offsetHeight,
+                maxHeight: Math.max(bodyHeight, 140),
+            };
+            if (grip.setPointerCapture) {
+                grip.setPointerCapture(event.pointerId);
+            }
+            document.body.classList.add("cw-resizing");
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
+        });
+    }
+
+    /** Append a text block to the console drawer and reveal it. */
+    appendConsoleBlock(text) {
+        this._ensureConsole();
+        const content = String(text ?? "").trim();
+        if (!content) {
+            return;
+        }
+        const pre = this._consoleBody;
+        if (pre.textContent) {
+            pre.appendChild(document.createTextNode("\n\n"));
+        }
+        pre.appendChild(document.createTextNode(content));
+        pre.scrollTop = pre.scrollHeight;
+        this._console.classList.remove("cw-collapsed");
+    }
+
+    /** Empty the console drawer (keeps it visible). */
+    clearConsole() {
+        if (this._consoleBody) {
+            this._consoleBody.textContent = "";
+        }
+    }
+
+    /** The current console text (clean of ANSI codes), trimmed. */
+    getConsoleText() {
+        return this._consoleBody ? this._consoleBody.textContent : "";
+    }
+
+    /** Post the console output to the current agent as a user message. */
+    sendConsoleToAgent() {
+        const text = this.getConsoleText().trim();
+        if (!text) {
+            this.addSystemMessage("Console output is empty - nothing to send.");
+            return;
+        }
+        this.sendText(text);
+    }
+
+    /** Load the console output into the composer so the user can append their
+     * own question and send it manually. */
+    loadConsoleIntoInput() {
+        const text = this.getConsoleText().trim();
+        if (!text) {
+            this.addSystemMessage("Console output is empty - nothing to load.");
+            return;
+        }
+        this.setInputValue(text);
+        if (this._input) {
+            this._input.focus();
+        }
+    }
+
+    /** Open the standalone full-page log viewer in its own independent window
+     * (specific dimensions; a stable target name reuses the same window). */
+    openConsolePage() {
+        window.open(
+            "/static/logs.html",
+            "console_logs",
+            "width=1000,height=700,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes"
+        );
     }
 
     /** Enable/disable the composer and show/hide the typing indicator. */
@@ -1119,12 +1424,37 @@ class ChatWindow {
         }
     }
 
+    /** Push pre-written text through the normal send pipeline: shown as a user
+     * bubble, then handed to the registered sendHandler (e.g. the console's
+     * "send output to agent" flow). */
+    sendText(text) {
+        const value = String(text ?? "").trim();
+        if (!value || this.isWaiting) {
+            return;
+        }
+        this.addUserMessage(value);
+        if (typeof this.sendHandler === "function") {
+            this.sendHandler(value, this);
+        } else {
+            this.addSystemMessage("No send handler is registered for this chat window.");
+        }
+    }
+
     /* ---------- internal wiring ---------- */
 
     _bindWindow() {
         window.addEventListener("resize", () => {
-            if (this.isOpen) {
+            if (this.isOpen && !this.isMaximized) {
                 this._keepInViewport();
+            }
+        });
+
+        if (this._maxBtn) {
+            this._maxBtn.addEventListener("click", () => this.toggleFullscreen());
+        }
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && this.isMaximized) {
+                this.toggleFullscreen(false);
             }
         });
 
@@ -1170,6 +1500,9 @@ class ChatWindow {
     _bindDragHeader(header) {
         header.style.touchAction = "none";
         header.addEventListener("pointerdown", (event) => {
+            if (this.isMaximized) {
+                return; // fullscreen windows don't get dragged
+            }
             if (event.target.closest(".cw-window-actions")) {
                 return; // let the buttons work normally
             }
@@ -1216,6 +1549,9 @@ class ChatWindow {
      * is also nudged back if it would slide off-screen.
      */
     _beginResize(edge, event) {
+        if (this.isMaximized) {
+            return; // no edge-resizing while fullscreen
+        }
         event.preventDefault();
 
         const hasN = edge.includes("n");
@@ -1276,7 +1612,7 @@ class ChatWindow {
 
     /** Keep the window fully inside the viewport (after open/resize). */
     _keepInViewport() {
-        if (!this.element) {
+        if (!this.element || this.isMaximized) {
             return;
         }
         const rect = this.element.getBoundingClientRect();
