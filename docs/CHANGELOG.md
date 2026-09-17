@@ -3,6 +3,148 @@
 All notable changes to this project. Format based on Keep a Changelog
 (https://keepachangelog.com/), grouped by date.
 
+## 2026-09-17 — Agent monitoring subsystem (`agent_monitoring/`)
+
+A new top-level backend package records per-turn agent telemetry and exposes
+it under `/api/monitoring/*`, without editing the engine or any existing
+chat/tool route. Monitoring is wired in at the HTTP boundary only.
+
+### Added — backend
+
+- `agent_monitoring/store.py` — `MonitoringStore`: thread-safe, fail-safe
+  JSONL persistence at `<dataDir>/monitoring/agent_metrics.jsonl`. Malformed
+  lines are skipped on read, and a disk error never breaks the caller.
+- `agent_monitoring/collector.py` — `MetricsCollector`: in-memory active
+  session tracking (`turns_count`, `total_duration_ms`) plus cumulative
+  system-turn math. Lock-guarded for the FastAPI threadpool.
+- `agent_monitoring/backup.py` — `BackupManager`: timestamped snapshot copies
+  under `<dataDir>/snapshots/monitoring/` and formatted JSON exports under
+  `<dataDir>/exports/`.
+- `agent_monitoring/manager.py` — `MonitoringService` facade (the sole entry
+  point into the package) and the `get_monitoring_service()` process
+  singleton. `safe_reset()` snapshots the log before clearing it.
+- `agent_monitoring/router.py` — `APIRouter(prefix="/api/monitoring")`.
+- `agent_monitoring/__init__.py` — package boundary.
+- `server/server.py` — the router is mounted via `app.include_router(...)`.
+  `POST /api/chat` now times `agent.think()` and records `session_start` +
+  an `agent_turn` event (fail-safe: telemetry can never break a reply), and
+  `POST /api/chats/end` closes the session.
+
+### Added — API
+
+- `GET /api/monitoring/status` — `{status, active_sessions, total_system_turns}`.
+- `GET /api/monitoring/records` — every stored telemetry record.
+- `POST /api/monitoring/export` — writes a JSON telemetry report to `exports/`.
+- `POST /api/monitoring/reset` — snapshots the metrics log, then clears it.
+
+### Notes
+
+- Paths resolve through `server/paths.py` (`DATA_DIR` / `EXPORTS_DIR`), so the
+  store follows the configured data folder like the rest of the app.
+- In-memory session counters reset on restart; the JSONL log is the durable
+  record.
+
+## 2026-09-16 — Agent id no longer tied to the folder name
+
+New agents could fail with `(unknown agent '<id>' - is the folder present in
+agent_library/?)` when their `agent.json` `id` differed from their folder name
+(e.g. folder `Feature Planner Agent/` with id `feature_planner_agent`). The
+registry announced agents by their `agent.json` id, but `load_definition()`
+looked up the folder by treating the id as the literal path, so the two new
+agents (`feature_planner_agent`, `feature_clarifier_agent`) were listed yet
+unusable in `/api/chat` and on the Settings agent cards.
+
+### Fixed — backend
+
+- `engine/agents/loader.py` — folder lookup is now **id-aware**:
+  `agent_dir(agent_id)` first tries the literal `agent_library/<agent_id>`
+  folder (fast path), then scans `agent_library/*/agent.json` and returns the
+  first folder (sorted, deterministic) whose `meta["id"]` matches. Falls back
+  to the literal path when nothing matches, so `save_markdown` can still
+  create folders for brand-new ids. `load_definition()` uses the same
+  resolver, fixing both `/api/chat` and `GET/PUT /api/agents/{id}/config`.
+  Folder names with spaces / kebab-case / any case now work as long as
+  `agent.json#id` is set.
+- `server/server.py` — `_default_agent()` now resolves the no-`agent_id`
+  chat default correctly: it reads `defaultAgentId` from
+  `dashboard/config/app_settings.json` (the same value the Settings page's
+  dropdown writes), then the legacy `config/settings.json` `default_agent`,
+  falling back to `rag_assistant` instead of the deleted `basic_chat`.
+- `dashboard/config/app_settings.json` — `defaultAgentId` updated from the
+  deleted `dev_assistant` to the existing `rag_assistant`.
+
+### Notes
+
+- The previous demo agents (`basic_chat`, `dev_assistant`,
+  `problem_discovery_agent`) were removed from `engine/agent_library/` in the
+  working tree; `rag_assistant` is now the safe default.
+
+## 2026-09-16 — Tool-usage tracker (console log monitor)
+
+The console log monitor (`dashboard/logs.html`) now has a **Tool Usage** tab
+next to **Console**: a structured, chronological feed of every tool call
+agents make, with a full timestamp, the agent (id + name), model, tool name,
+arguments, status and a result/error preview. Unlike the chat widget's
+per-request `tool_events`, this feed is a running record that survives server
+restarts.
+
+### Added — backend
+
+- `server/tool_log.py` — process-wide, append-only tool-usage log. Each event
+  is written as one JSON line to `data/toollog/tool_usage.jsonl` (path resolved
+  through `server/paths.py`, so it follows the configured dataDir like the rest
+  of the chat data), AND kept in a bounded in-memory deque for live reads. The
+  tail is seeded from disk once at import so a restarted server still shows
+  recent history without duplicating fresh events. `append()` is thread-safe
+  and fail-safe (a disk/serialization error never breaks the tool call).
+  `tail(limit, tool, agent, since)` serves the feed with optional filters.
+  Event shape: `{time (ISO), agentId, agentName, model, tool, args, status,
+  result_preview | error, origin ("native tool_calls" | "TEXT reply")}`.
+- `server/paths.py` — `TOOL_LOG_FILE` (`<dataDir>/toollog/tool_usage.jsonl`)
+  and a `tool_log_file` field in `paths.about()`.
+- `engine/core/agent.py` — `Agent.act()` now reports every success/error/missing
+  tool call to `tool_log` via a new fail-safe `_log_tool_event()` helper (agent
+  id/name + model + ISO timestamp are stamped there). `think()` passes the call
+  origin through to `act()` for the `origin` field. `Agent.tool_events` (the
+  chat drawer) is unchanged.
+- `server/server.py` — new `GET /api/logs/tools?limit=&tool=&agent=&since=`
+  endpoint returning `{events, total, captured}`, newest first.
+
+### Added — frontend
+
+- `dashboard/logs.html` — a `Console | Tool Usage` tab bar in the header plus
+  a second `<pre>` body for the tool feed (both bodies live in the same main
+  column, one visible at a time).
+- `dashboard/js/classes/terminal-window-out.js` — `cleanPreview` and
+  `formatArgs` are now exported for reuse by the logs page.
+- `dashboard/js/logs-page.js` — polls `/api/logs/tools` every 2s alongside the
+  console feed, appends only new events (chronologically), and renders each as
+  `[<ISO-time>] [OK|ERR|MISS] <agent> - <tool>(<args>)` with a result/error
+  preview. Pause/Clear/Copy operate on whichever tab is active.
+- `dashboard/css/styles.css` — `.logs-page-tabs` / `.logs-page-tab(.active)`
+  pill-toggle styles in SECTION 10.
+
+### Testing note (incomplete — to be finished)
+
+The live HTTP round-trip of `/api/logs/tools` was **not** completed: on this
+machine port `8000` was already in use by an earlier server instance, so a
+fresh boot of `server/server.py` could not bind there (the test was stopped on
+purpose; the user will fix the port situation and re-run later). Everything
+else was verified directly:
+
+- `server/tool_log` appends + filters work: `tail()`, `tail(tool=...)`,
+  `tail(agent=...)`, `tail(since=...)`, newest-first, no duplicates after the
+  at-import seed fix.
+- Full agent path verified without Ollama: `build_agent("dev_assistant")` +
+  `agent.act()` (both a success and a missing-file read) produced correctly
+  shaped events in the JSONL tail with agent id/name/model.
+- `python -m py_compile` passes for every touched Python file.
+
+To finish: start `server/server.py` on a free port, chat with a tool-using
+agent, confirm rows appear in `data/toollog/tool_usage.jsonl`, `GET
+/api/logs/tools` returns them, and the logs.html **Tool Usage** tab streams
+them live.
+
 ## 2026-09-15 — Chat console output (tool logs + captured startup logs)
 
 The tool calls an agent makes during a chat now surface in a console drawer

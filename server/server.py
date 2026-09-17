@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 import subprocess
 
 # Make `python server.py` work from anywhere (server/, root, ...):
@@ -38,6 +39,7 @@ from engine.agents.factory import build_agent, replay_history, AgentNotFoundErro
 from server.chat_store import store as chat_store
 from server import paths
 from server import console_log
+from server import tool_log
 
 # Modular interface layer (docs/01_IDEA_AND_ARCHITECTURE.md): update modules
 # under interface/updates/<domain>/ are discovered and executed natively.
@@ -54,6 +56,11 @@ from interface.restore_manager import (RestoreManager, get_restore_manager,
 # 'custom' domain, so core code can call them via the traced dispatcher.
 from interface.custom_module_manager import get_custom_module_manager
 from interface.wiring import WiringManager
+
+# Agent monitoring subsystem (top-level agent_monitoring/ package): telemetry
+# store + metrics collector + snapshots/exports, exposed at /api/monitoring/*.
+from agent_monitoring.router import router as monitoring_router
+from agent_monitoring import get_monitoring_service
 
 # Runs once at startup; scans data/chatlog/agent-text-records/*.txt and records
 # their header info in data/chatlog/chatRecord.jsonl so past chats appear in
@@ -97,14 +104,26 @@ def _save_json(path, value) -> None:
 def _default_agent() -> str:
     """The agent used when a chat request carries no agent_id.
 
-    Comes from config/settings.json ("default_agent"); falls back to
-    "basic_chat" when the file is missing or unreadable.
+    Resolution order:
+        1. "defaultAgentId" in the dashboard's consolidated settings
+           (dashboard/config/app_settings.json) - the same value the Settings
+           page's "default agent" dropdown writes;
+        2. the legacy "default_agent" key in config/settings.json;
+        3. "rag_assistant" (the previous fallbacks, basic_chat/dev_assistant,
+           no longer ship with the library).
     """
     try:
-        settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-        return settings.get("default_agent") or "basic_chat"
+        app_settings = json.loads(APP_SETTINGS_FILE.read_text(encoding="utf-8"))
+        agent_id = app_settings.get("defaultAgentId") or ""
+        if agent_id:
+            return agent_id
     except (OSError, json.JSONDecodeError):
-        return "basic_chat"
+        pass
+    try:
+        settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        return settings.get("default_agent") or "rag_assistant"
+    except (OSError, json.JSONDecodeError):
+        return "rag_assistant"
 
 
 # Startup hook: scan Ollama models BEFORE any request is served, and import
@@ -395,11 +414,27 @@ def chat(data: ChatRequest):
     for turn in session.get("messages", []):
         agent.messages.append({"role": turn.get("role"), "content": turn.get("content", "")})
 
+    _started = time.perf_counter()
     reply = agent.think(data.message)
+    _duration_ms = (time.perf_counter() - _started) * 1000.0
     session = chat_store.append_turn(data.message, reply) or session
     print(f"[SERVER] Reply via {agent.model}: {reply[:120]}...")
 
     tool_logs = getattr(agent, "tool_events", [])
+
+    # Telemetry hook (fail-safe): logging must never break a chat reply.
+    try:
+        m_service = get_monitoring_service()
+        m_service.collector.start_session(session["id"], agent_id)
+        m_service.log_agent_turn(
+            agent_id=agent_id,
+            duration_ms=_duration_ms,
+            tool_calls_count=len(getattr(agent, "tool_events", [])),
+            session_id=session["id"],
+        )
+    except Exception:
+        pass
+
     return {
         "reply": reply,
         "session_id": session["id"],
@@ -418,6 +453,17 @@ async def console_logs(limit: int = 300):
     the standalone pop-out page (dashboard/logs.html), which apply their own
     filtering client-side."""
     return {"logs": console_log.tail(limit=limit), "captured": console_log.captured()}
+
+
+@app.get("/api/logs/tools")
+async def tool_logs(limit: int = 500, tool: str = "", agent: str = "", since: str = ""):
+    """Structured tool-usage feed: every tool call agents have made (the app's
+    own log, data/toollog/tool_usage.jsonl), newest first. Each event carries
+    an ISO timestamp, agent id/name, model, tool name, args, status and a
+    result/error preview. Optional filters: `tool` (exact ID), `agent`
+    (substring of id or name), `since` (ISO timestamp)."""
+    events = tool_log.tail(limit=limit, tool=tool, agent=agent, since=since)
+    return {"events": events, "total": len(events), "captured": tool_log.captured()}
 
 
 # --- CHAT SESSIONS (server-side organization) ---
@@ -455,6 +501,11 @@ async def end_chat(payload: dict = None):
     )
     if not row:
         return {"finalized": False, "saved": False, "error": "No active chat to finalize."}
+    try:
+        if row and row.get("id"):
+            get_monitoring_service().collector.end_session(row["id"])
+    except Exception:
+        pass
     return {"finalized": True, "saved": True, "file": row["fileName"], "id": row["id"], "version": row["version"]}
 
 
@@ -740,6 +791,8 @@ async def save_export(payload: dict):
     print(f"[EXPORTS] wrote {md_path.name} + {json_path.name}")
     return {"saved": True, "files": [md_path.name, json_path.name]}
 
+
+app.include_router(monitoring_router)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

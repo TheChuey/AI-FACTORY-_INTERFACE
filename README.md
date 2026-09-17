@@ -144,11 +144,24 @@ terminator1/
 │   ├── paths.py              # Config-driven runtime path authority: dataDir /
 │   │                         # chatSavePath / ragDbPath / customModulesPath
 │   │                         # (incl. per-OS *Linux overrides) / RAG switches.
+│   ├── console_log.py        # Ring-buffer capture of stdout/stderr + logging
+│   │                         # (GET /api/logs/console -> logs.html + chat drawer).
+│   ├── tool_log.py           # Append-only tool-usage log (JSONL + in-memory
+│   │                         # tail): every tool call agents make, with agent,
+│   │                         # timestamp, args, status (GET /api/logs/tools).
 │   └── chat_store/           # Server-side chat session + chat log
 │       ├── store.py          # ensure_session / append_turn / finalize_session,
 │       │                     # the one-active-chat state, .txt transcripts,
 │       │                     # chatRecord.jsonl (create/read/delete).
 │       └── logger.py         # Small helpers the store uses to log rows.
+│
+├── agent_monitoring/         # Top-level telemetry subsystem (HTTP-boundary only)
+│   ├── __init__.py           # Package boundary: re-exports the public facade
+│   ├── store.py              # MonitoringStore: fail-safe JSONL persistence
+│   ├── collector.py          # MetricsCollector: in-memory session + turn metrics
+│   ├── backup.py             # BackupManager: snapshots + JSON exports
+│   ├── manager.py            # MonitoringService facade + get_monitoring_service()
+│   └── router.py             # APIRouter -> /api/monitoring/* (status/records/export/reset)
 │
 ├── engine/                   # The agent engine
 │   ├── core/
@@ -327,6 +340,12 @@ Agent modes:
 | `POST /api/interface/restore` | `{baseline?, apply?, dryRun?}` — roll back (dry-run by default) |
 | `POST /api/interface/run` | Execute an update-module function (`{domain, module, function, args?, kwargs?}`) |
 | `POST /api/interface/toggle-run` | `{enabled}` — arm/disarm module execution for the process |
+| `GET /api/logs/console` | Tail of the captured console output (feeds the chat console drawer + `logs.html`) |
+| `GET /api/logs/tools` | Structured tool-usage feed (newest first; filter by `tool`, `agent`, `since`; from `data/toollog/tool_usage.jsonl`) |
+| `GET /api/monitoring/status` | Agent telemetry status: active sessions + cumulative system turns |
+| `GET /api/monitoring/records` | Every stored telemetry record (`<dataDir>/monitoring/agent_metrics.jsonl`) |
+| `POST /api/monitoring/export` | Write a JSON telemetry report to `<dataDir>/exports/` |
+| `POST /api/monitoring/reset` | Snapshot the metrics log, then clear it (safe reset) |
 | `POST /api/chat` | `{message, model, agent_id, history, session_id?, title?, new_chat?, rag?}` → `{reply, session_id, title}` |
 | `GET /api/chats` | Chat log + the active chat (feeds the chats drop-down) |
 | `GET /api/chats/{id}` | One chat: log row + `.txt` content + parsed messages |
@@ -527,7 +546,12 @@ your own risk — it runs arbitrary functions from `interface/updates/`.
 ## Recent changes
 
 See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for the full history. The most
-recent entry covers the **dynamic module UI actions + developer guide**: a
+recent entry covers the **`agent_monitoring/` telemetry subsystem**: a
+top-level, HTTP-boundary-only package that records per-turn agent duration and
+tool-call counts to `<dataDir>/monitoring/agent_metrics.jsonl`, tracks active
+sessions, and exposes `GET /api/monitoring/status|records` plus
+`POST /api/monitoring/export|reset` (reset snapshots before clearing). Before
+that, the entry covering the **dynamic module UI actions + developer guide**: a
 manifest button can now be a `dropdown_menu` (flyout), `open_modal`
 (schema-driven form), `qa_survey` (step wizard) or `prompt_input`, any response
 with `indicate_success: true` lights a green status-dot, and the new

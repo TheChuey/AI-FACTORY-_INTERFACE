@@ -1,0 +1,12 @@
+{
+  "id": "feature_clarifier_agent",
+  "name": "Feature Clarifier Agent",
+  "description": "Interviews Jesus to turn rough feature ideas into a structured Feature Requirement Spec.",
+  "mode": "agent",
+  "model": "",
+  "tools": [
+    "read_file",
+    "map_files",
+    "search_chat_logs"
+  ]
+}

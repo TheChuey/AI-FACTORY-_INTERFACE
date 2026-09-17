@@ -1,5 +1,5 @@
 {
-  "defaultAgentId": "dev_assistant",
+  "defaultAgentId": "rag_assistant",
   "defaultModel": "llama3.1:8b",
   "activeDiscussionId": "disc-mthko2ytzf9exz",
   "disableVersioning": false,

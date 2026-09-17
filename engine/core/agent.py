@@ -289,7 +289,7 @@ class Agent:
             origin = "native tool_calls" if message.get("tool_calls") else "TEXT reply"
             print(f"[Agent.think] Executing {len(tool_calls)} tool call(s) from {origin}.")
             for tool_call in tool_calls:
-                result = self.act(tool_call)
+                result = self.act(tool_call, origin)
                 self.observe(tool_call["function"]["name"], result)
 
             self._inject_session_context()
@@ -331,7 +331,7 @@ class Agent:
                 return
         self.messages.append({"role": self._SESSION_CONTEXT_ROLE, "content": context})
 
-    def act(self, tool_call: dict) -> str:
+    def act(self, tool_call: dict, origin: str = "") -> str:
         """Run one tool that the LLM asked for, using the name and args it chose."""
         name = tool_call.get("function", {}).get("name")
         args = self._normalize_args(name, tool_call.get("function", {}).get("arguments", {}))
@@ -347,6 +347,14 @@ class Agent:
                     "result_preview": result[:200],
                     "status": "success",
                 })
+                self._log_tool_event({
+                    "time": timestamp,
+                    "tool": name,
+                    "args": args,
+                    "result_preview": result[:200],
+                    "status": "success",
+                    "origin": origin,
+                })
                 return result
             except Exception as e:
                 print(f"[Agent.act] Error executing {name}: {e}")
@@ -357,6 +365,14 @@ class Agent:
                     "error": str(e),
                     "status": "error",
                 })
+                self._log_tool_event({
+                    "time": timestamp,
+                    "tool": name,
+                    "args": args,
+                    "error": str(e),
+                    "status": "error",
+                    "origin": origin,
+                })
                 return f"Error executing tool: {e}"
         print(f"[Agent.act] Missing tool requested: {name}")
         self.tool_events.append({
@@ -365,7 +381,29 @@ class Agent:
             "args": args,
             "status": "missing",
         })
+        self._log_tool_event({
+            "time": timestamp,
+            "tool": name,
+            "args": args,
+            "status": "missing",
+            "origin": origin,
+        })
         return f"Error: {name} missing"
+
+    def _log_tool_event(self, event: dict) -> None:
+        """Report one structured tool event to the process-wide tool log
+        (server/tool_log.py). Deliberately fail-safe so a logging problem can
+        never break the tool call that just succeeded."""
+        event.setdefault("agentId", self.profile.id or "")
+        event.setdefault("agentName", self.profile.name or "")
+        event.setdefault("model", self.model or "")
+        event["time"] = datetime.now().isoformat(timespec="seconds")
+        try:
+            from server.tool_log import append as _record_tool_event
+
+            _record_tool_event(event)
+        except Exception:
+            pass
 
     def observe(self, name: str, result: str) -> None:
         """Record a tool's result back into the conversation history."""

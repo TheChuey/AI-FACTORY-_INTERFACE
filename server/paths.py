@@ -209,6 +209,10 @@ CUSTOM_MODULES_DIR = _rooted(CUSTOM_MODULES_PATH, DATA_DIR / "custom_modules")
 LOG_FILE = CHATS_DIR / "chatRecord.jsonl"
 ACTIVE_SESSION_FILE = CHATS_DIR / ".active-chat.json"
 
+# Tool-usage log (append-only JSONL of every tool call agents make).
+TOOL_LOG_DIR = DATA_DIR / "toollog"
+TOOL_LOG_FILE = TOOL_LOG_DIR / "tool_usage.jsonl"
+
 # History + exports (server.py).
 HISTORY_FILE = DATA_DIR / "history.json"
 EXPORTS_DIR = DATA_DIR / "exports"
@@ -266,6 +270,7 @@ def about() -> dict:
         "chat_records_dir": str(RECORDS_DIR),
         "chat_log_file": str(LOG_FILE),
         "active_session_file": str(ACTIVE_SESSION_FILE),
+        "tool_log_file": str(TOOL_LOG_FILE),
         "history_file": str(HISTORY_FILE),
         "exports_dir": str(EXPORTS_DIR),
         "rag_db_dir": str(RAG_DB_DIR),

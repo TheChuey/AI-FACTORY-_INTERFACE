@@ -5,12 +5,12 @@
   "mode": "agent",
   "model": "gemma4:e2b",
   "tools": [
-    "search_chat_logs",
-    "get_current_date",
     "map_files",
     "read_file",
     "write_text_file",
-    "delete_files"
+    "delete_files",
+    "get_current_date",
+    "search_chat_logs"
   ],
   "tests": [
     {

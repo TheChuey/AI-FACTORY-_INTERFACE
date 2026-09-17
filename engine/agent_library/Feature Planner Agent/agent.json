@@ -1,0 +1,11 @@
+{
+  "id": "feature_planner_agent",
+  "name": "Feature Planner Agent",
+  "description": "Clarifies feature goals, asks targeted questions about logic origins, reads docs/HOW_TO_USE.md, and creates detailed UI interface and pseudo-logic implementation plans for developers.",
+  "mode": "agent",
+  "model": "gemma4:e2b",
+  "tools": [
+    "read_file",
+    "map_files"
+  ]
+}

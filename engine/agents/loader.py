@@ -24,8 +24,57 @@ AGENT_MD_FILE = "agent.md"
 
 
 def agent_dir(agent_id: str) -> Path:
-    """The folder for an agent id inside agent_library/."""
-    return AGENT_LIBRARY_DIR / agent_id
+    """The folder for an agent id inside agent_library/.
+
+    First tries the literal ``agent_library/<agent_id>`` path (fast path).
+    When that is missing or not a directory, scans ``agent_library/*/agent.json``
+    and returns the first folder (sorted) whose ``meta["id"]`` matches, so
+    folder names with spaces, kebab-case, etc. all work as long as the
+    ``agent.json`` ``id`` field is set. Falls back to the literal path so
+    callers that create folders (``save_markdown``) still work for brand-new
+    agents.
+    """
+    resolved = _resolve_agent_dir(agent_id)
+    return resolved if resolved is not None else AGENT_LIBRARY_DIR / agent_id
+
+
+def _resolve_agent_dir(agent_id: str) -> Path | None:
+    """Find the on-disk folder for an agent by id.
+
+    Two strategies, tried in order:
+        1. Literal: ``AGENT_LIBRARY_DIR / agent_id`` exists and is a directory.
+        2. Scan: walk every subfolder of ``AGENT_LIBRARY_DIR``, read its
+           ``agent.json``, and return the first (sorted by folder name) whose
+           ``meta["id"]`` equals ``agent_id``.
+
+    Returns ``None`` when nothing matches so callers can fall back to the
+    literal path (which preserves the existing create-folder semantics for
+    ``save_markdown`` on genuinely new agents).
+    """
+    literal = AGENT_LIBRARY_DIR / agent_id
+    if literal.is_dir():
+        return literal
+
+    # Scan: read agent.json in each sibling folder, match by "id" field.
+    # Folders are sorted for deterministic tie-breaking when (unlikely)
+    # multiple folders declare the same id.
+    candidates: list[tuple[str, Path]] = []
+    if AGENT_LIBRARY_DIR.exists():
+        for child in AGENT_LIBRARY_DIR.iterdir():
+            if not child.is_dir() or child.name.startswith(("_", ".")):
+                continue
+            meta_file = child / AGENT_META_FILE
+            if not meta_file.exists():
+                continue
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if meta.get("id") == agent_id:
+                candidates.append((child.name, child))
+
+    candidates.sort(key=lambda t: t[0])
+    return candidates[0][1] if candidates else None
 
 
 def save_meta(agent_id: str, meta: dict) -> dict:
@@ -110,7 +159,9 @@ def load_definition(agent_id: str) -> dict:
     Returns {"meta": dict, "sections": dict}. Raises AgentNotFoundError
     when the folder or either required file is missing/unreadable.
     """
-    agent_dir = AGENT_LIBRARY_DIR / agent_id
+    agent_dir = _resolve_agent_dir(agent_id)
+    if agent_dir is None:
+        agent_dir = AGENT_LIBRARY_DIR / agent_id
     json_file = agent_dir / AGENT_META_FILE
     md_file = agent_dir / AGENT_MD_FILE
 

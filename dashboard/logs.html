@@ -36,6 +36,10 @@
             <a href="/static/index.html" class="logs-page-back">&#8592; Dashboard</a>
             <h1>Console Logs</h1>
         </div>
+        <nav class="logs-page-tabs" aria-label="Log views">
+            <button id="logs-tab-console" class="logs-page-tab" type="button">Console</button>
+            <button id="logs-tab-tools" class="logs-page-tab" type="button">Tool Usage</button>
+        </nav>
         <div class="logs-page-actions">
             <span id="logs-status" class="logs-page-status">connecting&#8230;</span>
             <button id="logs-pause" class="cw-console-btn" type="button">Pause</button>
@@ -46,6 +50,7 @@
 
     <main class="logs-page-main">
         <pre id="logs-body" class="logs-page-body" aria-live="polite"></pre>
+        <pre id="tools-body" class="logs-page-body" aria-live="polite" hidden></pre>
     </main>
 
     <script type="module" src="/static/js/logs-page.js"></script>

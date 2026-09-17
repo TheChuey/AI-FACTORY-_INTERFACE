@@ -1,6 +1,6 @@
 # Terminator1 — App Code Snapshot
 
-_Auto-generated on 2026-09-15T22:47:40 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-17T10:51:14 by `scripts/update_docs.py`._
 
 
 ## README.md
@@ -152,11 +152,24 @@ terminator1/
 │   ├── paths.py              # Config-driven runtime path authority: dataDir /
 │   │                         # chatSavePath / ragDbPath / customModulesPath
 │   │                         # (incl. per-OS *Linux overrides) / RAG switches.
+│   ├── console_log.py        # Ring-buffer capture of stdout/stderr + logging
+│   │                         # (GET /api/logs/console -> logs.html + chat drawer).
+│   ├── tool_log.py           # Append-only tool-usage log (JSONL + in-memory
+│   │                         # tail): every tool call agents make, with agent,
+│   │                         # timestamp, args, status (GET /api/logs/tools).
 │   └── chat_store/           # Server-side chat session + chat log
 │       ├── store.py          # ensure_session / append_turn / finalize_session,
 │       │                     # the one-active-chat state, .txt transcripts,
 │       │                     # chatRecord.jsonl (create/read/delete).
 │       └── logger.py         # Small helpers the store uses to log rows.
+│
+├── agent_monitoring/         # Top-level telemetry subsystem (HTTP-boundary only)
+│   ├── __init__.py           # Package boundary: re-exports the public facade
+│   ├── store.py              # MonitoringStore: fail-safe JSONL persistence
+│   ├── collector.py          # MetricsCollector: in-memory session + turn metrics
+│   ├── backup.py             # BackupManager: snapshots + JSON exports
+│   ├── manager.py            # MonitoringService facade + get_monitoring_service()
+│   └── router.py             # APIRouter -> /api/monitoring/* (status/records/export/reset)
 │
 ├── engine/                   # The agent engine
 │   ├── core/
@@ -335,6 +348,12 @@ Agent modes:
 | `POST /api/interface/restore` | `{baseline?, apply?, dryRun?}` — roll back (dry-run by default) |
 | `POST /api/interface/run` | Execute an update-module function (`{domain, module, function, args?, kwargs?}`) |
 | `POST /api/interface/toggle-run` | `{enabled}` — arm/disarm module execution for the process |
+| `GET /api/logs/console` | Tail of the captured console output (feeds the chat console drawer + `logs.html`) |
+| `GET /api/logs/tools` | Structured tool-usage feed (newest first; filter by `tool`, `agent`, `since`; from `data/toollog/tool_usage.jsonl`) |
+| `GET /api/monitoring/status` | Agent telemetry status: active sessions + cumulative system turns |
+| `GET /api/monitoring/records` | Every stored telemetry record (`<dataDir>/monitoring/agent_metrics.jsonl`) |
+| `POST /api/monitoring/export` | Write a JSON telemetry report to `<dataDir>/exports/` |
+| `POST /api/monitoring/reset` | Snapshot the metrics log, then clear it (safe reset) |
 | `POST /api/chat` | `{message, model, agent_id, history, session_id?, title?, new_chat?, rag?}` → `{reply, session_id, title}` |
 | `GET /api/chats` | Chat log + the active chat (feeds the chats drop-down) |
 | `GET /api/chats/{id}` | One chat: log row + `.txt` content + parsed messages |
@@ -535,7 +554,12 @@ your own risk — it runs arbitrary functions from `interface/updates/`.
 ## Recent changes
 
 See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for the full history. The most
-recent entry covers the **dynamic module UI actions + developer guide**: a
+recent entry covers the **`agent_monitoring/` telemetry subsystem**: a
+top-level, HTTP-boundary-only package that records per-turn agent duration and
+tool-call counts to `<dataDir>/monitoring/agent_metrics.jsonl`, tracks active
+sessions, and exposes `GET /api/monitoring/status|records` plus
+`POST /api/monitoring/export|reset` (reset snapshots before clearing). Before
+that, the entry covering the **dynamic module UI actions + developer guide**: a
 manifest button can now be a `dropdown_menu` (flyout), `open_modal`
 (schema-driven form), `qa_survey` (step wizard) or `prompt_input`, any response
 with `indicate_success: true` lights a green status-dot, and the new
@@ -806,6 +830,309 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+```
+
+## agent_monitoring/__init__.py
+
+```python
+"""agent_monitoring
+=================
+
+Top-level backend subsystem for agent telemetry: metrics collection,
+JSONL persistence, snapshot backups and JSON exports, exposed through a
+single facade (`MonitoringService`) and a FastAPI router under
+`/api/monitoring/*`.
+
+Public surface:
+
+    from agent_monitoring import get_monitoring_service
+    get_monitoring_service().log_agent_turn(agent_id, duration_ms, tool_count)
+"""
+
+from agent_monitoring.manager import MonitoringService, get_monitoring_service
+
+__all__ = ["MonitoringService", "get_monitoring_service"]
+
+```
+
+## agent_monitoring/backup.py
+
+```python
+"""
+Role: Snapshot backups, exported summaries, and state purging.
+"""
+import json
+import shutil
+from datetime import datetime
+from pathlib import Path
+from server.paths import DATA_DIR, EXPORTS_DIR  # Path authority
+
+SNAPSHOTS_DIR = DATA_DIR / "snapshots" / "monitoring"
+
+
+class BackupManager:
+    """Manages snapshot backups and JSON reports."""
+
+    def __init__(self) -> None:
+        EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    def create_snapshot(self, source_file: Path) -> Path:
+        """Creates a timestamped snapshot in DATA_DIR / snapshots / monitoring."""
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        target_path = SNAPSHOTS_DIR / f"agent_metrics_{stamp}.jsonl"
+        if source_file.exists():
+            shutil.copy2(source_file, target_path)
+        return target_path
+
+    def export_summary_json(self, records: list[dict]) -> Path:
+        """Exports formatted telemetry records to EXPORTS_DIR."""
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        export_file = EXPORTS_DIR / f"monitoring_export_{stamp}.json"
+        payload = {
+            "exported_at": datetime.now().isoformat(),
+            "record_count": len(records),
+            "records": records,
+        }
+        export_file.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        return export_file
+
+```
+
+## agent_monitoring/collector.py
+
+```python
+"""
+Role: Real-time telemetry tracking and session metric aggregation.
+"""
+import threading
+from typing import Any
+
+
+class MetricsCollector:
+    """Thread-safe in-memory metric aggregator."""
+
+    def __init__(self) -> None:
+        self.active_sessions: dict[str, dict[str, Any]] = {}
+        self.total_turns: int = 0
+        self._lock = threading.Lock()
+
+    def start_session(self, session_id: str, agent_id: str) -> None:
+        """Idempotently registers an active session in memory."""
+        with self._lock:
+            if session_id not in self.active_sessions:
+                self.active_sessions[session_id] = {
+                    "agent_id": agent_id,
+                    "turns_count": 0,
+                    "total_duration_ms": 0.0,
+                }
+
+    def record_turn(
+        self,
+        agent_id: str,
+        duration_ms: float,
+        tool_calls_count: int,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Calculates turn metrics and updates active session state."""
+        with self._lock:
+            self.total_turns += 1
+            if session_id and session_id in self.active_sessions:
+                sess = self.active_sessions[session_id]
+                sess["turns_count"] += 1
+                sess["total_duration_ms"] += duration_ms
+
+            return {
+                "agent_id": agent_id,
+                "session_id": session_id,
+                "duration_ms": duration_ms,
+                "tool_calls_count": tool_calls_count,
+                "cumulative_system_turns": self.total_turns,
+            }
+
+    def end_session(self, session_id: str) -> dict[str, Any] | None:
+        """Removes session from memory and returns final stats."""
+        with self._lock:
+            return self.active_sessions.pop(session_id, None)
+
+```
+
+## agent_monitoring/manager.py
+
+```python
+"""
+Role: Central Coordinator — Orchestrates all internal communication
+between MonitoringStore, MetricsCollector, and BackupManager.
+"""
+from datetime import datetime
+from typing import Any
+from agent_monitoring.store import MonitoringStore
+from agent_monitoring.collector import MetricsCollector
+from agent_monitoring.backup import BackupManager
+
+
+class MonitoringService:
+    """Central Hub: Single entry point for external subsystem calls."""
+
+    def __init__(self) -> None:
+        self.store = MonitoringStore()
+        self.collector = MetricsCollector()
+        self.backup = BackupManager()
+
+    def log_event(self, event_type: str, agent_id: str, payload: dict[str, Any]) -> None:
+        """Logs a generic event directly to persistent storage."""
+        record = {
+            "timestamp": datetime.now().isoformat(),
+            "event_type": event_type,
+            "agent_id": agent_id,
+            "data": payload,
+        }
+        self.store.append_record(record)
+
+    def log_agent_turn(
+        self,
+        agent_id: str,
+        duration_ms: float,
+        tool_calls_count: int,
+        session_id: str | None = None,
+    ) -> None:
+        """Coordinates Collector metric calculation and Store persistence."""
+        summary = self.collector.record_turn(
+            agent_id, duration_ms, tool_calls_count, session_id=session_id
+        )
+        self.log_event("agent_turn", agent_id, summary)
+
+    def export_telemetry_report(self) -> str:
+        """Fetches records from Store and creates an export file via BackupManager."""
+        records = self.store.read_records()
+        return str(self.backup.export_summary_json(records))
+
+    def safe_reset(self) -> dict[str, Any]:
+        """Creates a snapshot backup via BackupManager, then clears the Store."""
+        snapshot_path = self.backup.create_snapshot(self.store.metrics_file)
+        self.store.clear_file()
+        return {
+            "status": "success",
+            "message": "Monitoring store safely backed up and cleared.",
+            "snapshot_backup": str(snapshot_path),
+        }
+
+
+# Singleton instance for process-wide access
+_service_instance: MonitoringService | None = None
+
+
+def get_monitoring_service() -> MonitoringService:
+    """Returns or creates the process-wide MonitoringService singleton."""
+    global _service_instance
+    if _service_instance is None:
+        _service_instance = MonitoringService()
+    return _service_instance
+
+```
+
+## agent_monitoring/router.py
+
+```python
+"""
+Role: REST API boundary exposing status, records, export, and reset endpoints.
+"""
+from fastapi import APIRouter, HTTPException
+from agent_monitoring.manager import get_monitoring_service
+
+router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
+
+
+@router.get("/status")
+def get_status():
+    service = get_monitoring_service()
+    return {
+        "status": "active",
+        "active_sessions": len(service.collector.active_sessions),
+        "total_system_turns": service.collector.total_turns,
+    }
+
+
+@router.get("/records")
+def get_records():
+    service = get_monitoring_service()
+    return {"status": "success", "records": service.store.read_records()}
+
+
+@router.post("/export")
+def export_report():
+    try:
+        service = get_monitoring_service()
+        return {"status": "success", "export_file": service.export_telemetry_report()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reset")
+def reset_logs():
+    try:
+        service = get_monitoring_service()
+        return service.safe_reset()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+```
+
+## agent_monitoring/store.py
+
+```python
+"""
+Role: Thread-safe JSONL persistence under the central data directory.
+"""
+import json
+import threading
+from pathlib import Path
+from server.paths import DATA_DIR  # Official path authority
+
+MONITORING_DIR = DATA_DIR / "monitoring"
+
+
+class MonitoringStore:
+    """Thread-safe JSONL storage for monitoring metrics."""
+
+    def __init__(self, storage_dir: Path = MONITORING_DIR) -> None:
+        self.storage_dir = storage_dir
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.metrics_file = self.storage_dir / "agent_metrics.jsonl"
+        self._lock = threading.Lock()
+
+    def append_record(self, record: dict) -> None:
+        """Fail-safe append: swallows I/O errors to prevent breaking agent responses."""
+        try:
+            with self._lock:
+                with self.metrics_file.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception:
+            pass  # Logging failures must not crash chat execution
+
+    def read_records(self) -> list[dict]:
+        """Reads stored telemetry, skipping malformed lines."""
+        if not self.metrics_file.exists():
+            return []
+        records = []
+        with self._lock:
+            with self.metrics_file.open("r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        try:
+                            records.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+        return records
+
+    def clear_file(self) -> None:
+        """Safely empties the active metrics log file."""
+        with self._lock:
+            if self.metrics_file.exists():
+                self.metrics_file.write_text("", encoding="utf-8")
 
 ```
 
@@ -7925,6 +8252,37 @@ body.logs-page {
     gap: 8px;
 }
 
+.logs-page-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+}
+
+.logs-page-tab {
+    border: 0;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font: inherit;
+    font-size: 12px;
+    color: #9fadbd;
+    background: transparent;
+    cursor: pointer;
+}
+
+.logs-page-tab:hover {
+    color: #e6edf3;
+}
+
+.logs-page-tab.active {
+    color: #e6edf3;
+    background: #21262d;
+    box-shadow: inset 0 0 0 1px #30363d;
+}
+
 .logs-page-status {
     font-size: 12px;
 }
@@ -10905,7 +11263,7 @@ export { ChatFactory, ChatWindow, CHAT_CONFIG_EXAMPLES };
 // Keeping the formatting here (instead of inside chat-window.js) means it can
 // grow into full stdout/stderr streaming later without touching the window.
 
-function cleanPreview(text) {
+export function cleanPreview(text) {
     return String(text ?? "").replace(/[\r\n]+/g, " ").slice(0, 200);
 }
 
@@ -10918,7 +11276,7 @@ function stripAnsi(line) {
     return line.replace(ANSI_RE, "");
 }
 
-function formatArgs(args) {
+export function formatArgs(args) {
     try {
         const str = JSON.stringify(args || {});
         return str.length > 240 ? str.slice(0, 237) + "..." : str;
@@ -11524,25 +11882,50 @@ export function slugify(value) {
 // ==========================================
 // js/logs-page.js - standalone console viewer for logs.html
 // ==========================================
-// Full-page terminal for the captured server console (GET /api/logs/console):
-// the same data streamed into the chat widget's console drawer, but in its
-// own tab. Polls every 2s, applies the SAME shared filter as the drawer
-// (classes/terminal-window-out.js), and only appends lines it has not shown
+// Two full-page feeds for the server's captured output:
+//   1. Console  - captured server console (GET /api/logs/console), the same
+//                 data streamed into the chat widget's console drawer.
+//   2. Tools    - structured tool-usage feed (GET /api/logs/tools): every tool
+//                 call agents made, with ISO timestamp, agent, tool, status
+//                 and a result/error preview.
+// Both poll every 2s, apply the SAME shared console filter as the drawer
+// (classes/terminal-window-out.js), and only append lines they have not shown
 // yet so copied output is a clean chronological stream.
 
-import { filterConsoleLines } from "./classes/terminal-window-out.js";
+import {
+    cleanPreview,
+    formatArgs,
+    filterConsoleLines,
+} from "./classes/terminal-window-out.js";
 
 const PRE_ELEMENT = document.getElementById("logs-body");
+const TOOLS_ELEMENT = document.getElementById("tools-body");
 const STATUS = document.getElementById("logs-status");
 const PAUSE_BTN = document.getElementById("logs-pause");
 const CLEAR_BTN = document.getElementById("logs-clear");
 const COPY_BTN = document.getElementById("logs-copy");
+const TAB_CONSOLE = document.getElementById("logs-tab-console");
+const TAB_TOOLS = document.getElementById("logs-tab-tools");
 const POLL_MS = 2000;
 const MAX_LINES = 4000;
 
+let activeTab = "console";
 let paused = false;
-let shownCount = 0;
-let rows = [];
+
+// Per-feed state: rendered rows (chronological) + how many source entries the
+// server has returned so far (so we only append the fresh ones).
+let feeds = {
+    console: { rows: [], shownCount: 0 },
+    tools: { rows: [], shownCount: 0 },
+};
+
+function currentBody() {
+    return activeTab === "tools" ? TOOLS_ELEMENT : PRE_ELEMENT;
+}
+
+function currentFeed() {
+    return feeds[activeTab];
+}
 
 function setStatus(kind, text) {
     STATUS.textContent = text;
@@ -11550,13 +11933,46 @@ function setStatus(kind, text) {
 }
 
 function render() {
-    PRE_ELEMENT.textContent = rows.join("\n");
+    const body = currentBody();
+    const feed = currentFeed();
+    body.textContent = feed.rows.join("\n");
     if (!paused) {
-        PRE_ELEMENT.scrollTop = PRE_ELEMENT.scrollHeight;
+        body.scrollTop = body.scrollHeight;
     }
 }
 
-async function pollOnce() {
+function formatToolTime(iso) {
+    return String(iso || "").replace("T", " ").slice(0, 19);
+}
+
+function formatToolEvent(evt) {
+    const time = formatToolTime(evt.time);
+    const tool = evt.tool || "?";
+    const agent = evt.agentName || evt.agentId || "?";
+    const argStr = formatArgs(evt.args);
+    const lines = [];
+    if (evt.status === "error") {
+        lines.push(`[${time}] [ERR]  ${agent} - ${tool}(${argStr})`);
+        lines.push(`    ERROR: ${cleanPreview(evt.error)}`);
+    } else if (evt.status === "missing") {
+        lines.push(`[${time}] [MISS] ${agent} - ${tool}(${argStr}) - not available`);
+    } else {
+        lines.push(`[${time}] [OK]   ${agent} - ${tool}(${argStr})`);
+        if (evt.result_preview) {
+            lines.push(`    -> ${cleanPreview(evt.result_preview)}`);
+        }
+    }
+    return lines.join("\n");
+}
+
+function appendFresh(feed, freshRows) {
+    feed.rows.push(...freshRows);
+    if (feed.rows.length > MAX_LINES) {
+        feed.rows = feed.rows.slice(feed.rows.length - MAX_LINES);
+    }
+}
+
+async function pollConsole() {
     try {
         const res = await fetch("/api/logs/console?limit=1000");
         if (!res.ok) {
@@ -11564,43 +11980,91 @@ async function pollOnce() {
         }
         const data = await res.json();
         const lines = filterConsoleLines(data.logs || []);
+        const feed = feeds.console;
 
-        if (lines.length > shownCount) {
-            const fresh = lines.slice(shownCount);
-            rows.push(...fresh);
-            if (rows.length > MAX_LINES) {
-                rows = rows.slice(rows.length - MAX_LINES);
-                shownCount = lines.length - MAX_LINES;
-            }
-            shownCount = lines.length;
+        if (lines.length > feed.shownCount) {
+            const fresh = lines.slice(feed.shownCount);
+            appendFresh(feed, fresh);
+            feed.shownCount = lines.length;
             render();
         }
 
         if (!data.captured) {
             setStatus("warn", "no capture running - start the server fresh");
-        } else {
-            setStatus("ok", paused ? "paused" : "live - " + lines.length + " lines");
+        } else if (activeTab === "console") {
+            setStatus("ok", paused ? "paused" : "live - " + feed.rows.length + " lines");
         }
     } catch (error) {
-        setStatus("error", "cannot reach server: " + error.message);
+        if (activeTab === "console") {
+            setStatus("error", "cannot reach server: " + error.message);
+        }
     }
 }
+
+async function pollTools() {
+    try {
+        const res = await fetch("/api/logs/tools?limit=500");
+        if (!res.ok) {
+            throw new Error(res.statusText);
+        }
+        const data = await res.json();
+        const events = data.events || []; // newest first
+        const feed = feeds.tools;
+
+        if (events.length > feed.shownCount) {
+            // The newest `events.length - shownCount` events are the new ones
+            // (the array is newest-first); reverse for a chronological append.
+            const fresh = events
+                .slice(0, events.length - feed.shownCount)
+                .reverse()
+                .map(formatToolEvent);
+            appendFresh(feed, fresh);
+            feed.shownCount = events.length;
+            render();
+        }
+
+        if (activeTab === "tools") {
+            setStatus(
+                "ok",
+                paused ? "paused" : "live - " + feed.rows.length + " tool call(s)"
+            );
+        }
+    } catch (error) {
+        if (activeTab === "tools") {
+            setStatus("error", "cannot reach server: " + error.message);
+        }
+    }
+}
+
+function switchTab(tab) {
+    activeTab = tab;
+    TAB_CONSOLE.classList.toggle("active", tab === "console");
+    TAB_TOOLS.classList.toggle("active", tab === "tools");
+    PRE_ELEMENT.hidden = tab !== "console";
+    TOOLS_ELEMENT.hidden = tab !== "tools";
+    setStatus("ok", paused ? "paused" : "switched");
+    render();
+}
+
+TAB_CONSOLE.addEventListener("click", () => switchTab("console"));
+TAB_TOOLS.addEventListener("click", () => switchTab("tools"));
 
 PAUSE_BTN.addEventListener("click", () => {
     paused = !paused;
     PAUSE_BTN.textContent = paused ? "Resume" : "Pause";
-    setStatus("ok", paused ? "paused" : "live - " + rows.length + " lines");
+    setStatus("ok", paused ? "paused" : "live");
 });
 
 CLEAR_BTN.addEventListener("click", () => {
-    rows = [];
-    shownCount = 0;
+    const feed = currentFeed();
+    feed.rows = [];
+    feed.shownCount = 0;
     render();
 });
 
 COPY_BTN.addEventListener("click", async () => {
     try {
-        await navigator.clipboard.writeText(PRE_ELEMENT.textContent || "");
+        await navigator.clipboard.writeText(currentBody().textContent || "");
         COPY_BTN.textContent = "Copied!";
         setTimeout(() => (COPY_BTN.textContent = "Copy"), 1200);
     } catch {
@@ -11608,8 +12072,11 @@ COPY_BTN.addEventListener("click", async () => {
     }
 });
 
-pollOnce();
-setInterval(pollOnce, POLL_MS);
+TAB_CONSOLE.classList.add("active");
+pollConsole();
+pollTools();
+setInterval(pollConsole, POLL_MS);
+setInterval(pollTools, POLL_MS);
 ```
 
 ## dashboard/js/ui/agent-editor.js
@@ -13930,6 +14397,10 @@ function buildInlineNode(tag, groups) {
             <a href="/static/index.html" class="logs-page-back">&#8592; Dashboard</a>
             <h1>Console Logs</h1>
         </div>
+        <nav class="logs-page-tabs" aria-label="Log views">
+            <button id="logs-tab-console" class="logs-page-tab" type="button">Console</button>
+            <button id="logs-tab-tools" class="logs-page-tab" type="button">Tool Usage</button>
+        </nav>
         <div class="logs-page-actions">
             <span id="logs-status" class="logs-page-status">connecting&#8230;</span>
             <button id="logs-pause" class="cw-console-btn" type="button">Pause</button>
@@ -13940,6 +14411,7 @@ function buildInlineNode(tag, groups) {
 
     <main class="logs-page-main">
         <pre id="logs-body" class="logs-page-body" aria-live="polite"></pre>
+        <pre id="tools-body" class="logs-page-body" aria-live="polite" hidden></pre>
     </main>
 
     <script type="module" src="/static/js/logs-page.js"></script>
@@ -13954,7 +14426,7 @@ function buildInlineNode(tag, groups) {
 ```markdown
 # Terminator1 — App Structure
 
-_Auto-generated on 2026-09-15T22:47:40 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-17T10:51:14 by `scripts/update_docs.py`._
 
 
 ```
@@ -13962,6 +14434,13 @@ genV2_Interface_projectManager/
 
 |-- about
 |   `-- set_title.py
+|-- agent_monitoring
+|   |-- __init__.py
+|   |-- backup.py
+|   |-- collector.py
+|   |-- manager.py
+|   |-- router.py
+|   `-- store.py
 |-- config
 |   `-- models.json
 |-- dashboard
@@ -14019,13 +14498,10 @@ genV2_Interface_projectManager/
 |   `-- HOW_TO_USE.md
 |-- engine
 |   |-- agent_library
-|   |   |-- basic_chat
+|   |   |-- Feature Planner Agent
 |   |   |   |-- agent.json
 |   |   |   `-- agent.md
-|   |   |-- dev_assistant
-|   |   |   |-- agent.json
-|   |   |   `-- agent.md
-|   |   |-- problem_discovery_agent
+|   |   |-- feature-clarifier-agent
 |   |   |   |-- agent.json
 |   |   |   `-- agent.md
 |   |   `-- rag_assistant
@@ -14076,7 +14552,8 @@ genV2_Interface_projectManager/
 |   |   `-- store.py
 |   |-- console_log.py
 |   |-- paths.py
-|   `-- server.py
+|   |-- server.py
+|   `-- tool_log.py
 |-- tools
 |   |-- __init__.py
 |   |-- registry.py
@@ -14084,10 +14561,11 @@ genV2_Interface_projectManager/
 |   `-- tools.py
 |-- .gitignore
 |-- README.md
+|-- plan1.md
 `-- requirements.txt
 ```
 
-_88 tracked source file(s)._
+_94 tracked source file(s)._
 
 ```
 
@@ -14098,6 +14576,148 @@ _88 tracked source file(s)._
 
 All notable changes to this project. Format based on Keep a Changelog
 (https://keepachangelog.com/), grouped by date.
+
+## 2026-09-17 — Agent monitoring subsystem (`agent_monitoring/`)
+
+A new top-level backend package records per-turn agent telemetry and exposes
+it under `/api/monitoring/*`, without editing the engine or any existing
+chat/tool route. Monitoring is wired in at the HTTP boundary only.
+
+### Added — backend
+
+- `agent_monitoring/store.py` — `MonitoringStore`: thread-safe, fail-safe
+  JSONL persistence at `<dataDir>/monitoring/agent_metrics.jsonl`. Malformed
+  lines are skipped on read, and a disk error never breaks the caller.
+- `agent_monitoring/collector.py` — `MetricsCollector`: in-memory active
+  session tracking (`turns_count`, `total_duration_ms`) plus cumulative
+  system-turn math. Lock-guarded for the FastAPI threadpool.
+- `agent_monitoring/backup.py` — `BackupManager`: timestamped snapshot copies
+  under `<dataDir>/snapshots/monitoring/` and formatted JSON exports under
+  `<dataDir>/exports/`.
+- `agent_monitoring/manager.py` — `MonitoringService` facade (the sole entry
+  point into the package) and the `get_monitoring_service()` process
+  singleton. `safe_reset()` snapshots the log before clearing it.
+- `agent_monitoring/router.py` — `APIRouter(prefix="/api/monitoring")`.
+- `agent_monitoring/__init__.py` — package boundary.
+- `server/server.py` — the router is mounted via `app.include_router(...)`.
+  `POST /api/chat` now times `agent.think()` and records `session_start` +
+  an `agent_turn` event (fail-safe: telemetry can never break a reply), and
+  `POST /api/chats/end` closes the session.
+
+### Added — API
+
+- `GET /api/monitoring/status` — `{status, active_sessions, total_system_turns}`.
+- `GET /api/monitoring/records` — every stored telemetry record.
+- `POST /api/monitoring/export` — writes a JSON telemetry report to `exports/`.
+- `POST /api/monitoring/reset` — snapshots the metrics log, then clears it.
+
+### Notes
+
+- Paths resolve through `server/paths.py` (`DATA_DIR` / `EXPORTS_DIR`), so the
+  store follows the configured data folder like the rest of the app.
+- In-memory session counters reset on restart; the JSONL log is the durable
+  record.
+
+## 2026-09-16 — Agent id no longer tied to the folder name
+
+New agents could fail with `(unknown agent '<id>' - is the folder present in
+agent_library/?)` when their `agent.json` `id` differed from their folder name
+(e.g. folder `Feature Planner Agent/` with id `feature_planner_agent`). The
+registry announced agents by their `agent.json` id, but `load_definition()`
+looked up the folder by treating the id as the literal path, so the two new
+agents (`feature_planner_agent`, `feature_clarifier_agent`) were listed yet
+unusable in `/api/chat` and on the Settings agent cards.
+
+### Fixed — backend
+
+- `engine/agents/loader.py` — folder lookup is now **id-aware**:
+  `agent_dir(agent_id)` first tries the literal `agent_library/<agent_id>`
+  folder (fast path), then scans `agent_library/*/agent.json` and returns the
+  first folder (sorted, deterministic) whose `meta["id"]` matches. Falls back
+  to the literal path when nothing matches, so `save_markdown` can still
+  create folders for brand-new ids. `load_definition()` uses the same
+  resolver, fixing both `/api/chat` and `GET/PUT /api/agents/{id}/config`.
+  Folder names with spaces / kebab-case / any case now work as long as
+  `agent.json#id` is set.
+- `server/server.py` — `_default_agent()` now resolves the no-`agent_id`
+  chat default correctly: it reads `defaultAgentId` from
+  `dashboard/config/app_settings.json` (the same value the Settings page's
+  dropdown writes), then the legacy `config/settings.json` `default_agent`,
+  falling back to `rag_assistant` instead of the deleted `basic_chat`.
+- `dashboard/config/app_settings.json` — `defaultAgentId` updated from the
+  deleted `dev_assistant` to the existing `rag_assistant`.
+
+### Notes
+
+- The previous demo agents (`basic_chat`, `dev_assistant`,
+  `problem_discovery_agent`) were removed from `engine/agent_library/` in the
+  working tree; `rag_assistant` is now the safe default.
+
+## 2026-09-16 — Tool-usage tracker (console log monitor)
+
+The console log monitor (`dashboard/logs.html`) now has a **Tool Usage** tab
+next to **Console**: a structured, chronological feed of every tool call
+agents make, with a full timestamp, the agent (id + name), model, tool name,
+arguments, status and a result/error preview. Unlike the chat widget's
+per-request `tool_events`, this feed is a running record that survives server
+restarts.
+
+### Added — backend
+
+- `server/tool_log.py` — process-wide, append-only tool-usage log. Each event
+  is written as one JSON line to `data/toollog/tool_usage.jsonl` (path resolved
+  through `server/paths.py`, so it follows the configured dataDir like the rest
+  of the chat data), AND kept in a bounded in-memory deque for live reads. The
+  tail is seeded from disk once at import so a restarted server still shows
+  recent history without duplicating fresh events. `append()` is thread-safe
+  and fail-safe (a disk/serialization error never breaks the tool call).
+  `tail(limit, tool, agent, since)` serves the feed with optional filters.
+  Event shape: `{time (ISO), agentId, agentName, model, tool, args, status,
+  result_preview | error, origin ("native tool_calls" | "TEXT reply")}`.
+- `server/paths.py` — `TOOL_LOG_FILE` (`<dataDir>/toollog/tool_usage.jsonl`)
+  and a `tool_log_file` field in `paths.about()`.
+- `engine/core/agent.py` — `Agent.act()` now reports every success/error/missing
+  tool call to `tool_log` via a new fail-safe `_log_tool_event()` helper (agent
+  id/name + model + ISO timestamp are stamped there). `think()` passes the call
+  origin through to `act()` for the `origin` field. `Agent.tool_events` (the
+  chat drawer) is unchanged.
+- `server/server.py` — new `GET /api/logs/tools?limit=&tool=&agent=&since=`
+  endpoint returning `{events, total, captured}`, newest first.
+
+### Added — frontend
+
+- `dashboard/logs.html` — a `Console | Tool Usage` tab bar in the header plus
+  a second `<pre>` body for the tool feed (both bodies live in the same main
+  column, one visible at a time).
+- `dashboard/js/classes/terminal-window-out.js` — `cleanPreview` and
+  `formatArgs` are now exported for reuse by the logs page.
+- `dashboard/js/logs-page.js` — polls `/api/logs/tools` every 2s alongside the
+  console feed, appends only new events (chronologically), and renders each as
+  `[<ISO-time>] [OK|ERR|MISS] <agent> - <tool>(<args>)` with a result/error
+  preview. Pause/Clear/Copy operate on whichever tab is active.
+- `dashboard/css/styles.css` — `.logs-page-tabs` / `.logs-page-tab(.active)`
+  pill-toggle styles in SECTION 10.
+
+### Testing note (incomplete — to be finished)
+
+The live HTTP round-trip of `/api/logs/tools` was **not** completed: on this
+machine port `8000` was already in use by an earlier server instance, so a
+fresh boot of `server/server.py` could not bind there (the test was stopped on
+purpose; the user will fix the port situation and re-run later). Everything
+else was verified directly:
+
+- `server/tool_log` appends + filters work: `tail()`, `tail(tool=...)`,
+  `tail(agent=...)`, `tail(since=...)`, newest-first, no duplicates after the
+  at-import seed fix.
+- Full agent path verified without Ollama: `build_agent("dev_assistant")` +
+  `agent.act()` (both a success and a missing-file read) produced correctly
+  shaped events in the JSONL tail with agent id/name/model.
+- `python -m py_compile` passes for every touched Python file.
+
+To finish: start `server/server.py` on a free port, chat with a tool-using
+agent, confirm rows appear in `data/toollog/tool_usage.jsonl`, `GET
+/api/logs/tools` returns them, and the logs.html **Tool Usage** tab streams
+them live.
 
 ## 2026-09-15 — Chat console output (tool logs + captured startup logs)
 
@@ -18598,397 +19218,176 @@ if __name__ == "__main__":
 
 ```
 
-## engine/agent_library/basic_chat/agent.json
+## engine/agent_library/Feature Planner Agent/agent.json
 
 ```json
 {
-  "id": "basic_chat",
-  "name": "Basic Chat",
-  "description": "A simple chatbot with no tools.",
-  "mode": "agent",
-  "model": "llama3:latest",
-  "tools": []
-}
-```
-
-## engine/agent_library/basic_chat/agent.md
-
-```markdown
-# Basic Chat
-
-## role
-
-You are a helpful Basic Chat.
-
-## purpose
-
-Help the user with general questions and tasks.
-
-## communication
-
-- Be concise and clear.
-- Answer directly.
-- Use examples when useful.
-
-## boundaries
-
-- Do not fabricate results.
-- If you do not know something, say so.
-
-## principles
-
-- Be accurate.
-- Explain concepts clearly.
-
-```
-
-## engine/agent_library/dev_assistant/agent.json
-
-```json
-{
-  "id": "dev_assistant",
-  "name": "Dev Assistant",
-  "description": "AI agent development teacher with full file tools.",
+  "id": "feature_planner_agent",
+  "name": "Feature Planner Agent",
+  "description": "Clarifies feature goals, asks targeted questions about logic origins, reads docs/HOW_TO_USE.md, and creates detailed UI interface and pseudo-logic implementation plans for developers.",
   "mode": "agent",
   "model": "gemma4:e2b",
   "tools": [
     "read_file",
-    "write_text_file",
-    "map_files",
-    "delete_files",
-    "get_current_date",
-    "tell_me_the_date_and_time",
-    "search_chat_logs"
-  ],
-  "tests": [
-    {
-      "id": "custom-mtnwyh6t-krgy",
-      "name": "what is you objective",
-      "steps": [
-        "what is you objective",
-        "who is the user",
-        "list all the cities in california"
-      ],
-      "expectedResult": {
-        "mode": "type",
-        "value": "nonEmpty"
-      },
-      "enabled": true
-    },
-    {
-      "id": "custom-mty2mshm-d756",
-      "name": "who is your user?",
-      "steps": [
-        "who is your user?",
-        "what are your tools?"
-      ],
-      "expectedResult": {
-        "mode": "type",
-        "value": "nonEmpty"
-      },
-      "enabled": true
-    }
+    "map_files"
   ]
 }
+
 ```
 
-## engine/agent_library/dev_assistant/agent.md
+## engine/agent_library/Feature Planner Agent/agent.md
 
 ```markdown
-# Dev Assistant
+# Feature Planner Agent
 
 ## role
+You are a senior systems architect and technical product strategist specialized in the **Genessis** modular extension framework. You assist **Jesus** (a junior developer) in refining feature requirements and planning complete, hallucination-free technical implementation specifications.
 
-You are an **AI Agent Development Assistant**.
-
-Your primary purpose is to help the user:
-
-* Learn how AI agents work.
-* Build AI agents with Python.
-* Understand agent architecture.
-* Create reusable AI-agent components.
-* Experiment with different approaches.
-* Understand what works, what does not work, and why.
-* Gradually move from simple examples to more advanced systems.
-
-You are both a **software developer** and a **teacher**.
+## user_profile
+- **Name:** Jesus
+- **Level:** Junior Developer
+- **Goal:** Build modular drop-in extension features for Genessis without getting lost in code structure or modifying core system files.
 
 ## purpose
+Clarify what a new feature is going to solve, ask targeted clarification questions, inquire explicitly where the underlying logic stems from, consult official system documentation (`docs/HOW_TO_USE.md`) using the `read_file` tool, and generate a well-formatted plan for another agent (the **Module Developer Agent**) to write the code for the UI interface and the necessary backend functions/methods.
 
-Help the user learn how AI agents work and build AI agents with Python.
+---
 
-## personality
+## workflow_instructions
 
-You are patient, practical, clear, direct, and analytical. You act as both a software developer and a teacher. You explain concepts step by step, starting with the simple idea before showing advanced patterns.
+### Step 1: Problem Clarification & Logic Origin Inquiry
+Engage Jesus interactively to establish the feature's core goal:
+- **Clarification Questions:** Ask 1 to 3 focused, practical questions to clarify what problem or manual task the new feature will solve and what success looks like.
+- **Main Inquiry — Logic Origin:** Explicitly ask where the core feature logic stems from:
+  - *File System / Path Operations:* Does it manipulate files/directories via `server.paths` (`DATA_DIR`, `EXPORTS_DIR`, `RECORDS_DIR`, `CUSTOM_MODULES_DIR`)?
+  - *Core Dispatcher Bridge:* Does it trigger existing core Python functions via `InterfaceDispatcher().execute_action("custom", ...)`?
+  - *External Scripts / Data Processing:* Does it perform data parsing, CLI execution, or multi-step processing?
 
-## communication
+### Step 2: UI Interface & Feature Pseudo-Logic Planning
+Plan out the UI display and feature logic based on documentation:
+- **Documentation Lookup (`read_file` tool):** Execute the `read_file` tool to inspect `docs/HOW_TO_USE.md` (located in the `docs/` folder) to learn the latest `UI_MANIFEST` contracts, supported button action types (`prompt_input`, `open_modal`, `qa_survey`, `dropdown_menu`), and `register_routes(app)` structure.
+- **UI Interface Planning:** Determine the appropriate header button action, form inputs, modal schema components, or Q&A survey steps needed to capture user intent.
+- **Backend Pseudo-Logic Planning:** Plan the high-level pseudo-logic and methods needed for the feature, incorporating pseudo-code aspects and contracts learned from `docs/HOW_TO_USE.md` (e.g., standard response format `{"status": "success", "message": "...", "indicate_success": True}`).
+- **No Full Code Generation:** Do NOT write final Python/JS code yourself—your purpose is strictly to plan out the UI display and backend pseudo-logic for another agent to code.
 
-- Be concise and clear.
-- Use examples when useful.
-- Avoid unnecessary repetition.
-- When introducing a new concept, explain unfamiliar terminology.
-- Keep examples small, copy-pasteable, and easy to modify.
-- Write simple code over clever code.
+### Step 3: Well-Formatted Implementation Plan Output
+Generate a structured, well-formatted plan for the **Module Developer Agent** to implement the UI interface, routes, functions, and methods.
 
-## boundaries
+---
 
-- You have full permission to use every listed tool on this Windows machine.
-- When asked to create/read/write files or folders, you MUST call the matching tool - never only describe the action, and never claim you lack permission.
-- Use absolute Windows paths. Home folder: C:\Users\43319.
-- **When asked about past chats, previous sessions, what was worked on 'earlier', or 'last time', you MUST call the `search_chat_logs` tool to search your memory database.**
-- **CRITICAL: When calling `search_chat_logs`, translate temporal keywords (like 'last session', 'yesterday', 'earlier') into topical keywords (like 'venv', 'chromadb', 'test_app', 'FastAPI') to find matching records. Do not search for the literal phrase 'last session'.**
-- Do not claim a tool was used when it was not.
+## genessis_architecture_rules
+1. **Module Location:** Every drop-in custom module is a standalone `.py` file inside `data/custom_modules/<module_name>.py`.
+2. **UI Manifest Contract:** Declare a top-level `UI_MANIFEST` dictionary defining `module_id` and header `buttons`. Supported actions: `prompt_input`, `open_modal`, `qa_survey`, `dropdown_menu`.
+3. **Auto-Route Registration:** Declare `register_routes(app: FastAPI)` to attach FastAPI routes to `app`.
+4. **Response Signature:** Every endpoint must return `{"status": "success", "message": "...", "indicate_success": True}`.
+5. **Path Authority:** Use official path constants from `server.paths` (`DATA_DIR`, `EXPORTS_DIR`, `RECORDS_DIR`, `CUSTOM_MODULES_DIR`). Never hardcode relative string paths.
+6. **Core Boundaries:** NEVER recommend editing core application files (`server/server.py`, `dashboard/index.html`, `dashboard/js/ui/header-nav.js`).
 
-...
+---
 
-## decision_style
+## output_template
+Output the implementation plan in this exact format for the **Module Developer Agent**:
 
-- Prefer simple solutions before complex ones.
-- Separate facts from assumptions.
-- Use tools when external information is required.
-- **Actively use the `search_chat_logs` tool when Jesus makes relative references, translating those references into technical topics (e.g. searching for 'venv' instead of 'last session') to find historical facts before proposing changes.**
-- Do not make hidden assumptions.
-## principles
+# Genessis Technical Implementation Plan
 
-- Be accurate.
-- Do not invent information.
-- Explain concepts clearly.
-- Prefer maintainable and simple solutions.
-- When a more advanced design is useful, explain the simple version first, then show the advanced one.
+### 1. Problem Statement & Logic Origin
+- **Feature Name:** `<short_descriptive_name>`
+- **Problem Solved:** <What specific problem or manual task this feature solves>
+- **Logic Origin:** <File System / Core Dispatcher / Data Processing / External Script>
+- **Target File Location:** `data/custom_modules/<module_name>.py`
 
-## priorities
+### 2. UI Interface Plan (`UI_MANIFEST` Specification)
+- **Module ID:** `<module_name>`
+- **Header Button Label:** `<e.g. ⚡ Feature Name>`
+- **Action Type:** `<prompt_input | open_modal | qa_survey | dropdown_menu>`
+- **UI Display Structure & Components:**
+  - *If prompt_input:* Prompt dialog message text.
+  - *If open_modal:* Form schema title, target endpoint, and component list (`input`, `select`, `checkbox`, `button`).
+  - *If qa_survey:* Wizard question sequence, choices, and step flow.
+  - *If dropdown_menu:* Nested action items array.
+- **Endpoints Declared:**
+  - `GET /api/<module_name>/schema` (if `open_modal`)
+  - `POST /api/<module_name>/execute` or `/qa_step`
 
-1. Accuracy
-2. Safety
-3. Relevance
-4. Clarity
-5. Brevity
+### 3. Feature Logic & Method Plan (Pseudo-Code)
+- **Required Imports & Path Constants:**
+  - `from fastapi import FastAPI`
+  - Required constants from `server.paths` (`DATA_DIR`, `EXPORTS_DIR`, `CUSTOM_MODULES_DIR`, etc.)
+  - Dispatcher imports if core bridge execution is required (`from interface.interface_dispatcher import InterfaceDispatcher`)
+- **Functions & Methods Needed (Pseudo-Code Outline):**
+  1. `get_schema()` *(if open_modal)*: Returns UI component schema dictionary.
+  2. `execute_feature_logic(payload)`:
+     - Extract and validate input parameters from `payload`.
+     - Execute backend operations based on the identified **Logic Origin** (e.g., file creation via `server.paths`, core dispatcher call).
+     - Return standard dictionary response: `{"status": "success", "message": "...", "indicate_success": True}`.
 
-## user
-
-**Name:** Jesus
-
-**Current knowledge:**
-
-* Knows some Python.
-* Is still becoming comfortable with Python.
-* Is learning AI agents.
-* Understands basic programming concepts but may need explanations of unfamiliar Python syntax.
-
-**Goal:**
-
-Jesus wants to create **off-the-shelf AI-agent components** that can be reused to build different AI agents. The long-term goal is to understand how individual components work and how they can be combined into larger agent systems.
-
-## job
-
-Teach like a patient software-development instructor.
-
-When explaining something:
-
-1. Start with the simple idea.
-2. Explain why it exists.
-3. Show a small example.
-4. Explain the important parts of the example.
-5. Show how it can be modified.
-6. Explain how it fits into an AI-agent system.
-
-Do not assume the user already understands advanced Python, LangChain, LangGraph, RAG, or agent architecture. When introducing a new concept, explain unfamiliar terminology.
-
-Keep examples small, copy-pasteable, and easy to modify. Write simple code over clever code. When a more advanced design is useful, explain the simple version first, then show the advanced one.
-
-## greeting
-
-Initial greeting is Hello Jesus
+### 4. Developer Execution & Activation Steps
+1. Pass this plan to the **Module Developer Agent** to generate `data/custom_modules/<module_name>.py`.
+2. Activate by running `python about/set_title.py apply` or restarting `server.py`.
 
 ```
 
-## engine/agent_library/problem_discovery_agent/agent.json
+## engine/agent_library/feature-clarifier-agent/agent.json
 
 ```json
 {
-  "name": "Problem Discovery Agent",
-  "id": "problem_discovery_agent",
-  "mode": "chat",
-  "agent_name": "Problem Discovery Agent",
-  "agent_type": "discovery",
-  "description": "Investigates user problems, asks focused questions, analyzes answers, and identifies the core problem before sending a planning topic to the Planner Agent.",
-
-  "system_prompt_file": "problem_discovery_agent.md",
-
-  "workflow": {
-    "minimum_questions": 1,
-    "maximum_questions": 7,
-
-    "steps": [
-      "Understand the user's initial problem",
-      "Identify known and missing information",
-      "Ask focused questions",
-      "Analyze the user's answers",
-      "Continue questioning only when necessary",
-      "Identify the root cause",
-      "Define the desired outcome",
-      "Create a planning topic"
-    ]
-  },
-
-  "tools": {
-    "present_questions": {
-      "enabled": true,
-      "purpose": "Collect answers interactively from the user",
-      "question_types": [
-        "open",
-        "choice"
-      ]
-    }
-  },
-
-  "investigation_focus": [
-    "stated_problem",
-    "symptoms",
-    "user_goal",
-    "obstacles",
-    "root_causes",
-    "previous_attempts",
-    "constraints",
-    "success_criteria"
-  ],
-
-  "rules": [
-    "Do not solve the problem immediately",
-    "Do not create a detailed project plan",
-    "Do not invent missing information",
-    "Ask only meaningful questions",
-    "Focus on root causes instead of symptoms",
-    "Stop asking questions when the problem is sufficiently clear"
-  ],
-
-  "final_output": [
-    "Problem Discovery Summary",
-    "What We Learned",
-    "Analysis",
-    "THE CORE PROBLEM",
-    "Desired Outcome",
-    "Planning Topic"
-  ],
-
-  "next_agent": "Planner Agent"
+  "id": "feature_clarifier_agent",
+  "name": "Feature Clarifier Agent",
+  "description": "Interviews Jesus to turn rough feature ideas into a structured Feature Requirement Spec.",
+  "mode": "agent",
+  "model": "",
+  "tools": [
+    "read_file",
+    "map_files",
+    "search_chat_logs"
+  ]
 }
 
 ```
 
-## engine/agent_library/problem_discovery_agent/agent.md
+## engine/agent_library/feature-clarifier-agent/agent.md
 
 ```markdown
-# Problem Discovery Agent
+# Feature Clarifier Agent
 
-## Purpose
+## role
+You are a patient, analytical AI product manager assisting **Jesus** (a junior developer) in refining and clarifying ideas for new features in the **Genessis** application.
 
-You investigate a user's problem to discover the underlying cause. You do not solve the problem or create the plan.
+## user_profile
+- **Name:** Jesus
+- **Level:** Junior Developer
+- **Goal:** Wants to build custom drop-in modules for Genessis without getting lost in ambiguous code requirements.
 
-## Workflow
+## purpose
+Help Jesus transform broad or vague feature ideas into a crystal-clear, structured **Feature Requirement Spec** before any Python code or architectural blueprint is written.
 
-1. Read the user's problem, idea, goal, or situation.
-2. Identify what is already known and what is missing.
-3. Ask between 1 and 7 focused questions using the guided survey tool.
-4. Use the answers to investigate symptoms, causes, obstacles, goals, and constraints.
-5. Analyze the answers and produce the Problem Discovery Summary when the problem is clear.
-6. Ask another set of questions ONLY if important information is still actually missing.
-7. Stop when the underlying problem is clear.
-8. Produce one clear Planning Topic for the Planner Agent.
+## instructions
+1. **Friendly Greeting:** Start by greeting Jesus warmly.
+2. **Interactive Discovery:** Ask 1 to 3 focused, practical questions at a time to clarify:
+   - What trigger or button action does the user want on the dashboard header?
+   - What inputs should be collected from the user (e.g. simple text prompt, multi-field form, or step-by-step wizard)?
+   - What backend action or calculation should occur (e.g. creating folders, saving JSON files, processing data)?
+   - What success message should be shown back to the user?
+3. **Pacing:** Do not overwhelm Jesus with long technical jargon. Explain concepts in simple terms.
+4. **Harden Against Hallucination:**
+   - Do not assume or invent unstated business rules or features.
+   - If Jesus gives a vague request (e.g., "make a project tool"), ask what specific steps or data the tool needs.
+5. **Completion:** Once all inputs, processing steps, and expected outputs are clear, output the standardized **Feature Requirement Spec**.
 
-## How to Use the Question Tool
+---
 
-Use the guided survey tool `start_guided_survey` to collect answers interactively, one question at a time.
+## output_template
+When requirements are fully clarified, output:
 
-Invoke it as a real tool call (do NOT write `start_guided_survey(...)` as literal text in your reply) with each question as a separate argument: `question_1="...", question_2="...", ...` (up to 7 questions).
+# Feature Requirement Spec
 
-A question is free text unless it lists options such as `a) ...` / `b) ...` / `c) ...`, in which case it becomes multiple choice.
-
-Call the tool with 1 to 7 meaningful questions. Ask only questions that help uncover the real problem. Do not repeat questions or ask for information already provided.
-
-### Place The Survey URL In Your Reply
-
-The `start_guided_survey` tool returns a short survey URL. The tool gives you the
-exact URL — use it VERBATIM. Do NOT guess, invent, change, or shorten the id, and
-do NOT substitute an example URL. Write the exact returned link into your reply
-so the user can click it to answer.
-
-Write a short, friendly intro line before the link, for example:
-
-> To understand your situation better, please answer these quick questions:
->
-> [the exact URL returned by the tool]
-
-Do NOT list the questions out as plain text in the same reply.
-Do NOT simulate the questionnaire yourself.
-Wait for the user's answers (sent back through the chat) before continuing.
-The frontend collects the answers and returns them to you as a message.
-
-## Investigation Focus
-
-Look for:
-
-* The stated problem or symptom
-* The user's actual goal
-* What is preventing progress
-* Possible root causes
-* Previous attempts
-* Important constraints
-* What success looks like
-
-## Rules
-
-Do not jump directly to a solution.
-Do not create a detailed project plan.
-Do not invent missing information.
-Focus on the underlying problem, not just the symptom.
-Stop questioning when enough information is available.
-
-### After The Answers Arrive
-
-When the user's answers come back through the chat, analyze them carefully first:
-
-1. Read every answer.
-2. Compare them with the original request.
-3. Identify symptoms, causes, and constraints.
-4. Identify the user's actual goal.
-
-Then decide: if the core problem and desired outcome are now clear, produce the **Problem Discovery Summary** immediately. Do NOT call the survey again unless important information is still genuinely missing. Prefer completing the summary over asking more questions.
-
-## Final Output
-
-When the investigation is complete, provide this format using the exact headings shown.
-
-# Problem Discovery Summary
-
-## What We Learned
-
-* Key discoveries from the investigation
-
-## Analysis
-
-Briefly explain the connection between the user's situation, symptoms, causes, and goals.
-
-## The Core Problem
-
-[Clearly state the underlying problem that needs to be solved.]
-
-## Desired Outcome
-
-[State what the user actually wants to achieve.]
-
-## Constraints
-
-* Constraint supported by the investigation
-* Constraint supported by the investigation
-
-If no important constraints were identified, write:
-
-* No major constraints were identified during discovery.
-
-## Planning Topic
-
-**[One clear, concise topic to send to the Planner Agent.]**
+- **Feature Name:** <short_descriptive_name>
+- **Target User:** Jesus / Dashboard User
+- **Goal:** <what this feature accomplishes>
+- **UI Interaction Style:** <simple popup prompt | multi-field modal form | step-by-step wizard | dropdown menu>
+- **Collected Inputs:** <list of fields, e.g. project_name, priority, etc.>
+- **Backend Action:** <what files/data/folders should be modified or created>
+- **Expected Success Message:** <text shown in the frontend alert/modal upon completion>
 
 ```
 
@@ -19282,8 +19681,57 @@ AGENT_MD_FILE = "agent.md"
 
 
 def agent_dir(agent_id: str) -> Path:
-    """The folder for an agent id inside agent_library/."""
-    return AGENT_LIBRARY_DIR / agent_id
+    """The folder for an agent id inside agent_library/.
+
+    First tries the literal ``agent_library/<agent_id>`` path (fast path).
+    When that is missing or not a directory, scans ``agent_library/*/agent.json``
+    and returns the first folder (sorted) whose ``meta["id"]`` matches, so
+    folder names with spaces, kebab-case, etc. all work as long as the
+    ``agent.json`` ``id`` field is set. Falls back to the literal path so
+    callers that create folders (``save_markdown``) still work for brand-new
+    agents.
+    """
+    resolved = _resolve_agent_dir(agent_id)
+    return resolved if resolved is not None else AGENT_LIBRARY_DIR / agent_id
+
+
+def _resolve_agent_dir(agent_id: str) -> Path | None:
+    """Find the on-disk folder for an agent by id.
+
+    Two strategies, tried in order:
+        1. Literal: ``AGENT_LIBRARY_DIR / agent_id`` exists and is a directory.
+        2. Scan: walk every subfolder of ``AGENT_LIBRARY_DIR``, read its
+           ``agent.json``, and return the first (sorted by folder name) whose
+           ``meta["id"]`` equals ``agent_id``.
+
+    Returns ``None`` when nothing matches so callers can fall back to the
+    literal path (which preserves the existing create-folder semantics for
+    ``save_markdown`` on genuinely new agents).
+    """
+    literal = AGENT_LIBRARY_DIR / agent_id
+    if literal.is_dir():
+        return literal
+
+    # Scan: read agent.json in each sibling folder, match by "id" field.
+    # Folders are sorted for deterministic tie-breaking when (unlikely)
+    # multiple folders declare the same id.
+    candidates: list[tuple[str, Path]] = []
+    if AGENT_LIBRARY_DIR.exists():
+        for child in AGENT_LIBRARY_DIR.iterdir():
+            if not child.is_dir() or child.name.startswith(("_", ".")):
+                continue
+            meta_file = child / AGENT_META_FILE
+            if not meta_file.exists():
+                continue
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if meta.get("id") == agent_id:
+                candidates.append((child.name, child))
+
+    candidates.sort(key=lambda t: t[0])
+    return candidates[0][1] if candidates else None
 
 
 def save_meta(agent_id: str, meta: dict) -> dict:
@@ -19368,7 +19816,9 @@ def load_definition(agent_id: str) -> dict:
     Returns {"meta": dict, "sections": dict}. Raises AgentNotFoundError
     when the folder or either required file is missing/unreadable.
     """
-    agent_dir = AGENT_LIBRARY_DIR / agent_id
+    agent_dir = _resolve_agent_dir(agent_id)
+    if agent_dir is None:
+        agent_dir = AGENT_LIBRARY_DIR / agent_id
     json_file = agent_dir / AGENT_META_FILE
     md_file = agent_dir / AGENT_MD_FILE
 
@@ -19766,7 +20216,7 @@ class Agent:
             origin = "native tool_calls" if message.get("tool_calls") else "TEXT reply"
             print(f"[Agent.think] Executing {len(tool_calls)} tool call(s) from {origin}.")
             for tool_call in tool_calls:
-                result = self.act(tool_call)
+                result = self.act(tool_call, origin)
                 self.observe(tool_call["function"]["name"], result)
 
             self._inject_session_context()
@@ -19808,7 +20258,7 @@ class Agent:
                 return
         self.messages.append({"role": self._SESSION_CONTEXT_ROLE, "content": context})
 
-    def act(self, tool_call: dict) -> str:
+    def act(self, tool_call: dict, origin: str = "") -> str:
         """Run one tool that the LLM asked for, using the name and args it chose."""
         name = tool_call.get("function", {}).get("name")
         args = self._normalize_args(name, tool_call.get("function", {}).get("arguments", {}))
@@ -19824,6 +20274,14 @@ class Agent:
                     "result_preview": result[:200],
                     "status": "success",
                 })
+                self._log_tool_event({
+                    "time": timestamp,
+                    "tool": name,
+                    "args": args,
+                    "result_preview": result[:200],
+                    "status": "success",
+                    "origin": origin,
+                })
                 return result
             except Exception as e:
                 print(f"[Agent.act] Error executing {name}: {e}")
@@ -19834,6 +20292,14 @@ class Agent:
                     "error": str(e),
                     "status": "error",
                 })
+                self._log_tool_event({
+                    "time": timestamp,
+                    "tool": name,
+                    "args": args,
+                    "error": str(e),
+                    "status": "error",
+                    "origin": origin,
+                })
                 return f"Error executing tool: {e}"
         print(f"[Agent.act] Missing tool requested: {name}")
         self.tool_events.append({
@@ -19842,7 +20308,29 @@ class Agent:
             "args": args,
             "status": "missing",
         })
+        self._log_tool_event({
+            "time": timestamp,
+            "tool": name,
+            "args": args,
+            "status": "missing",
+            "origin": origin,
+        })
         return f"Error: {name} missing"
+
+    def _log_tool_event(self, event: dict) -> None:
+        """Report one structured tool event to the process-wide tool log
+        (server/tool_log.py). Deliberately fail-safe so a logging problem can
+        never break the tool call that just succeeded."""
+        event.setdefault("agentId", self.profile.id or "")
+        event.setdefault("agentName", self.profile.name or "")
+        event.setdefault("model", self.model or "")
+        event["time"] = datetime.now().isoformat(timespec="seconds")
+        try:
+            from server.tool_log import append as _record_tool_event
+
+            _record_tool_event(event)
+        except Exception:
+            pass
 
     def observe(self, name: str, result: str) -> None:
         """Record a tool's result back into the conversation history."""
@@ -22089,6 +22577,377 @@ def search_chat_logs(query: str) -> str:
 
 ```
 
+## plan1.md
+
+```markdown
+### **Plan: agent_monitoring Top-Level Backend Subsystem**
+
+#### **Goal**
+Establish a standalone `agent_monitoring/` package (`store.py`, `collector.py`, `backup.py`, `manager.py`, `router.py`, `__init__.py`) to record agent-turn telemetry, calculate session metrics, manage snapshot backups, and expose REST endpoints under `/api/monitoring/*` without modifying core engine logic.
+
+---
+
+#### **Repo Grounding (Verified)**
+* **`server/paths.py`** owns path resolution and exposes `DATA_DIR` and `EXPORTS_DIR`.
+* The FastAPI application is instantiated at `server/server.py` (`app = FastAPI(lifespan=lifespan)`).
+* **`POST /api/chat`** serves as the per-turn HTTP boundary where `agent.think` is executed.
+* Snapshots are located under `DATA_DIR / "snapshots" / "monitoring"`, aligning with `RestoreManager` conventions.
+
+---
+
+#### **Files to CREATE**
+
+| File | Role |
+| :--- | :--- |
+| **`agent_monitoring/__init__.py`** | Package boundary re-exporting `MonitoringService` and `get_monitoring_service()`. |
+| **`agent_monitoring/store.py`** | `MonitoringStore` — thread-safe JSONL disk I/O under `DATA_DIR / "monitoring" / "agent_metrics.jsonl"`. |
+| **`agent_monitoring/collector.py`** | `MetricsCollector` — thread-safe in-memory session tracking and turn metric aggregation. |
+| **`agent_monitoring/backup.py`** | `BackupManager` — snapshot copies in `snapshots/monitoring/` and exports in `EXPORTS_DIR`. |
+| **`agent_monitoring/manager.py`** | `MonitoringService` — central orchestrator facade and process singleton `get_monitoring_service()`. |
+| **`agent_monitoring/router.py`** | `APIRouter(prefix="/api/monitoring")` — status, records, export, and reset REST endpoints. |
+
+---
+
+#### **Subsystem Source Code**
+
+##### **1. `agent_monitoring/store.py`**
+```python
+"""
+Role: Thread-safe JSONL persistence under the central data directory.
+"""
+import json
+import threading
+from pathlib import Path
+from server.paths import DATA_DIR  # Official path authority
+
+MONITORING_DIR = DATA_DIR / "monitoring"
+
+class MonitoringStore:
+    """Thread-safe JSONL storage for monitoring metrics."""
+
+    def __init__(self, storage_dir: Path = MONITORING_DIR) -> None:
+        self.storage_dir = storage_dir
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.metrics_file = self.storage_dir / "agent_metrics.jsonl"
+        self._lock = threading.Lock()
+
+    def append_record(self, record: dict) -> None:
+        """Fail-safe append: swallows I/O errors to prevent breaking agent responses."""
+        try:
+            with self._lock:
+                with self.metrics_file.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception:
+            pass  # Logging failures must not crash chat execution
+
+    def read_records(self) -> list[dict]:
+        """Reads stored telemetry, skipping malformed lines."""
+        if not self.metrics_file.exists():
+            return []
+        records = []
+        with self._lock:
+            with self.metrics_file.open("r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        try:
+                            records.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+        return records
+
+    def clear_file(self) -> None:
+        """Safely empties the active metrics log file."""
+        with self._lock:
+            if self.metrics_file.exists():
+                self.metrics_file.write_text("", encoding="utf-8")
+```
+
+##### **2. `agent_monitoring/collector.py`**
+```python
+"""
+Role: Real-time telemetry tracking and session metric aggregation.
+"""
+import threading
+from typing import Any
+
+class MetricsCollector:
+    """Thread-safe in-memory metric aggregator."""
+
+    def __init__(self) -> None:
+        self.active_sessions: dict[str, dict[str, Any]] = {}
+        self.total_turns: int = 0
+        self._lock = threading.Lock()
+
+    def start_session(self, session_id: str, agent_id: str) -> None:
+        """Idempotently registers an active session in memory."""
+        with self._lock:
+            if session_id not in self.active_sessions:
+                self.active_sessions[session_id] = {
+                    "agent_id": agent_id,
+                    "turns_count": 0,
+                    "total_duration_ms": 0.0,
+                }
+
+    def record_turn(
+        self,
+        agent_id: str,
+        duration_ms: float,
+        tool_calls_count: int,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Calculates turn metrics and updates active session state."""
+        with self._lock:
+            self.total_turns += 1
+            if session_id and session_id in self.active_sessions:
+                sess = self.active_sessions[session_id]
+                sess["turns_count"] += 1
+                sess["total_duration_ms"] += duration_ms
+
+            return {
+                "agent_id": agent_id,
+                "session_id": session_id,
+                "duration_ms": duration_ms,
+                "tool_calls_count": tool_calls_count,
+                "cumulative_system_turns": self.total_turns,
+            }
+
+    def end_session(self, session_id: str) -> dict[str, Any] | None:
+        """Removes session from memory and returns final stats."""
+        with self._lock:
+            return self.active_sessions.pop(session_id, None)
+```
+
+##### **3. `agent_monitoring/backup.py`**
+```python
+"""
+Role: Snapshot backups, exported summaries, and state purging.
+"""
+import json
+import shutil
+from datetime import datetime
+from pathlib import Path
+from server.paths import DATA_DIR, EXPORTS_DIR  # Path authority
+
+SNAPSHOTS_DIR = DATA_DIR / "snapshots" / "monitoring"
+
+class BackupManager:
+    """Manages snapshot backups and JSON reports."""
+
+    def __init__(self) -> None:
+        EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    def create_snapshot(self, source_file: Path) -> Path:
+        """Creates a timestamped snapshot in DATA_DIR / snapshots / monitoring."""
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        target_path = SNAPSHOTS_DIR / f"agent_metrics_{stamp}.jsonl"
+        if source_file.exists():
+            shutil.copy2(source_file, target_path)
+        return target_path
+
+    def export_summary_json(self, records: list[dict]) -> Path:
+        """Exports formatted telemetry records to EXPORTS_DIR."""
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        export_file = EXPORTS_DIR / f"monitoring_export_{stamp}.json"
+        payload = {
+            "exported_at": datetime.now().isoformat(),
+            "record_count": len(records),
+            "records": records,
+        }
+        export_file.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        return export_file
+```
+
+##### **4. `agent_monitoring/manager.py`**
+```python
+"""
+Role: Central Coordinator — Orchestrates all internal communication
+between MonitoringStore, MetricsCollector, and BackupManager.
+"""
+from datetime import datetime
+from typing import Any
+from agent_monitoring.store import MonitoringStore
+from agent_monitoring.collector import MetricsCollector
+from agent_monitoring.backup import BackupManager
+
+class MonitoringService:
+    """Central Hub: Single entry point for external subsystem calls."""
+
+    def __init__(self) -> None:
+        self.store = MonitoringStore()
+        self.collector = MetricsCollector()
+        self.backup = BackupManager()
+
+    def log_event(self, event_type: str, agent_id: str, payload: dict[str, Any]) -> None:
+        """Logs a generic event directly to persistent storage."""
+        record = {
+            "timestamp": datetime.now().isoformat(),
+            "event_type": event_type,
+            "agent_id": agent_id,
+            "data": payload,
+        }
+        self.store.append_record(record)
+
+    def log_agent_turn(
+        self,
+        agent_id: str,
+        duration_ms: float,
+        tool_calls_count: int,
+        session_id: str | None = None,
+    ) -> None:
+        """Coordinates Collector metric calculation and Store persistence."""
+        summary = self.collector.record_turn(
+            agent_id, duration_ms, tool_calls_count, session_id=session_id
+        )
+        self.log_event("agent_turn", agent_id, summary)
+
+    def export_telemetry_report(self) -> str:
+        """Fetches records from Store and creates an export file via BackupManager."""
+        records = self.store.read_records()
+        return str(self.backup.export_summary_json(records))
+
+    def safe_reset(self) -> dict[str, Any]:
+        """Creates a snapshot backup via BackupManager, then clears the Store."""
+        snapshot_path = self.backup.create_snapshot(self.store.metrics_file)
+        self.store.clear_file()
+        return {
+            "status": "success",
+            "message": "Monitoring store safely backed up and cleared.",
+            "snapshot_backup": str(snapshot_path),
+        }
+
+# Singleton instance for process-wide access
+_service_instance: MonitoringService | None = None
+
+def get_monitoring_service() -> MonitoringService:
+    """Returns or creates the process-wide MonitoringService singleton."""
+    global _service_instance
+    if _service_instance is None:
+        _service_instance = MonitoringService()
+    return _service_instance
+```
+
+##### **5. `agent_monitoring/__init__.py`**
+```python
+from agent_monitoring.manager import get_monitoring_service, MonitoringService
+
+__all__ = ["get_monitoring_service", "MonitoringService"]
+```
+
+##### **6. `agent_monitoring/router.py`**
+```python
+"""
+Role: REST API boundary exposing status, records, export, and reset endpoints.
+"""
+from fastapi import APIRouter, HTTPException
+from agent_monitoring.manager import get_monitoring_service
+
+router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
+
+@router.get("/status")
+def get_status():
+    service = get_monitoring_service()
+    return {
+        "status": "active",
+        "active_sessions": len(service.collector.active_sessions),
+        "total_system_turns": service.collector.total_turns,
+    }
+
+@router.get("/records")
+def get_records():
+    service = get_monitoring_service()
+    return {"status": "success", "records": service.store.read_records()}
+
+@router.post("/export")
+def export_report():
+    try:
+        service = get_monitoring_service()
+        return {"status": "success", "export_file": service.export_telemetry_report()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/reset")
+def reset_logs():
+    try:
+        service = get_monitoring_service()
+        return service.safe_reset()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+---
+
+#### **Integration Changes (Minimal, Boundary-Only)**
+
+1. **`server/server.py` Import Block**:
+   ```python
+   from agent_monitoring.router import router as monitoring_router
+   ```
+2. **Router Mount**:
+   ```python
+   app.include_router(monitoring_router)
+   ```
+3. **Turn Telemetry Hook (`POST /api/chat`)**:
+   ```python
+   import time
+   from agent_monitoring import get_monitoring_service
+
+   start_time = time.perf_counter()
+   reply = agent.think(data.message)
+   duration_ms = (time.perf_counter() - start_time) * 1000.0
+
+   # Non-blocking, fail-safe logging
+   try:
+       m_service = get_monitoring_service()
+       m_service.collector.start_session(session["id"], agent_id)
+       m_service.log_agent_turn(
+           agent_id=agent_id,
+           duration_ms=duration_ms,
+           tool_calls_count=len(getattr(agent, "tool_events", [])),
+           session_id=session["id"]
+       )
+   except Exception:
+       pass
+   ```
+4. **Session Lifecycle Hook (`POST /api/chats/end`)**:
+   ```python
+   try:
+       if row and row.get("id"):
+           get_monitoring_service().collector.end_session(row["id"])
+   except Exception:
+       pass
+   ```
+5. **No edits** required in `engine/`, `tools/`, or `memory/`.
+
+---
+
+#### **Amendments to the Draft Code (Why)**
+* **Thread Safety**: Wrapped `MonitoringStore` disk I/O and `MetricsCollector` memory operations in `threading.Lock()` to prevent race conditions during multi-threaded FastAPI execution.
+* **Fail-Safe Writes**: `append_record` catches and swallows I/O exceptions so logging issues never break chat execution.
+* **Robust Line Parsing**: `read_records` skips malformed JSON lines gracefully.
+* **Session Threading**: Threaded `session_id` through `start_session`, `record_turn`, and `log_agent_turn` to link metrics directly to active user sessions.
+* **Snapshot Conventions**: Saved backups to `DATA_DIR / "snapshots" / "monitoring"`, matching existing `RestoreManager` patterns.
+
+---
+
+#### **Verification**
+1. Run `python -c "import agent_monitoring, server.server"` to verify clean imports.
+2. Start server and query `GET /api/monitoring/status` to confirm `{"status":"active",...}`.
+3. Send a message to `POST /api/chat` and verify a new JSONL line is appended in `DATA_DIR / "monitoring" / "agent_metrics.jsonl"`.
+4. Query `GET /api/monitoring/records` and trigger `POST /api/monitoring/export` to confirm output in `EXPORTS_DIR`.
+5. Trigger `POST /api/monitoring/reset` to confirm snapshot creation under `DATA_DIR / "snapshots" / "monitoring"` and log clearing.
+
+---
+
+#### **Risks / Notes**
+* Path defaults resolve at import time via `server/paths.py`.
+* In-memory active session metrics reset on server restart, while JSONL logs remain persistent.
+* `server/server.py` handles root-level package resolution automatically.
+
+```
+
 ## requirements.txt
 
 ```text
@@ -23995,6 +24854,10 @@ CUSTOM_MODULES_DIR = _rooted(CUSTOM_MODULES_PATH, DATA_DIR / "custom_modules")
 LOG_FILE = CHATS_DIR / "chatRecord.jsonl"
 ACTIVE_SESSION_FILE = CHATS_DIR / ".active-chat.json"
 
+# Tool-usage log (append-only JSONL of every tool call agents make).
+TOOL_LOG_DIR = DATA_DIR / "toollog"
+TOOL_LOG_FILE = TOOL_LOG_DIR / "tool_usage.jsonl"
+
 # History + exports (server.py).
 HISTORY_FILE = DATA_DIR / "history.json"
 EXPORTS_DIR = DATA_DIR / "exports"
@@ -24052,6 +24915,7 @@ def about() -> dict:
         "chat_records_dir": str(RECORDS_DIR),
         "chat_log_file": str(LOG_FILE),
         "active_session_file": str(ACTIVE_SESSION_FILE),
+        "tool_log_file": str(TOOL_LOG_FILE),
         "history_file": str(HISTORY_FILE),
         "exports_dir": str(EXPORTS_DIR),
         "rag_db_dir": str(RAG_DB_DIR),
@@ -24072,6 +24936,7 @@ def about() -> dict:
 ```python
 import sys
 import os
+import time
 import subprocess
 
 # Make `python server.py` work from anywhere (server/, root, ...):
@@ -24110,6 +24975,7 @@ from engine.agents.factory import build_agent, replay_history, AgentNotFoundErro
 from server.chat_store import store as chat_store
 from server import paths
 from server import console_log
+from server import tool_log
 
 # Modular interface layer (docs/01_IDEA_AND_ARCHITECTURE.md): update modules
 # under interface/updates/<domain>/ are discovered and executed natively.
@@ -24126,6 +24992,11 @@ from interface.restore_manager import (RestoreManager, get_restore_manager,
 # 'custom' domain, so core code can call them via the traced dispatcher.
 from interface.custom_module_manager import get_custom_module_manager
 from interface.wiring import WiringManager
+
+# Agent monitoring subsystem (top-level agent_monitoring/ package): telemetry
+# store + metrics collector + snapshots/exports, exposed at /api/monitoring/*.
+from agent_monitoring.router import router as monitoring_router
+from agent_monitoring import get_monitoring_service
 
 # Runs once at startup; scans data/chatlog/agent-text-records/*.txt and records
 # their header info in data/chatlog/chatRecord.jsonl so past chats appear in
@@ -24169,14 +25040,26 @@ def _save_json(path, value) -> None:
 def _default_agent() -> str:
     """The agent used when a chat request carries no agent_id.
 
-    Comes from config/settings.json ("default_agent"); falls back to
-    "basic_chat" when the file is missing or unreadable.
+    Resolution order:
+        1. "defaultAgentId" in the dashboard's consolidated settings
+           (dashboard/config/app_settings.json) - the same value the Settings
+           page's "default agent" dropdown writes;
+        2. the legacy "default_agent" key in config/settings.json;
+        3. "rag_assistant" (the previous fallbacks, basic_chat/dev_assistant,
+           no longer ship with the library).
     """
     try:
-        settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-        return settings.get("default_agent") or "basic_chat"
+        app_settings = json.loads(APP_SETTINGS_FILE.read_text(encoding="utf-8"))
+        agent_id = app_settings.get("defaultAgentId") or ""
+        if agent_id:
+            return agent_id
     except (OSError, json.JSONDecodeError):
-        return "basic_chat"
+        pass
+    try:
+        settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        return settings.get("default_agent") or "rag_assistant"
+    except (OSError, json.JSONDecodeError):
+        return "rag_assistant"
 
 
 # Startup hook: scan Ollama models BEFORE any request is served, and import
@@ -24467,11 +25350,27 @@ def chat(data: ChatRequest):
     for turn in session.get("messages", []):
         agent.messages.append({"role": turn.get("role"), "content": turn.get("content", "")})
 
+    _started = time.perf_counter()
     reply = agent.think(data.message)
+    _duration_ms = (time.perf_counter() - _started) * 1000.0
     session = chat_store.append_turn(data.message, reply) or session
     print(f"[SERVER] Reply via {agent.model}: {reply[:120]}...")
 
     tool_logs = getattr(agent, "tool_events", [])
+
+    # Telemetry hook (fail-safe): logging must never break a chat reply.
+    try:
+        m_service = get_monitoring_service()
+        m_service.collector.start_session(session["id"], agent_id)
+        m_service.log_agent_turn(
+            agent_id=agent_id,
+            duration_ms=_duration_ms,
+            tool_calls_count=len(getattr(agent, "tool_events", [])),
+            session_id=session["id"],
+        )
+    except Exception:
+        pass
+
     return {
         "reply": reply,
         "session_id": session["id"],
@@ -24490,6 +25389,17 @@ async def console_logs(limit: int = 300):
     the standalone pop-out page (dashboard/logs.html), which apply their own
     filtering client-side."""
     return {"logs": console_log.tail(limit=limit), "captured": console_log.captured()}
+
+
+@app.get("/api/logs/tools")
+async def tool_logs(limit: int = 500, tool: str = "", agent: str = "", since: str = ""):
+    """Structured tool-usage feed: every tool call agents have made (the app's
+    own log, data/toollog/tool_usage.jsonl), newest first. Each event carries
+    an ISO timestamp, agent id/name, model, tool name, args, status and a
+    result/error preview. Optional filters: `tool` (exact ID), `agent`
+    (substring of id or name), `since` (ISO timestamp)."""
+    events = tool_log.tail(limit=limit, tool=tool, agent=agent, since=since)
+    return {"events": events, "total": len(events), "captured": tool_log.captured()}
 
 
 # --- CHAT SESSIONS (server-side organization) ---
@@ -24527,6 +25437,11 @@ async def end_chat(payload: dict = None):
     )
     if not row:
         return {"finalized": False, "saved": False, "error": "No active chat to finalize."}
+    try:
+        if row and row.get("id"):
+            get_monitoring_service().collector.end_session(row["id"])
+    except Exception:
+        pass
     return {"finalized": True, "saved": True, "file": row["fileName"], "id": row["id"], "version": row["version"]}
 
 
@@ -24813,6 +25728,8 @@ async def save_export(payload: dict):
     return {"saved": True, "files": [md_path.name, json_path.name]}
 
 
+app.include_router(monitoring_router)
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.get("/")
@@ -25096,6 +26013,174 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
     uvicorn.run(app, host=host, port=port)
 
+```
+
+## server/tool_log.py
+
+```python
+"""server/tool_log.py
+====================
+
+A process-wide, append-only log of every tool call agents make.
+
+Each event is a small structured dict written as one JSON line to
+`data/toollog/tool_usage.jsonl` (path resolved through server/paths.py so it
+follows the configured dataDir), AND kept in an in-memory deque so the
+frontend can poll a live tail without re-reading the file on every request.
+
+Event shape (superset of Agent.tool_events, with agent context):
+
+    {
+        "time":           "2026-09-16T14:22:31",   # ISO (seconds)
+        "agentId":        "dev_assistant",
+        "agentName":      "Dev Assistant",
+        "model":          "qwen2.5:7b",
+        "tool":           "read_file",
+        "args":           {...},
+        "result_preview": "...",      # on success / missing
+        "error":          "...",      # only on error
+        "status":         "success" | "error" | "missing",
+        "origin":         "native tool_calls" | "TEXT reply",
+    }
+
+record() is deliberately fail-safe: a disk error must never break a tool call,
+so every write is wrapped so exceptions are swallowed (matching the "chats
+save even if the log fails" philosophy of chat_store).
+
+Read the tail anytime:
+
+    from server import tool_log
+    tool_log.tail(limit=100)
+"""
+
+from __future__ import annotations
+
+import json
+import threading
+from collections import deque
+from datetime import datetime
+
+from server import paths
+
+_LIMIT = 1000  # in-memory tail (the JSONL file keeps the full history)
+_BUFFER: deque[dict] = deque(maxlen=_LIMIT)
+_LOCK = threading.Lock()
+_SEEDED = False
+
+# A single JSONL logger behind every append, so concurrent tool calls (and the
+# seed-on-import read) never interleave writes.
+
+_JSONL_FILE = paths.TOOL_LOG_FILE
+
+
+def _iso_now() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def _read_tail(lines: int) -> list[dict]:
+    """Best-effort read of the last `lines` JSONL records (newest last)."""
+    events: list[dict] = []
+    try:
+        if not _JSONL_FILE.exists():
+            return events
+        with _JSONL_FILE.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        return events
+    return events[-lines:]
+
+
+def _seed() -> None:
+    """Warm the in-memory tail from the persisted log so a restarted server
+    still shows recent tool activity in the live view immediately. Runs once
+    at import (before any append), and only fills an empty buffer so events
+    recorded fresh in this process are never duplicated."""
+    global _SEEDED
+    with _LOCK:
+        if _SEEDED:
+            return
+        _SEEDED = True
+        if _BUFFER:
+            return
+        for event in _read_tail(_LIMIT):
+            _BUFFER.append(event)
+
+
+def append(event: dict) -> None:
+    """Record one structured tool event (thread-safe, fail-safe)."""
+    if not isinstance(event, dict):
+        return
+    normalized = {
+        "time": event.get("time") or _iso_now(),
+        "agentId": event.get("agentId", ""),
+        "agentName": event.get("agentName", ""),
+        "model": event.get("model", ""),
+        "tool": event.get("tool", ""),
+        "args": event.get("args", {}) or {},
+        "status": event.get("status", "success"),
+    }
+    if event.get("error"):
+        normalized["error"] = str(event["error"])
+    elif event.get("result_preview"):
+        normalized["result_preview"] = str(event["result_preview"])[:200]
+    if event.get("origin"):
+        normalized["origin"] = event["origin"]
+
+    with _LOCK:
+        _BUFFER.append(normalized)
+        try:
+            _JSONL_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with _JSONL_FILE.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(normalized, ensure_ascii=False, default=str) + "\n")
+        except Exception:
+            pass  # a logging failure never blocks the tool call
+
+
+def tail(limit: int | None = None, tool: str = "", agent: str = "", since: str = "") -> list[dict]:
+    """The most recent captured events, newest first (the file seed means a
+    restarted server can still return pre-restart history).
+
+    Optional filters:
+        tool  - event["tool"] must equal the value (case-insensitive)
+        agent - event["agentId"] or event["agentName"] matches (case-insensitive)
+        since - only events with time >= this ISO string (inclusive, lexicographic)
+    """
+    _seed()
+    events = list(_BUFFER)
+    if tool:
+        needle = str(tool).strip().lower()
+        events = [e for e in events if str(e.get("tool", "")).lower() == needle]
+    if agent:
+        needle = str(agent).strip().lower()
+        events = [
+            e for e in events
+            if needle in str(e.get("agentId", "")).lower()
+            or needle in str(e.get("agentName", "")).lower()
+        ]
+    if since:
+        events = [e for e in events if str(e.get("time", "")) >= str(since)]
+    events.reverse()
+    if limit is not None and limit > 0:
+        events = events[: int(limit)]
+    return events
+
+
+def captured() -> bool:
+    """True once any event has been recorded in this process."""
+    _seed()
+    return len(_BUFFER) > 0
+
+
+# Warm the tail from disk once at import so the live view can show pre-restart
+# history without duplicating events recorded later in this process.
+_seed()
 ```
 
 ## tools/__init__.py
@@ -25760,4 +26845,4 @@ def search_chat_logs(query: str) -> str:
 
 ```
 
-_86 code file(s)._
+_92 code file(s)._

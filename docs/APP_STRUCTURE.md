@@ -1,6 +1,6 @@
 # Terminator1 — App Structure
 
-_Auto-generated on 2026-09-15T22:47:40 by `scripts/update_docs.py`._
+_Auto-generated on 2026-09-17T10:51:14 by `scripts/update_docs.py`._
 
 
 ```
@@ -8,6 +8,13 @@ genV2_Interface_projectManager/
 
 |-- about
 |   `-- set_title.py
+|-- agent_monitoring
+|   |-- __init__.py
+|   |-- backup.py
+|   |-- collector.py
+|   |-- manager.py
+|   |-- router.py
+|   `-- store.py
 |-- config
 |   `-- models.json
 |-- dashboard
@@ -65,13 +72,10 @@ genV2_Interface_projectManager/
 |   `-- HOW_TO_USE.md
 |-- engine
 |   |-- agent_library
-|   |   |-- basic_chat
+|   |   |-- Feature Planner Agent
 |   |   |   |-- agent.json
 |   |   |   `-- agent.md
-|   |   |-- dev_assistant
-|   |   |   |-- agent.json
-|   |   |   `-- agent.md
-|   |   |-- problem_discovery_agent
+|   |   |-- feature-clarifier-agent
 |   |   |   |-- agent.json
 |   |   |   `-- agent.md
 |   |   `-- rag_assistant
@@ -122,7 +126,8 @@ genV2_Interface_projectManager/
 |   |   `-- store.py
 |   |-- console_log.py
 |   |-- paths.py
-|   `-- server.py
+|   |-- server.py
+|   `-- tool_log.py
 |-- tools
 |   |-- __init__.py
 |   |-- registry.py
@@ -130,7 +135,8 @@ genV2_Interface_projectManager/
 |   `-- tools.py
 |-- .gitignore
 |-- README.md
+|-- plan1.md
 `-- requirements.txt
 ```
 
-_88 tracked source file(s)._
+_94 tracked source file(s)._

@@ -14,7 +14,7 @@
 // Keeping the formatting here (instead of inside chat-window.js) means it can
 // grow into full stdout/stderr streaming later without touching the window.
 
-function cleanPreview(text) {
+export function cleanPreview(text) {
     return String(text ?? "").replace(/[\r\n]+/g, " ").slice(0, 200);
 }
 
@@ -27,7 +27,7 @@ function stripAnsi(line) {
     return line.replace(ANSI_RE, "");
 }
 
-function formatArgs(args) {
+export function formatArgs(args) {
     try {
         const str = JSON.stringify(args || {});
         return str.length > 240 ? str.slice(0, 237) + "..." : str;
