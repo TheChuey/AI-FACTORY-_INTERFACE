@@ -29,8 +29,8 @@ export async function renderInterfaceIndicator({ container = null, onMesh = fals
     );
     if (total === 0) return null;
 
-    const driftCount = status.baseline && status.baseline.drift
-        ? Number(status.baseline.drift.modified) || 0
+    const driftCount = status.baseline && status.baseline.exists
+        ? Number(status.baseline.modified) || 0
         : 0;
     const runEnabled = Boolean(status.run_enabled);
 

@@ -3,6 +3,117 @@
 All notable changes to this project. Format based on Keep a Changelog
 (https://keepachangelog.com/), grouped by date.
 
+## 2026-09-18 — Master-copy recovery
+
+The "Updates / Interface" recovery feature was rebuilt around a single
+known-good **master copy** (`current-known-good-copy/`) with overlay-restore
+semantics and a guard UI, replacing the old multi-baseline dry-run flow.
+
+### Changed — `interface/restore_manager.py`
+
+- Rewritten to keep **one** master copy. New API: `snapshot()` (publish the
+  current tree as the master), `status()` (master info + how many live files
+  drift), `restore()` (overlay every master file back onto the live tree).
+- Remove `snapshot_baseline()`, `diff()` and the arg-driven `restore(baseline=,
+  dry_run=)`; `LEGACY_BASELINE` (old `test/` folder) removed.
+- Restore semantics (overlay): differing live files are backed up first into
+  `agent_monitoring/data/snapshots/pre_restore_backup/<stamp>/` then
+  overwritten; master-only files are **added**; live-only files are **never
+  deleted**. Docs are regenerated afterwards (`_run_docs_regeneration()`).
+- `BASELINE_MANIFEST.json` is now excluded from comparisons so the master
+  never reports itself as drift. Backups stay under the relocated
+  `agent_monitoring/data/snapshots/pre_restore_backup/`.
+
+### Changed — endpoints (`server/server.py`)
+
+- `GET /api/interface/status` → `baseline` is now `RestoreManager().status()`
+  (`{exists, folder, files, created, modified, modified_files, error}`).
+- `POST /api/interface/snapshot` → `RestoreManager().snapshot()`.
+- `POST /api/interface/restore` → real restore only, no payload; returns
+  `{restored, added, backup_dir, docs_regenerated}`. Preview drift via the
+  status endpoint instead of a dry-run flag.
+- Dropped the unused `MANIFEST_NAME` import.
+
+### Changed — frontend
+
+- `dashboard/js/ui/interface-manager.js` — one **"↩ Restore to master copy"**
+  button opens a warning dialog (overlay modal, Cancel / Restore now); the two
+  dry-run/real buttons are gone. "❖ Snapshot" is now **"Save current state as
+  master"**. Status card shows master copy freshness + drift and the master
+  manifest line.
+- `dashboard/js/ui/interface-indicator.js` — header dot now reads
+  `baseline.modified` (new shape) instead of `baseline.drift`.
+- `dashboard/js/api/api.js` — `restoreInterface()` is now payload-less
+  (real restore); old `baseline/apply/dryRun` params removed.
+
+### Changed — CLI
+
+- `about/set_title.py` — removed the `apply`, `snapshot` and `restore`
+  subcommands (they called the removed APIs). The interactive title editor and
+  `create-module` remain.
+- `README.md` + `docs/HOW_TO_USE.md` — recovery/how-to steps now reference the
+  Settings card buttons and `/api/interface/*` instead of the removed CLI.
+
+### Changed — master copy published
+
+- `current-known-good-copy/` published from the current tree (94 files) with a
+  fresh `BASELINE_MANIFEST.json`; it is git-ignored, so it never enters the
+  repo.
+
+The central runtime data directory moved from the project root (`data/`) into
+the `agent_monitoring/` subsystem (`agent_monitoring/data/`). Every backend
+logger and store reads its paths from `server/paths.py`, so changing the base
+`DATA_DIR` default routed chat transcripts, `chatRecord.jsonl`, the
+`toollog`, `interface_trace.log`, snapshots, exports and the RAG store to the
+new home without touching individual loggers.
+
+### Changed — path authority
+
+- `server/paths.py` — `DATA_DIR` now defaults to
+  `agent_monitoring/data` instead of project-root `data/` (docstring +
+  comment updated). Explicit configuration still wins: `dataDir` /
+  `dataDirWindows|Linux|Mac` in `app_settings.json` and the
+  `GENESSIS_DATA_DIR` env var override the default exactly as before, so an
+  existing external data folder is untouched. Everything derived
+  (`CHATS_DIR`, `RECORDS_DIR`, `RAG_DB_DIR`, `CUSTOM_MODULES_DIR`,
+  `TOOL_LOG_FILE`, `HISTORY_FILE`, `EXPORTS_DIR`, `LOG_FILE`) follows.
+- The whole runtime tree still lives under one folder: `chatlog/`
+  (transcripts + `chatRecord.jsonl`), `toollog/`, `monitoring/`,
+  `rag_db/`, `exports/`, `snapshots/`, `custom_modules/`,
+  `interface_archive/`, `interface_trace.log`.
+
+### Changed — hardcoded `data/` reconcilers
+
+- `interface/restore_manager.py` — `BACKUP_ROOT` now writes restore backups
+  to `agent_monitoring/data/snapshots/pre_restore_backup/`; `EXCLUDED_TOP`
+  gained `"agent_monitoring/data"` (the existing `"data"` segment rule also
+  covers it) so the relocated runtime data never leaks into snapshots/restores.
+- `interface/update_manager.py` — `ARCHIVE_DIR` → `agent_monitoring/data/interface_archive`.
+- `interface/interface_dispatcher.py` — `TRACE_LOG_FILE` → `agent_monitoring/data/interface_trace.log`.
+- `server/chat_store/logger.py` — import-failure fallback log path updated.
+- `server/server.py` — legacy `/api/chat-save` escape-guard fallback updated.
+- `memory/search.py` + `memory/main.py` — standalone-call fallback defaults
+  updated (`agent_monitoring/data/rag_db`); the app runtime already passes
+  `paths.RAG_DB_DIR`.
+- `.gitignore` — explicit `agent_monitoring/data/` ignore line added.
+
+### Migration & reconciliation
+
+- Existing project-root `data/` contents (`chatlog/`, `snapshots/`,
+  `custom_modules/`, `interface_archive/`, `interface_trace.log`) were copied
+  into `agent_monitoring/data/` and the relocated `chatRecord.jsonl` is
+  consistent with the transcripts after `chat_store.import_once()` (records
+  reconciled, stale references pruned, no duplicates).
+- `agent_monitoring/store.py` (JSONL metrics) and `backup.py` (snapshots +
+  exports) verified under the relocated `monitoring/` folder; docs snapshots
+  regenerated.
+
+### Notes
+
+- On machines with an explicit data folder (e.g. `dataDirWindows`),
+  `DATA_DIR` keeps resolving to that external location - the relocation only
+  changes the default.
+
 ## 2026-09-17 — Agent monitoring subsystem (`agent_monitoring/`)
 
 A new top-level backend package records per-turn agent telemetry and exposes

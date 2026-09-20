@@ -21,6 +21,9 @@ Event shape (superset of Agent.tool_events, with agent context):
         "error":          "...",      # only on error
         "status":         "success" | "error" | "missing",
         "origin":         "native tool_calls" | "TEXT reply",
+        "op_ok":          bool,       # False when the tool ran but its OPERATION
+                                      # failed (e.g. file not found / bad path)
+        "op_error":       "...",      # the operation-level failure message
     }
 
 record() is deliberately fail-safe: a disk error must never break a tool call,
@@ -110,6 +113,10 @@ def append(event: dict) -> None:
         normalized["error"] = str(event["error"])
     elif event.get("result_preview"):
         normalized["result_preview"] = str(event["result_preview"])[:200]
+    if event.get("op_ok") is not None:
+        normalized["op_ok"] = bool(event["op_ok"])
+    if event.get("op_error"):
+        normalized["op_error"] = str(event["op_error"])
     if event.get("origin"):
         normalized["origin"] = event["origin"]
 

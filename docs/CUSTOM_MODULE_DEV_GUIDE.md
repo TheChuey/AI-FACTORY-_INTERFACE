@@ -62,8 +62,8 @@ python about/set_title.py create-module my_feature
 ### When modules (re)load
 | You just… | Do this |
 |---|---|
-| Created a **brand-new** module file | `python about/set_title.py apply` — or Settings → Updates/Interface → Apply — or `POST /api/interface/apply`. Routes get registered live. |
-| **Edited** an already-loaded module | **Restart the server** (`python server.py`). Routes are registered once per process, so an edit to a loaded module isn't picked up by `apply`. |
+| Created a **brand-new** module file | Settings → Updates/Interface → **Apply**, or `POST /api/interface/apply`. Routes get registered live. |
+| **Edited** an already-loaded module | **Restart the server** (`python server.py`). Routes are registered once per process, so an edit to a loaded module isn't picked up by Apply. |
 
 Check what's loaded at any time:
 

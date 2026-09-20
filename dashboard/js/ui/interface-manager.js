@@ -1,12 +1,13 @@
 // ============================================================
 // ui/interface-manager.js - "Updates / Interface" card (config.html)
 // ============================================================
-// Drives the Modular Interface / update system from the browser
-// (docs/01_IDEA_AND_ARCHITECTURE.md). Shows the live module catalog, the
-// external archive, the trace-log tail and the known-good baseline; offers
-// Apply / Snapshot / Restore actions, plus an explicitly-armable
-// "module execution" panel (arbitrary code execution - OFF by default and
-// gated both here in the UI and server-side via /api/interface/toggle-run).
+// Drives the Modular Interface / update system from the browser: the live
+// module catalog, the external archive, the trace-log tail and the MASTER
+// COPY recovery (current-known-good-copy/). Actions: Apply (reload modules),
+// "Save current state as master", and "Restore to master copy" - the latter
+// guarded by a warning dialog. Plus an explicitly-armable "module execution"
+// panel (arbitrary code execution - OFF by default and gated both here in
+// the UI and server-side via /api/interface/toggle-run).
 // ============================================================
 
 import {
@@ -23,9 +24,10 @@ export async function renderInterfaceSection(mount) {
 
     mount.appendChild(el("h2", "config-section-heading", "Updates / Interface"));
     mount.appendChild(el("p", "config-note",
-        "Modular update modules (interface/updates/<domain>/) are discovered at server " +
-        "startup and re-loaded through Apply. Snapshot publishes the current tree as the " +
-        "known-good baseline; Restore rolls changed files back to it (dry-run first)."));
+        "Update modules (interface/updates/<domain>/) are discovered at server startup " +
+        "and reloaded through Apply. 'Save current state as master' stores a known-good " +
+        "master copy of the app; 'Restore to master copy' rolls every file back to it " +
+        "(a backup of changed files is saved first, then docs are regenerated)."));
 
     const statusEl = el("div", "status-message");
     const statusBody = el("div", "");
@@ -78,43 +80,41 @@ export async function renderInterfaceSection(mount) {
                     d + "/ -> " + (list.length ? list.join(", ") : "(none)")).join("\n")
                 : "empty"));
 
+        // Master copy status (server-side RestoreManager.status()).
         const baseline = status.baseline || {};
-        let driftText = "(no baseline)";
-        let driftClass = "";
-        if (baseline.drift) {
-            const n = baseline.drift.modified;
-            driftText = n === 0
+        let driftText = "(no master copy)";
+        let driftClass = "warn";
+        if (baseline.exists) {
+            driftText = baseline.modified === 0
                 ? "up to date"
-                : n + " file" + (n === 1 ? "" : "s") + " differ \u2014 run Snapshot to rebaseline";
-            driftClass = n === 0 ? "ok" : "warn";
+                : baseline.modified + " file" + (baseline.modified === 1 ? "" : "s") +
+                  " differ \u2014 run 'Save current state as master' to rebaseline";
+            driftClass = baseline.modified === 0 ? "ok" : "warn";
+        } else if (baseline.error) {
+            driftText = baseline.error;
         }
-        grid.appendChild(label("Baseline", baseline.folder || "", driftText, driftClass));
-
-        const manifest = baseline.manifest;
-        if (manifest) {
-            grid.appendChild(label("Baseline manifest",
-                (manifest.created || "?") + " \u00b7 " + (manifest.files ?? "?") + " files"));
+        grid.appendChild(label("Master copy", baseline.folder || "", driftText, driftClass));
+        if (baseline.exists && baseline.created) {
+            grid.appendChild(label("Master manifest",
+                baseline.created + " \u00b7 " + baseline.files + " files"));
         }
 
         const actions = el("div", "iface-actions");
         actions.appendChild(actionBtn("\u21bb Apply", "Reload update modules + regenerate docs", async (btn) => {
             return await applyInterface();
         }));
-        actions.appendChild(actionBtn("\u2756 Snapshot", "Publish the current tree as the new baseline", async (btn) => {
-            return await snapshotInterface();
-        }));
-        actions.appendChild(actionBtn("\u21a9 Restore (dry-run)",
-            "Preview what a rollback would change", async (btn) => {
-                return await restoreInterface({ dryRun: true });
+        actions.appendChild(actionBtn("\u2756 Save current state as master",
+            "Publish the current tree as the known-good master copy", async (btn) => {
+                return await snapshotInterface();
             }));
-        actions.appendChild(actionBtn("\u21a9 Restore (real)",
-            "Back up + roll changed files back to the baseline",
+        actions.appendChild(actionBtn("\u21a9 Restore to master copy",
+            "Roll every file back to the master copy (warning dialog first)",
             async (btn) => {
-                if (!confirm("Restore the live tree from the baseline?\n\nChanged files are backed up to data/snapshots/pre_restore_backup/ first.")) {
-                    return { cancelled: true };
-                }
-                return await restoreInterface({ dryRun: false });
-            }));
+                const proceed = await confirmRestoreDialog();
+                if (!proceed) return { cancelled: true };
+                return await restoreInterface();
+            },
+            "btn-danger"));
 
         const trace = el("div", "iface-trace");
         trace.appendChild(el("div", "iface-trace-title", "Trace log tail (" + (status.trace_log || "") + ")"));
@@ -130,8 +130,8 @@ export async function renderInterfaceSection(mount) {
         statusBody.replaceChildren(box);
     }
 
-    function actionBtn(text, title, run) {
-        const btn = el("button", "btn", text);
+    function actionBtn(text, title, run, extraClass = "") {
+        const btn = el("button", "btn" + (extraClass ? " " + extraClass : ""), text);
         btn.type = "button";
         btn.title = title;
         btn.addEventListener("click", async () => {
@@ -152,13 +152,18 @@ export async function renderInterfaceSection(mount) {
 
     function summarise(action, result) {
         if (!result || typeof result !== "object") return action + " done.";
-        if (result.dry_run !== undefined) {
-            return action + ": " + (result.modified === 0
-                ? "clean - live tree matches the baseline."
-                : result.modified + " file(s) would change" + (result.skipped ? ", " + result.skipped + " baseline-only" : "") + ".");
-        }
         if (result.files !== undefined) {
-            return action + ": baseline published with " + result.files + " files.";
+            return "Master copy published with " + result.files + " files.";
+        }
+        if (result.restored !== undefined) {
+            const changed = result.restored + result.added;
+            if (changed === 0) {
+                return "Restore complete - the live tree already matched the master copy.";
+            }
+            return "Restore complete: " + result.restored + " overwritten, " +
+                result.added + " added" +
+                (result.backup_dir ? ". Backup at " + result.backup_dir : "") +
+                ". Docs " + (result.docs_regenerated ? "regenerated." : "NOT regenerated.");
         }
         if (result.catalog) {
             return action + ": modules reloaded per domain \u2014 " +
@@ -231,8 +236,7 @@ export async function renderInterfaceSection(mount) {
         }
 
         domainSel.addEventListener("change", () => {
-            const mapping = currentCatalog;
-            const mods = (mapping[domainSel.value] || []);
+            const mods = (currentCatalog[domainSel.value] || []);
             fillModules(mods.length ? mods : ["(none)"]);
         });
 
@@ -303,6 +307,87 @@ export async function renderInterfaceSection(mount) {
             },
         };
     }
+}
+
+// -------------------------------------------------- confirm-restore dialog
+
+function confirmRestoreDialog() {
+    ensureModalStyles();
+    return new Promise((resolve) => {
+        const overlay = el("div", "iface-modal-overlay");
+        const dialog = el("div", "iface-modal");
+        dialog.appendChild(el("h3", "", "Restore the application?"));
+
+        const warn = el("div", "iface-modal-warn",
+            "This will restore the system to its original parameters. Every " +
+            "application file will be replaced with the saved master copy, and " +
+            "any changes made since the master was saved will be overwritten.\n\n" +
+            "Chats, telemetry, settings and other runtime data are NOT touched. " +
+            "A backup of every overwritten file is saved before restoring, and " +
+            "the docs are regenerated afterwards.");
+        dialog.appendChild(warn);
+
+        const actions = el("div", "iface-modal-actions");
+        const cancelBtn = el("button", "btn", "Cancel");
+        const restoreBtn = el("button", "btn btn-danger", "Restore now");
+
+        function close(result) {
+            overlay.remove();
+            return resolve(result);
+        }
+        restoreBtn.addEventListener("click", () => close(true));
+        cancelBtn.addEventListener("click", () => close(false));
+        overlay.addEventListener("click", (event) => {
+            if (event.target === overlay) close(false);
+        });
+        document.addEventListener("keydown", function esc(e) {
+            if (e.key === "Escape") {
+                document.removeEventListener("keydown", esc);
+                close(false);
+            }
+        });
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(restoreBtn);
+        dialog.appendChild(actions);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+    });
+}
+
+function ensureModalStyles() {
+    if (document.getElementById("iface-modal-styles")) return;
+    const style = document.createElement("style");
+    style.id = "iface-modal-styles";
+    style.textContent = `
+        .iface-modal-overlay {
+            position: fixed; inset: 0; z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0, 0, 0, 0.55);
+        }
+        .iface-modal {
+            background: var(--color-surface, #ffffff);
+            color: var(--color-text, #1c2024);
+            border: 1px solid var(--color-border, #e1e5e8);
+            border-radius: 10px; padding: 18px 22px;
+            max-width: 460px; width: calc(100vw - 40px);
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+        }
+        .iface-modal h3 { margin: 0 0 10px; font-size: 16px; }
+        .iface-modal-warn {
+            white-space: pre-wrap; font-size: 13px; line-height: 1.55;
+            color: var(--color-text, #1c2024); opacity: 0.85;
+        }
+        .iface-modal-actions {
+            display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;
+        }
+        .btn-danger {
+            background: #b91c1c; border-color: #991b1b; color: #ffffff;
+        }
+        .btn-danger:hover:not(:disabled) { background: #dc2626; }
+        .btn-danger:disabled { opacity: 0.65; }
+    `;
+    document.head.appendChild(style);
 }
 
 // ---------------------------------------------------------------- helpers

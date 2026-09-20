@@ -41,6 +41,23 @@ def _is_plain_text(path: Path) -> bool:
     return path.suffix.lower() in _PLAIN_TEXT_EXTENSIONS
 
 
+def _unquote_path(value) -> str:
+    """Strip one level of surrounding quotes a model may have left on a path.
+
+    Small local models frequently emit tool args that still include the
+    double/single quotes from the prompt (e.g. output_path='"E:\\data\\x"').
+    Quote characters are invalid inside Windows path components, so passing
+    them through makes read/map/write/delete fail with WinError 123 - even
+    though the underlying path was perfectly real. Only matching quote pairs
+    at the very edges are stripped, and only for string arguments that are
+    really paths, so ordinary quoted prose is never mangled.
+    """
+    v = str(value).strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
+        return v[1:-1]
+    return v
+
+
 _DOCLING_CONVERTERS = {}
 
 
@@ -93,7 +110,7 @@ def read_file(path: str, ocr: bool = True) -> dict:
         dict: {"success": bool, "tool": "read_file", "data": {...}, "error": str|None}
             data keys: path, filename, file_type, extracted_content, status
     """
-    p = Path(path)
+    p = Path(_unquote_path(path))
     if not p.exists() or not p.is_file():
         return {
             "success": False,
@@ -174,7 +191,7 @@ def map_files(path: str, max_depth: int = 8, max_entries: int = 5000) -> dict:
             data keys: files (list of {name, path, extension, type, parent, level}),
                         truncated (bool), max_entries (int)
     """
-    root = Path(path)
+    root = Path(_unquote_path(path))
     if not root.exists() or not root.is_dir():
         return {
             "success": False,
@@ -265,9 +282,9 @@ def write_text_file(name: str, content: str, output_path: str, overwrite: bool =
         }
 
     try:
-        out_dir = Path(output_path)
+        out_dir = Path(_unquote_path(output_path))
         out_dir.mkdir(parents=True, exist_ok=True)
-        file_path = out_dir / name
+        file_path = out_dir / _unquote_path(name)
 
         if file_path.exists() and not overwrite:
             return {
@@ -334,7 +351,7 @@ def delete_files(file_list: list, approved: bool = False) -> dict:
 
     results = {}
     for f_path in file_list:
-        p = Path(f_path)
+        p = Path(_unquote_path(f_path))
         if p.exists() and p.is_file():
             try:
                 p.unlink()

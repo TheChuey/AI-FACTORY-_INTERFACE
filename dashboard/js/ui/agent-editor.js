@@ -80,13 +80,12 @@ function buildCard({ agent, models, toolIds }) {
         expanded = !expanded;
         body.style.display = expanded ? "" : "none";
         chevron.style.transform = expanded ? "rotate(0deg)" : "rotate(-90deg)";
-        if (expanded && !loaded) {
+        if (expanded) {
             await load();
         }
     });
     chevron.style.transform = "rotate(-90deg)";
 
-    let loaded = false;
     let state = null;
 
     async function load() {
@@ -97,7 +96,6 @@ function buildCard({ agent, models, toolIds }) {
                 if (badge.dataset.role === "mode-badge") baitBadge(badge, state.agent.mode);
             }
             renderBody();
-            loaded = true;
         } catch (error) {
             body.replaceChildren();
             body.appendChild(el("p", "status-message error", "Could not load agent config: " + error.message));
@@ -249,7 +247,9 @@ function buildMetaPane(state, models, toolIds, onSaved) {
             const updated = await saveAgentConfig(state.agent.id, { meta: payloadMeta });
             state = updated;
             onSaved();
-            statusEl.textContent = "Configuration saved.";
+            const updates = [];
+            if (updated.file) updates.push(updated.file);
+            statusEl.textContent = "Configuration saved." + (updates.length ? " -> " + updates.join(" ") : "");
             statusEl.style.color = "var(--color-success,#16803c)";
             refreshPaneFromState();
         } catch (error) {
@@ -306,7 +306,7 @@ function buildMarkdownPane(state) {
         try {
             const updated = await saveAgentConfig(state.agent.id, { markdown: textarea.value });
             state = updated;
-            statusEl.textContent = "agent.md saved.";
+            statusEl.textContent = "agent.md saved." + (updated.markdownFile ? " -> " + updated.markdownFile : "");
             statusEl.style.color = "var(--color-success,#16803c)";
         } catch (error) {
             statusEl.textContent = error.message;

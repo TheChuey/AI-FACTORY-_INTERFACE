@@ -13,8 +13,8 @@ callers can execute them natively:
     mod.run_example()
 
 Retiring a module physically moves its file out of the repo into
-`data/interface_archive/<domain>/` so the codebase never accumulates old
-experimental logic:
+`agent_monitoring/data/interface_archive/<domain>/` so the codebase never
+accumulates old experimental logic:
     UpdateManager().move_module_to_external_archive("engine", "hello_update")
 """
 
@@ -28,7 +28,7 @@ from types import ModuleType
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 UPDATES_DIR = BASE_DIR / "interface" / "updates"
-ARCHIVE_DIR = BASE_DIR / "data" / "interface_archive"
+ARCHIVE_DIR = BASE_DIR / "agent_monitoring" / "data" / "interface_archive"
 
 DOMAINS = ("engine", "tools", "server")
 

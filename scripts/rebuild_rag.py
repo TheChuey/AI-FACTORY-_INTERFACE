@@ -2,7 +2,7 @@
 scripts/rebuild_rag.py
 ======================
 
-Manage the persistent RAG store (data/rag_db/chroma.sqlite3 by default; the
+Manage the persistent RAG store (agent_monitoring/data/rag_db by default; the
 actual location + behavior comes from the configured app settings).
 
 Subcommands:

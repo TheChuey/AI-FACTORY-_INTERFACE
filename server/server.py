@@ -1,6 +1,5 @@
 import sys
 import os
-import time
 import subprocess
 
 # Make `python server.py` work from anywhere (server/, root, ...):
@@ -36,6 +35,7 @@ from pathlib import Path
 from engine.core.llm import refresh_models
 from engine.agents.registry import list_agents
 from engine.agents.factory import build_agent, replay_history, AgentNotFoundError
+from engine.pipeline import load_pipeline, run_pipeline
 from server.chat_store import store as chat_store
 from server import paths
 from server import console_log
@@ -48,7 +48,7 @@ from interface.update_manager import (UpdateManager, get_update_manager,
 from interface.interface_dispatcher import (InterfaceDispatcher,
                                             get_dispatcher, TRACE_LOG_FILE)
 from interface.restore_manager import (RestoreManager, get_restore_manager,
-                                       DEFAULT_BASELINE, MANIFEST_NAME)
+                                       DEFAULT_BASELINE)
 
 # Wiring layer: connects the two module loaders to the running app - owns
 # custom-module route registration and bridges Phase 1/2/3 drop-in modules
@@ -56,11 +56,6 @@ from interface.restore_manager import (RestoreManager, get_restore_manager,
 # 'custom' domain, so core code can call them via the traced dispatcher.
 from interface.custom_module_manager import get_custom_module_manager
 from interface.wiring import WiringManager
-
-# Agent monitoring subsystem (top-level agent_monitoring/ package): telemetry
-# store + metrics collector + snapshots/exports, exposed at /api/monitoring/*.
-from agent_monitoring.router import router as monitoring_router
-from agent_monitoring import get_monitoring_service
 
 # Runs once at startup; scans data/chatlog/agent-text-records/*.txt and records
 # their header info in data/chatlog/chatRecord.jsonl so past chats appear in
@@ -133,10 +128,11 @@ def _default_agent() -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     refresh_models()           # ollama -> config/models.json
-    chat_store.import_once()   # agent-text-records/*.txt -> data/chatlog/chatRecord.jsonl
+    chat_store.import_once()   # agent-text-records/*.txt -> <dataDir>/chatlog/chatRecord.jsonl
 
     # Resolved storage locations at boot (cross-platform - data/chat/rag can
-    # live anywhere via app_settings.json or GENESSIS_* env overrides).
+    # live anywhere via app_settings.json or GENESSIS_* env overrides; the
+    # default home is agent_monitoring/data/).
     _boot_paths = paths.about()
     print("[paths] data      -> " + _boot_paths["data_dir"])
     print("[paths] records   -> " + _boot_paths["chat_records_dir"])
@@ -196,6 +192,7 @@ class ChatRequest(BaseModel):
     title: str = ""           # optional user-chosen title for the chat
     new_chat: bool = False    # start a fresh chat (finalizes the previous one)
     rag: bool = False         # commit this chat to the RAG memory store on save
+    run_pipeline: bool = False  # run the whole config/pipeline.json chain on this message
 
 # --- UI SOURCE OF TRUTH ---
 
@@ -289,6 +286,7 @@ async def get_agent_config(agent_id: str):
 
     meta = definition["meta"]
     md_file = agent_dir(agent_id) / "agent.md"
+    json_file = agent_dir(agent_id) / "agent.json"
 
     return {
         "agent": {
@@ -301,6 +299,8 @@ async def get_agent_config(agent_id: str):
         "markdown": md_file.exists() and md_file.read_text(encoding="utf-8") or "",
         "tests": _agent_tests(meta),
         "sharedTests": _shared_tests(),
+        "file": str(json_file),
+        "markdownFile": str(md_file),
     }
 
 
@@ -328,6 +328,9 @@ async def save_agent_config(agent_id: str, payload: dict):
     except AgentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
+    json_file = agent_dir(agent_id) / "agent.json"
+    md_file = agent_dir(agent_id) / "agent.md"
+
     meta_update = payload.get("meta")
     if isinstance(meta_update, dict):
         normalized = dict(meta_update)
@@ -341,18 +344,20 @@ async def save_agent_config(agent_id: str, payload: dict):
         if "tools" in normalized and (normalized["tools"] is None or not isinstance(normalized["tools"], list)):
             normalized["tools"] = []
         save_meta(agent_id, normalized)
+        print(f"[AGENT-CONFIG] saved tools={normalized.get('tools')} -> {json_file}")
 
     markdown_update = payload.get("markdown")
     if isinstance(markdown_update, str):
         save_markdown(agent_id, markdown_update)
+        print(f"[AGENT-CONFIG] saved markdown -> {md_file}")
 
     tests_update = payload.get("tests")
     if isinstance(tests_update, list):
         save_tests(agent_id, tests_update)
+        print(f"[AGENT-CONFIG] saved {len(tests_update)} test(s) -> {json_file}")
 
     definition = load_definition(agent_id)
     meta = definition["meta"]
-    md_file = agent_dir(agent_id) / "agent.md"
     return {
         "agent": {
             "id": meta.get("id") or agent_id,
@@ -364,6 +369,8 @@ async def save_agent_config(agent_id: str, payload: dict):
         "markdown": md_file.exists() and md_file.read_text(encoding="utf-8") or "",
         "tests": _agent_tests(meta),
         "sharedTests": _shared_tests(),
+        "file": str(json_file),
+        "markdownFile": str(md_file),
     }
 
 # --- I/O ROUTES ---
@@ -372,12 +379,13 @@ async def save_agent_config(agent_id: str, payload: dict):
 def chat(data: ChatRequest):
     """Handle a chat message from the frontend.
 
-    The backend now tracks chat sessions itself (ONE active session at a
-    time). Each chat has its own start -> middle -> end:
-      - the first message ({new_chat: true}, or no active session) finalizes
-        any previous chat and starts a new one;
-      - every message appends the user turn + assistant reply to the active
-        session (persisted in data/chatlog/.active-chat.json);
+    The backend now tracks chat sessions itself (one in-progress session PER
+    AGENT, so opening another agent never shows the previous agent's chat).
+    Each chat has its own start -> middle -> end:
+      - the first message ({new_chat: true}, or no active session for that
+        agent) finalizes that agent's previous chat and starts a new one;
+      - every message appends the user turn + assistant reply to that agent's
+        session (persisted in data/chatlog/.active-chat.json, keyed by agent);
       - when a chat ends (new chat, "Save chat" or /api/chats/end), the
         transcript is written once to data/chatlog/agent-text-records/<title>[-v].txt
         and logged in data/chatlog/chatRecord.jsonl.
@@ -393,13 +401,27 @@ def chat(data: ChatRequest):
     print(f"[SERVER] Message for '{agent_id}': {data.message}")
     print(f"[SERVER] history turns received: {len(data.history)}")
 
+    # Pipeline test mode: run the FULL chain (config/pipeline.json) on this one
+    # message instead of a single agent. Each step receives the original idea
+    # plus every earlier step's output, so Step 2 never begs for Step 1's plan.
+    if data.run_pipeline:
+        pipeline = run_pipeline(data.message, model=data.model or None)
+        print(f"[SERVER] pipeline finished; reply: {pipeline['reply'][:120]!r}")
+        return {
+            "reply": pipeline["reply"],
+            "session_id": data.session_id,
+            "title": data.title,
+            "tool_events": pipeline["tool_events"],
+            "pipeline": {"outputs": pipeline["outputs"]},
+        }
+
     try:
         agent = build_agent(agent_id, model=data.model or None)
     except AgentNotFoundError as exc:
         print(f"[SERVER] {exc}")
         return {"reply": f"(unknown agent '{agent_id}' - is the folder present in agent_library/?)"}
 
-    # One session at a time: start one when asked, otherwise continue it.
+    # One session per agent: start one when asked, otherwise continue it.
     session = chat_store.ensure_session(
         agent,
         session_id=data.session_id,
@@ -414,26 +436,11 @@ def chat(data: ChatRequest):
     for turn in session.get("messages", []):
         agent.messages.append({"role": turn.get("role"), "content": turn.get("content", "")})
 
-    _started = time.perf_counter()
     reply = agent.think(data.message)
-    _duration_ms = (time.perf_counter() - _started) * 1000.0
-    session = chat_store.append_turn(data.message, reply) or session
+    session = chat_store.append_turn(agent.profile.id, data.message, reply) or session
     print(f"[SERVER] Reply via {agent.model}: {reply[:120]}...")
 
     tool_logs = getattr(agent, "tool_events", [])
-
-    # Telemetry hook (fail-safe): logging must never break a chat reply.
-    try:
-        m_service = get_monitoring_service()
-        m_service.collector.start_session(session["id"], agent_id)
-        m_service.log_agent_turn(
-            agent_id=agent_id,
-            duration_ms=_duration_ms,
-            tool_calls_count=len(getattr(agent, "tool_events", [])),
-            session_id=session["id"],
-        )
-    except Exception:
-        pass
 
     return {
         "reply": reply,
@@ -466,6 +473,15 @@ async def tool_logs(limit: int = 500, tool: str = "", agent: str = "", since: st
     return {"events": events, "total": len(events), "captured": tool_log.captured()}
 
 
+@app.get("/api/pipeline")
+async def get_pipeline():
+    """The configured agent chain (config/pipeline.json) for the frontend's
+    "Run pipeline" test button and the per-agent "send to next step" cards.
+    Returns {"steps": [...], "configured": bool} - empty steps when unset."""
+    steps = load_pipeline()
+    return {"steps": steps, "configured": bool(steps)}
+
+
 # --- CHAT SESSIONS (server-side organization) ---
 
 @app.get("/api/chats")
@@ -474,6 +490,42 @@ async def list_chats():
     transcript + the currently active session. Feeds the frontend chats
     drop-down."""
     return {"chats": chat_store.list_log()}
+
+
+@app.get("/api/chats/active")
+async def active_chat(agent_id: str = ""):
+    """Resume state for the browser tab for ONE agent: the record + latest
+    section of that agent's currently OPEN chat, including its in-progress
+    (unfinalized) session. Each agent keeps its own live session, so opening
+    agent B never resumes agent A's conversation.
+    Lets the frontend boot right back into its conversation after a reload.
+    Returns 404 when that agent has nothing active.
+
+    IMPORTANT: this route is registered BEFORE /api/chats/{chat_id} so
+    "active" is matched as a literal path, not as a chat id.
+    """
+    session = chat_store.current_session(agent_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active chat")
+    if session.get("id"):
+        chat = chat_store.get_chat(session["id"])
+        if chat:
+            return {**chat, "active": True}
+    return {
+        **{
+            "id": session.get("id"),
+            "title": session.get("title"),
+            "fileName": "",
+            "agentId": session.get("agentId", ""),
+            "agentName": session.get("agentName", ""),
+            "model": session.get("model", ""),
+            "version": "",
+            "status": "active",
+        },
+        "active": True,
+        "content": chat_store.build_transcript(session),
+        "messages": session.get("messages", []),
+    }
 
 
 @app.get("/api/chats/{chat_id}")
@@ -487,26 +539,54 @@ async def get_chat(chat_id: str):
 
 @app.post("/api/chats/end")
 async def end_chat(payload: dict = None):
-    """Finalize the active chat: writes its .txt (versioned on name collision)
-    and adds a header row to the log. Safe to call repeatedly.
+    """Finalize THAT agent's active chat: appends a '# VERSION N' section to
+    the chat's single .txt (or discards it entirely) and updates the log.
+    Safe to call repeatedly.
 
+    payload.agentId: which agent's in-progress chat to end.
+    payload.discard: True abandons that chat WITHOUT saving a transcript.
     payload.rag: optional bool override for committing this chat to the RAG
     memory store (falls back to the chat's stored flag / commitOnSave default).
     """
     payload = payload or {}
+    agent_id = str(payload.get("agentId") or "").strip()
+    if payload.get("discard"):
+        session = chat_store.discard_session(agent_id)
+        if not session:
+            return {"finalized": False, "saved": False, "error": "No active chat to discard."}
+        return {"finalized": True, "saved": False, "discarded": True, "id": session.get("id")}
     rag = payload.get("rag")
     row = chat_store.finalize_session(
+        agent_id=agent_id,
         title=payload.get("title") or payload.get("chatTitle"),
         rag=rag if isinstance(rag, bool) else None,
     )
     if not row:
         return {"finalized": False, "saved": False, "error": "No active chat to finalize."}
+    return {
+        "finalized": True,
+        "saved": True,
+        "file": row["fileName"],
+        "id": row["id"],
+        "version": row["version"],
+        "consolidation_offered": bool(row.get("consolidation_offered")),
+    }
+
+
+@app.post("/api/chats/consolidate")
+async def consolidate_chat(payload: dict = None):
+    """AI-consolidate a finalized chat: append a '# CONSOLIDATED' section
+    (summary + full conversation) to its transcript and mark the record as
+    version 'C'. Requires 2+ saved versions. The transcript is never mutated
+    when the LLM call or write fails."""
+    payload = payload or {}
+    from server.chat_store.consolidate import consolidate_chat as _consolidate
+
     try:
-        if row and row.get("id"):
-            get_monitoring_service().collector.end_session(row["id"])
-    except Exception:
-        pass
-    return {"finalized": True, "saved": True, "file": row["fileName"], "id": row["id"], "version": row["version"]}
+        result = _consolidate(payload.get("chatId"), model=payload.get("model"))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return result
 
 
 # --- RAG MEMORY STORE ---
@@ -697,7 +777,8 @@ def _sanitize_file_name(raw: str) -> str:
 def _resolve_chat_dir(raw_path: str) -> Path:
     """Resolve the configured output folder, always anchored inside BASE_DIR.
 
-    - Empty path -> BASE_DIR / "data" / "chatlog" / "agent-text-records"
+    - Empty path -> BASE_DIR / "agent_monitoring" / "data" / "chatlog" /
+      "agent-text-records"
     - Relative path -> BASE_DIR / <path>
     - Absolute path -> kept only if it stays inside BASE_DIR; otherwise
       an absolute path is re-rooted under BASE_DIR (so a crafted value
@@ -718,7 +799,7 @@ def _resolve_chat_dir(raw_path: str) -> Path:
     try:
         resolved.relative_to(BASE_DIR.resolve())
     except ValueError:
-        resolved = (BASE_DIR / "data" / "chatlog" / "agent-text-records").resolve()
+        resolved = (BASE_DIR / "agent_monitoring" / "data" / "chatlog" / "agent-text-records").resolve()
 
     return resolved
 
@@ -732,7 +813,10 @@ async def save_chat_session(payload: dict):
     frontend no longer sends raw 'content' per reply. If no active session
     exists, it falls back to writing the legacy payload the old way.
     """
-    row = chat_store.finalize_session(title=payload.get("title"))
+    row = chat_store.finalize_session(
+        agent_id=str(payload.get("agentId") or "").strip(),
+        title=payload.get("title"),
+    )
     if row:
         print(f"[CHAT-SAVE] finalized '{row['title']}' -> {row['fileName']} (v{row['version']})")
         return {"saved": True, "file": str(chat_store.RECORDS_DIR / row["fileName"]), "id": row["id"]}
@@ -791,8 +875,6 @@ async def save_export(payload: dict):
     print(f"[EXPORTS] wrote {md_path.name} + {json_path.name}")
     return {"saved": True, "files": [md_path.name, json_path.name]}
 
-
-app.include_router(monitoring_router)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -893,32 +975,7 @@ def interface_status():
             encoding="utf-8", errors="replace"
         ).splitlines()[-20:]
 
-    baseline = {
-        "folder": str(DEFAULT_BASELINE),
-        "exists": DEFAULT_BASELINE.is_dir(),
-        "manifest": None,
-        "drift": None,
-        "error": None,
-    }
-    try:
-        diff = _restore_manager().diff()
-        baseline.update({
-            "folder": diff["baseline"],
-            "exists": Path(diff["baseline"]).is_dir(),
-            "drift": {
-                "modified": len(diff["modified"]),
-                "modified_files": diff["modified"][:50],
-                "shared": diff["shared"],
-                "skipped": len(diff["skipped"]),
-                "untracked": len(diff["untracked"]),
-            },
-        })
-    except Exception as exc:
-        baseline["error"] = str(exc)
-
-    manifest_path = Path(baseline["folder"]) / MANIFEST_NAME
-    if manifest_path.is_file():
-        baseline["manifest"] = _load_json(manifest_path, None)
+    baseline = _restore_manager().status()
 
     wiring = getattr(app.state, "wiring", None)
     if wiring is not None:
@@ -1001,34 +1058,26 @@ def interface_apply():
 
 @app.post("/api/interface/snapshot")
 def interface_snapshot():
-    """Publish the current live tree as the new baseline (rebaseline)."""
+    """Publish the current live tree as the master copy (rebaseline)."""
     try:
-        count = _restore_manager().snapshot_baseline()
+        count = _restore_manager().snapshot()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"snapshot failed: {exc}")
     return {"ok": True, "files": count, "baseline": str(DEFAULT_BASELINE)}
 
 
 @app.post("/api/interface/restore")
-def interface_restore(payload: dict = None):
-    """Roll the live tree back to the baseline. DRY-RUN by default - the
-    browser must send {"apply": true} (or {"dryRun": false}) to actually
-    restore. A real restore backs everything up first into
-    data/snapshots/pre_restore_backup/."""
-    payload = payload or {}
-    baseline = payload.get("baseline")
-    requested = payload.get("apply", False)
-    dry_run = requested is not True
-    if payload.get("dryRun") is False:
-        dry_run = False
-    if dry_run:
-        result = _restore_manager().restore(baseline=baseline, dry_run=True)
-        return {"ok": True, "dry_run": True, **result}
+def interface_restore():
+    """Roll the live tree back to the master copy. Every master file is
+    overlaid onto the live tree; differing live files are backed up first into
+    agent_monitoring/data/snapshots/pre_restore_backup/ and docs are
+    regenerated. The browser's warning dialog is the guard, so no dry-run flag
+    is needed (use GET /api/interface/status to preview drift)."""
     try:
-        result = _restore_manager().restore(baseline=baseline, dry_run=False)
+        result = _restore_manager().restore()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"restore failed: {exc}")
-    return {"ok": True, "dry_run": False, **result}
+    return {"ok": True, **result}
 
 
 @app.post("/api/interface/run")

@@ -2,27 +2,32 @@
 app/chat_store/store.py
 =======================
 
-Server-side chat organization: exactly ONE active chat session at a time.
+Server-side chat organization: one in-progress chat session PER AGENT.
 
 Files:
-    data/chatlog/chatRecord.jsonl            -> the LOG: one record per chat VERSION
-    data/chatlog/.active-chat.json           -> the live session currently in progress
-    data/chatlog/agent-text-records/*.txt     -> finalized per-agent chat transcripts
+    data/chatlog/chatRecord.jsonl            -> the LOG: one record per chat
+    data/chatlog/.active-chat.json           -> {agentId: session} map of the
+                                                live conversations in progress
+    data/chatlog/agent-text-records/*.txt     -> ONE transcript per chat
 
 Lifecycle of a chat (its own start -> middle -> end):
     start  (new chat, or the first message after a restart/finalize)
     turn   (each /api/chat call appends the user message + assistant reply and
             persists the session JSON; NO .txt is written per-reply)
     end    (/api/chats/end, "Save chat", or a new chat starting) writes the
-            single transcript .txt (versioned on name collision) and adds one
-            record (per version) to chatRecord.jsonl.
+            transcript as a new '# VERSION N' SECTION inside the chat's ONE
+            .txt file, and updates the chat's single record in
+            chatRecord.jsonl. Version 1, 2, ..., 3 -> the frontend can then
+            OFFER AI consolidation ('# CONSOLIDATED'), which keeps a summary
+            plus the full conversation in the same file.
 
 The browser never owns the transcript anymore: the server tracks each chat, and
 data/chatlog/agent-text-records/*.txt is the source of truth that the records
 point at. The records and the live session stay directly in data/chatlog/.
 
-On startup, import_once() also migrates the old layout (data/chats/*.txt plus
-data/discussions.json) into data/chatlog/ so nothing is lost when upgrading.
+On startup, import_once() also migrates the old layout (separate -N.txt files,
+data/chats/*.txt, data/discussions.json) into data/chatlog/ so nothing is lost
+when upgrading.
 """
 
 import hashlib
@@ -64,6 +69,13 @@ _metadata_logger = chat_logger.ChatLogger()
 
 DIVIDER = "=" * 64
 THIN = "-" * 64
+
+# Single-file transcript model: every chat is ONE .txt where resets/saves
+# append "# VERSION N" sections. After 3 versions the AI can consolidate the
+# file into a "# CONSOLIDATED" doc (summary + full conversation).
+VERSION_MARK = "# VERSION"
+CONSOLIDATED_MARK = "# CONSOLIDATED"
+CONSOLIDATE_TRIGGER = 3
 
 
 def _resolve_transcript(file_name: str) -> Path:
@@ -210,6 +222,66 @@ def _parse_transcript_messages(text) -> list:
     return messages
 
 
+def parse_sections(text) -> list:
+    """Split a single-file transcript into its ordered sections.
+
+    Each entry is {kind: 'version'|'consolidated', version, summary, content}:
+      - version sections come from '# VERSION N' markers,
+      - the consolidated section from '# CONSOLIDATED' (its leading
+        '## Summary' block is captured in `summary`, the rest in `content`).
+    Unrecognized text parses as a single version-1 section.
+    """
+    sections: list = []
+    current: dict | None = None
+
+    def flush():
+        nonlocal current
+        if current is not None:
+            sections.append(current)
+            current = None
+
+    for raw in str(text or "").splitlines():
+        line = raw.rstrip()
+        if line.startswith(CONSOLIDATED_MARK):
+            flush()
+            current = {"kind": "consolidated", "version": "C", "summary": "", "content": [], "_area": "summary"}
+        elif line.startswith(VERSION_MARK):
+            flush()
+            match = re.match(rf"^{re.escape(VERSION_MARK)}\s*([0-9]+)", line)
+            current = {
+                "kind": "version",
+                "version": match.group(1) if match else str(len(sections) + 1),
+                "summary": "",
+                "content": [],
+                "_area": "body",
+            }
+        elif current is not None:
+            if line.startswith("## Full Conversation"):
+                current["_area"] = "body"
+            elif line.startswith("## Summary"):
+                current["_area"] = "summary"
+            elif current["_area"] == "summary":
+                current["summary"] = (current["summary"] + "\n" + line).strip()
+            else:
+                current["content"].append(line)
+
+    flush()
+    for section in sections:
+        section["content"] = "\n".join(section.get("content", [])).strip()
+        section.pop("_area", None)
+    return sections if sections else [{"kind": "version", "version": "1", "summary": "", "content": str(text or "").strip()}]
+
+
+def _append_block(path: Path, block: str) -> None:
+    """Append one text block onto a transcript file, creating it when missing."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        existing = path.read_text(encoding="utf-8", errors="replace").rstrip()
+        path.write_text(existing + "\n\n" + block + "\n", encoding="utf-8")
+    else:
+        path.write_text(block + "\n", encoding="utf-8")
+
+
 def parse_transcript_header(text: str) -> dict:
     """Pull the 'Session:/Agent:/...' header values out of a transcript.
 
@@ -254,36 +326,83 @@ def parse_transcript_header(text: str) -> dict:
 
 
 # ==========================================================================
-# ACTIVE SESSION
+# ACTIVE SESSIONS  (one in-progress chat PER AGENT)
 # ==========================================================================
 
-def current_session() -> dict | None:
-    """The single in-progress session (None when none exists)."""
+def _load_active_sessions() -> dict:
+    """Every in-progress session keyed by agent id.
+
+    Legacy support: the file used to hold ONE session object (a dict with
+    'id'/'messages'); that is auto-wrapped into {agentId: session} so an
+    existing .active-chat.json keeps working and is re-saved as a map on the
+    next write."""
+    data = _load_json(ACTIVE_SESSION_FILE, {})
+    if isinstance(data, dict) and "messages" in data:
+        agent = data.get("agentId") or ""
+        return {agent: data} if agent else {}
+    if not isinstance(data, dict):
+        return {}
+    return {cid: sess for cid, sess in data.items() if isinstance(sess, dict) and sess.get("id")}
+
+
+def _save_active_sessions(sessions: dict) -> None:
+    """Write the agent-keyed session map back to .active-chat.json."""
+    _save_json(ACTIVE_SESSION_FILE, sessions)
+
+
+def _session_for(agent_id: str) -> dict | None:
+    """The in-progress session for one agent (None when none exists).
+
+    Back-compat: a call with an empty agent id resolves the session only when
+    exactly one exists anywhere (old single-session clients)."""
+    sessions = _load_active_sessions()
+    if agent_id:
+        return sessions.get(agent_id)
+    if len(sessions) == 1:
+        return next(iter(sessions.values()))
+    return None
+
+
+def current_session(agent_id: str = "") -> dict | None:
+    """The in-progress session for one agent (None when none exists)."""
     with _lock:
-        return _load_json(ACTIVE_SESSION_FILE, None)
+        return _session_for(agent_id)
+
+
+def active_sessions() -> list:
+    """Every in-progress session across all agents, newest activity first."""
+    with _lock:
+        sessions = list(_load_active_sessions().values())
+        sessions.sort(
+            key=lambda s: s.get("updatedAt") or s.get("startedAt") or "",
+            reverse=True,
+        )
+        return sessions
 
 
 def ensure_session(agent, session_id: str = "", title: str = "", new_chat: bool = False, rag: bool | None = None) -> dict:
-    """Return the active session, finalizing the old one when a new chat starts.
+    """Return this agent's active session, finalizing any previous one when a
+    new chat starts. Each agent keeps its OWN in-progress session, so starting
+    a chat for agent B never touches agent A's live session.
 
     `rag` controls whether this chat is committed to the RAG store when it is
     saved. None -> the stored commitOnSave default applies.
     """
     with _lock:
-        active = _load_json(ACTIVE_SESSION_FILE, None)
+        agent_id = agent.profile.id or ""
+        active = _session_for(agent_id)
         wants_new = (
             new_chat
             or active is None
             or (session_id and active.get("id") != session_id)
-            or active.get("agentId") != agent.profile.id
         )
         if wants_new:
             if active is not None and active.get("status") == "finalized":
                 # Re-save only when the chat grew after its last version.
                 if len(active.get("messages", [])) > (active.get("finalizedCount") or 0):
-                    _finalize_locked()
+                    _finalize_locked(agent_id)
             elif active is not None:
-                _finalize_locked()
+                _finalize_locked(agent_id)
             return _create_locked(agent, title, rag=rag)
         return active
 
@@ -303,17 +422,20 @@ def _create_locked(agent, title: str = "", rag: bool | None = None) -> dict:
         "rag": bool(rag),
         "messages": [],
     }
-    _save_json(ACTIVE_SESSION_FILE, session)
+    sessions = _load_active_sessions()
+    sessions[session["agentId"]] = session
+    _save_active_sessions(sessions)
     print(f"[CHATS] started session '{session['id']}' for '{session['agentId']}' (rag={session['rag']})")
     return session
 
 
-def append_turn(user_text: str, reply_text: str) -> dict | None:
-    """Append the user message + assistant reply to the active session."""
+def append_turn(agent_id: str, user_text: str, reply_text: str) -> dict | None:
+    """Append the user message + assistant reply to that agent's active session."""
     with _lock:
-        session = _load_json(ACTIVE_SESSION_FILE, None)
+        session = _session_for(agent_id)
         if not session:
             return None
+        key = session.get("agentId") or next(iter(_load_active_sessions()), "")
         now = _now_iso()
         session.setdefault("messages", []).append(
             {"role": "user", "author": "You", "content": str(user_text), "timestamp": now}
@@ -329,7 +451,9 @@ def append_turn(user_text: str, reply_text: str) -> dict | None:
         if session.get("title") in ("", "New chat"):
             session["title"] = _first_words(user_text, 50)
         session["updatedAt"] = now
-        _save_json(ACTIVE_SESSION_FILE, session)
+        sessions = _load_active_sessions()
+        sessions[key] = session
+        _save_active_sessions(sessions)
         return session
 
 
@@ -346,19 +470,21 @@ def _first_words(text: str, max_chars: int) -> str:
 # FINALIZE (end of a chat)
 # ==========================================================================
 
-def finalize_session(title: str | None = None, rag: bool | None = None) -> dict | None:
-    """Finalize the active chat: write its .txt (versioned) + log one header row.
+def finalize_session(agent_id: str = "", title: str | None = None, rag: bool | None = None) -> dict | None:
+    """Finalize THAT agent's active chat: write its .txt (versioned) + log one
+    header row. A call without an agent id resolves the lone session when
+    exactly one exists (old single-session clients).
 
     `rag: True` commits the written transcript into the RAG store (save to
     memory). None -> the session's stored rag flag (set at chat creation from
     the per-chat toggle / commitOnSave default) applies.
     """
     with _lock:
-        return _finalize_locked(title=title, rag=rag)
+        return _finalize_locked(agent_id=agent_id, title=title, rag=rag)
 
 
-def _finalize_locked(title: str | None = None, rag: bool | None = None) -> dict | None:
-    session = _load_json(ACTIVE_SESSION_FILE, None)
+def _finalize_locked(agent_id: str = "", title: str | None = None, rag: bool | None = None) -> dict | None:
+    session = _session_for(agent_id)
     if not session:
         return None
 
@@ -376,8 +502,28 @@ def _finalize_locked(title: str | None = None, rag: bool | None = None) -> dict 
     content = build_transcript(session)
 
     base = _slugify(session["title"])
-    target, version = _target_path(base)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    target = _chat_file(base)
+    meta = {"id": session.get("id") or _stable_id(target.name), "title": session.get("title")}
+
+    if _versioning_disabled():
+        block = f"{VERSION_MARK} 1\n\n{content}".strip()
+        if not target.exists():
+            block = chat_logger.add_header_to_transcript(block, chat_logger.record_from_store_row({**meta, "version": "1"}))
+        target.write_text(block + "\n", encoding="utf-8")
+        version = "1"
+    else:
+        current = read_chat_file_locked(target)
+        version = "1"
+        if current and current.get("sections"):
+            numbers = [
+                s.get("version") for s in current["sections"]
+                if s.get("kind") == "version"
+            ]
+            version = str(max((_version_number(v) for v in numbers), default=0) + 1)
+        block = f"{VERSION_MARK} {version}\n\n{content}".strip()
+        if not target.exists():
+            block = chat_logger.add_header_to_transcript(block, chat_logger.record_from_store_row({**meta, "version": version}))
+        _append_block(target, block)
 
     row = {
         "id": session.get("id") or _stable_id(target.name),
@@ -386,7 +532,7 @@ def _finalize_locked(title: str | None = None, rag: bool | None = None) -> dict 
         "agentId": session.get("agentId", ""),
         "agentName": session.get("agentName", ""),
         "model": session.get("model", ""),
-        "version": str(version),
+        "version": version,
         "messageCount": len(session.get("messages", [])),
         "interactionCount": _count_interactions(session.get("messages", [])),
         "startedAt": session.get("startedAt"),
@@ -394,16 +540,12 @@ def _finalize_locked(title: str | None = None, rag: bool | None = None) -> dict 
         "status": "done",
     }
 
-    if _header_enabled():
-        content = chat_logger.add_header_to_transcript(
-            content, chat_logger.record_from_store_row(row)
-        )
-    target.write_text(content, encoding="utf-8")
-
-    # Record this version in chatRecord.jsonl. A failure here must never
-    # block the chat save, so the existing behavior is preserved.
+    # One row per chat in chatRecord.jsonl: update() appends when the chat id
+    # is unknown and REPLACES the most recent row for a known id, so the
+    # current version is always the row on disk. A failure must never block
+    # the chat save.
     try:
-        _metadata_logger.add(chat_logger.record_from_store_row(row))
+        _metadata_logger.update(row["id"], chat_logger.record_from_store_row(row))
     except OSError:
         pass
 
@@ -419,26 +561,155 @@ def _finalize_locked(title: str | None = None, rag: bool | None = None) -> dict 
             print(f"[CHATS] RAG commit failed (chat still saved): {e}")
 
     # Keep the live session so continued messages can become the next version.
-    _save_json(ACTIVE_SESSION_FILE, session)
+    sessions = _load_active_sessions()
+    sessions[session.get("agentId") or ""] = session
+    _save_active_sessions(sessions)
     print(f"[CHATS] finalized '{session['title']}' -> {target.name} (v{version})")
+    if _version_number(version) >= CONSOLIDATE_TRIGGER:
+        row["consolidation_offered"] = True
     return row
 
 
-def _target_path(base: str) -> tuple:
-    """Pick the file name + version for a finalized chat (inside RECORDS_DIR).
+def read_chat_file(base_or_path) -> dict | None:
+    """Public read of a single-file transcript: returns the parsed representation
+    {file, base, sections:[...]} with sections ordered newest-first."""
+    with _lock:
+        return read_chat_file_locked(base_or_path)
 
-    - Remember the existing version when overwriting is disabled: bump to the
-      next integer suffix (<base>-2.txt, -3.txt, ...) so every chat keeps its
-      own end-to-end transcript.
-    - With disableVersioning on, always overwrite <base>.txt (version 1).
+
+def read_chat_file_locked(base_or_path) -> dict | None:
+    """Parse the single-file transcript for `base`/`fileName`/a record id (or
+    Path directly). Sections are returned newest-first both for the transcript
+    builder and the API."""
+    path = _chat_file(base_or_path) if isinstance(base_or_path, Path) else _resolve_chat_target(base_or_path)
+    if path is None:
+        return None
+    if not path.exists():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    sections = parse_sections(text)
+    sections.reverse()
+    return {"file": path, "base": _base_file_name(path.name).replace(".txt", ""), "sections": sections}
+
+
+def write_consolidated(chat_id: str, summary: str, combined: str) -> Path | None:
+    """Persist a consolidated section into the chat's single transcript file.
+    The FULL conversation is kept (summary + full text); consolidation never
+    replaces or destroys earlier versions. Returns the target path."""
+    with _lock:
+        current = read_chat_file_locked(chat_id)
+        if current is None:
+            return None
+        block = (
+            f"{CONSOLIDATED_MARK}\n\n## Summary\n\n{_sanitize_embedded_markers(summary).strip()}\n\n"
+            f"## Full Conversation\n\n{_sanitize_embedded_markers(combined).strip()}"
+        ).strip()
+        _append_block(current["file"], block)
+        return current["file"]
+
+
+def _sanitize_embedded_markers(text: str) -> str:
+    """Neutralize '# VERSION N' / '# CONSOLIDATED' lines that appear INSIDE a
+    consolidated body's verbatim conversation, so parse_sections() keeps
+    treating top-level file sections as the only section boundaries."""
+    lines = []
+    for line in str(text or "").splitlines():
+        if re.match(r"^#\s*(VERSION|CONSOLIDATED)\b", line):
+            lines.append(line[1:].strip())
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def mark_consolidated(chat_id: str, file_name: str) -> None:
+    """Point a chat's log record at its consolidated section (version 'C').
+
+    The transcript itself already holds the '# CONSOLIDATED' section; this
+    only updates the metadata row so the UI shows "(consolidated)".
     """
-    primary = RECORDS_DIR / f"{base}.txt"
-    if _versioning_disabled() or not primary.exists():
-        return primary, "1"
-    n = 2
-    while (RECORDS_DIR / f"{base}-{n}.txt").exists():
-        n += 1
-    return RECORDS_DIR / f"{base}-{n}.txt", str(n)
+    with _lock:
+        record = _metadata_logger.get(chat_id)
+        if not record:
+            return
+        record["version"] = "C"
+        record["fileName"] = file_name
+        try:
+            _metadata_logger.update(
+                chat_id,
+                chat_logger.record_from_store_row(
+                    {**record, "status": "completed", "version": "C"}
+                ),
+            )
+        except OSError:
+            pass
+
+
+def discard_session(agent_id: str = "") -> dict | None:
+    """Abandon THAT agent's in-progress chat WITHOUT writing a transcript.
+    A call without an agent id resolves the lone session when exactly one
+    exists. Returns None when there is nothing to discard."""
+    with _lock:
+        sessions = _load_active_sessions()
+        key = agent_id
+        if not key:
+            if len(sessions) == 1:
+                key = next(iter(sessions))
+            else:
+                return None
+        session = sessions.pop(key, None)
+        if not session:
+            return None
+        _save_active_sessions(sessions)
+        return session
+
+
+def _chat_file(base: str | Path) -> Path:
+    """The ONE transcript file a chat ever gets: <slug>.txt (never versioned
+    into separate files - versions live inside as '# VERSION N' sections).
+    Accepts a full path, a file name (with .txt) or a base slug."""
+    if isinstance(base, Path):
+        return base
+    base = str(base)
+    if base.lower().endswith(".txt"):
+        return RECORDS_DIR / base
+    return RECORDS_DIR / f"{base}.txt"
+
+
+def _resolve_chat_target(chat_id) -> Path | None:
+    """Map a chat id / transcript file name / base slug to the ONE transcript
+    file on disk (None when missing). Used so API callers (and consolidation)
+    can find a chat by its record id without knowing the slug."""
+    if isinstance(chat_id, Path):
+        return chat_id if chat_id.exists() else None
+    direct = _chat_file(chat_id)
+    if direct.exists():
+        return direct
+    record = _metadata_logger.get(chat_id)
+    if record and record.get("fileName"):
+        path = _resolve_transcript(record.get("fileName", ""))
+        if path.exists():
+            return path
+    return None
+
+
+def _base_file_name(file_name: str) -> str:
+    """'my-chat-2.txt' -> 'my-chat.txt'; 'my-chat.txt' stays as-is. Used to
+    normalize legacy per-version names onto the single-file model."""
+    match = re.search(r"-(\d+(?:\.\d+)*)\.txt$", str(file_name or ""))
+    return file_name if not match else file_name[: match.start()] + ".txt"
+
+
+def _version_number(value) -> int:
+    """'1'/'2'/'3' -> int, 'C' -> a large number (consolidated wins)."""
+    if str(value).upper() == "C":
+        return 1000
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 # ==========================================================================
@@ -499,35 +770,37 @@ def prune_deleted() -> int:
             return 0
 
 
+def _active_row(active: dict) -> dict:
+    """The dropdown row shape for an in-progress session."""
+    return {
+        "id": active.get("id"),
+        "title": active.get("title"),
+        "fileName": "",
+        "agentId": active.get("agentId", ""),
+        "agentName": active.get("agentName", ""),
+        "model": active.get("model", ""),
+        "version": "",
+        "messageCount": len(active.get("messages", [])),
+        "interactionCount": _count_interactions(active.get("messages", [])),
+        "startedAt": active.get("startedAt"),
+        "endedAt": "",
+        "status": "active",
+    }
+
+
 def list_log(include_active=True) -> list:
     """The log used by the frontend dropdown/sidebar, newest end first.
 
     Stale records whose transcript .txt no longer exists are pruned first, so
     chats deleted on disk disappear here and from chatRecord.jsonl on the next
     refresh rather than lingering until a restart. Returns one row per chat,
-    pointing at its LATEST version.
+    pointing at its LATEST version. Every agent's in-progress session (status
+    'active') is appended.
     """
     prune_deleted()
     rows = [_record_to_row(rec) for rec in latest_per_chat(_metadata_logger.list_all())]
     if include_active:
-        active = _load_json(ACTIVE_SESSION_FILE, None)
-        if active and active.get("status") != "finalized":
-            rows.append(
-                {
-                    "id": active.get("id"),
-                    "title": active.get("title"),
-                    "fileName": "",
-                    "agentId": active.get("agentId", ""),
-                    "agentName": active.get("agentName", ""),
-                    "model": active.get("model", ""),
-                    "version": "",
-                    "messageCount": len(active.get("messages", [])),
-                    "interactionCount": _count_interactions(active.get("messages", [])),
-                    "startedAt": active.get("startedAt"),
-                    "endedAt": "",
-                    "status": "active",
-                }
-            )
+        rows.extend(_active_row(active) for active in active_sessions() if active.get("status") != "finalized")
     rows.sort(
         key=lambda r: r.get("endedAt") or r.get("savedAt") or r.get("startedAt") or "",
         reverse=True,
@@ -536,32 +809,36 @@ def list_log(include_active=True) -> list:
 
 
 def get_chat(chat_id: str) -> dict | None:
-    """One chat (its record w/ the transcript content/messages) to reopen it."""
+    """One chat (its record + the transcript/messages) to reopen it.
+
+    A transcript file may carry several '# VERSION N'/'# CONSOLIDATED'
+    sections; only the LATEST section is returned (that is what the UI
+    reopens), so past versions stay archived in the file without cluttering
+    the current conversation.
+    """
     record = _metadata_logger.get(chat_id)
     if record:
         path = _resolve_transcript(record.get("fileName", ""))
-        content = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+        content = ""
+        if path.exists():
+            current = read_chat_file_locked(path)
+            sections = (current or {}).get("sections") or []
+            if sections:
+                latest = sections[0]
+                content = latest.get("content") or ""
+                if latest["kind"] == "consolidated" and latest.get("summary"):
+                    content = f"## Summary\n\n{latest['summary']}\n\n{content}"
+            else:
+                content = path.read_text(encoding="utf-8", errors="replace")
         row = _record_to_row(record)
         return {**row, "content": content, "messages": _parse_transcript_messages(content)}
-    active = _load_json(ACTIVE_SESSION_FILE, None)
-    if active and active.get("id") == chat_id:
-        return {
-            **{
-                "id": active.get("id"),
-                "title": active.get("title"),
-                "fileName": "",
-                "agentId": active.get("agentId", ""),
-                "agentName": active.get("agentName", ""),
-                "model": active.get("model", ""),
-                "version": "",
-                "messageCount": len(active.get("messages", [])),
-                "startedAt": active.get("startedAt"),
-                "endedAt": "",
-                "status": "active",
-            },
-            "content": build_transcript(active),
-            "messages": active.get("messages", []),
-        }
+    for sess in _load_active_sessions().values():
+        if sess.get("id") == chat_id:
+            return {
+                **{**_active_row(sess), "status": "active"},
+                "content": build_transcript(sess),
+                "messages": sess.get("messages", []),
+            }
     return None
 
 
@@ -572,37 +849,35 @@ def _fileName_version(file_name: str) -> str:
 
 
 def set_chat_version(chat_id: str, version: str) -> dict | None:
-    """Point a chat at a new versioned .txt copy (e.g. '1.1').
+    """Append a chat's own transcript as a new '# VERSION N' section.
 
-    Used by scripts/version_chats.py: assumes the source .txt already exists
-    in data/chatlog/ and just writes the new versioned copy into
-    agent-text-records/ while adding a new (id, version, fileName) record to
-    chatRecord.jsonl. The chat's history line is preserved.
+    Kept for scripts/version_chats.py compatibility: this now works within
+    the single-file model by reading the chat's current transcript (first
+    section, i.e. the latest version) and appending it again under the given
+    version marker, then pointing the chat's record at that section.
     """
     with _lock:
         record = _metadata_logger.get(chat_id)
         if not record:
             return None
-        source = _resolve_transcript(record.get("fileName", ""))
-        if not source.exists():
+        current = read_chat_file_locked(record.get("fileName", ""))
+        if current is None or not current.get("sections"):
             return None
-        stem = re.sub(r"-(\d+(?:\.\d+)*)$", "", source.stem)
-        target = RECORDS_DIR / f"{stem}-{version}.txt"
-        if target.name == source.name:
-            target = RECORDS_DIR / f"{stem}-{version}-2.txt"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(source.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+        payload = current["sections"][0].get("content") or ""
+        block = f"{VERSION_MARK} {version}\n\n{payload}".strip()
+        _append_block(current["file"], block)
         record["version"] = str(version)
-        record["fileName"] = target.name
+        record["fileName"] = current["file"].name
         try:
-            _metadata_logger.add(record)
+            _metadata_logger.update(record)
         except OSError:
             pass
         return {**record}
 
 
 def _rebuild_header(file_name: str) -> dict:
-    """Best-effort header row for an existing .txt file (used by import_once)."""
+    """Best-effort header row for an existing single-file transcript (used by
+    import_once). Version + counts come from the LATEST '# VERSION N' section."""
     path = _resolve_transcript(file_name)
     if not path.exists():
         return None
@@ -614,7 +889,11 @@ def _rebuild_header(file_name: str) -> dict:
 
     header = parse_transcript_header(text)
     title = header.get("title") or re.sub(r"-(\d+(\.\d+)*)?$", "", path.stem).replace("-", " ").title()
-    messages = _parse_transcript_messages(text)
+    current = read_chat_file_locked(path)
+    sections = (current or {}).get("sections") or []
+    latest = sections[0] if sections else {}
+    content = latest.get("content") or (text if not sections else "")
+    messages = _parse_transcript_messages(content)
     return {
         "id": _stable_id(file_name),
         "title": title,
@@ -622,7 +901,7 @@ def _rebuild_header(file_name: str) -> dict:
         "agentId": "",
         "agentName": header.get("agent_name") or "",
         "model": "" if header.get("model") in (None, "(server default)") else header.get("model", ""),
-        "version": _fileName_version(file_name),
+        "version": latest.get("version") or _fileName_version(file_name),
         "messageCount": len(messages),
         "interactionCount": header.get("interactionCount", _count_interactions(messages)),
         "startedAt": "",
@@ -663,9 +942,50 @@ def _migrate_legacy_layout() -> None:
         shutil.move(str(legacy), str(target))
 
 
+def _migrate_legacy_version_files() -> int:
+    """Fold legacy per-version '<slug>-N.txt' files into one '<slug>.txt'.
+
+    The old model wrote a NEW .txt per version (my-chat-2.txt, -3.txt, ...);
+    the single-file model keeps everything in my-chat.txt as '# VERSION N'
+    sections. This folds any surviving -N.txt files into the base file as
+    sections (version label taken from the suffix), then deletes them.
+    Returns how many files were folded. Idempotent.
+    """
+    folded = 0
+    if not RECORDS_DIR.exists():
+        return 0
+    numbered = [
+        path for path in RECORDS_DIR.glob("*.txt")
+        if re.search(r"-(\d+(?:\.\d+)*)\.txt$", path.name)
+    ]
+    for path in sorted(numbered, key=lambda p: p.name):
+        match = re.search(r"-(\d+(?:\.\d+)*)\.txt$", path.name)
+        if not match:
+            continue
+        version = match.group(1)
+        base_name = path.name[: path.name.rfind("-" + version + ".txt")] + ".txt"
+        try:
+            content = path.read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            continue
+        if not content.startswith(VERSION_MARK) and not content.startswith(CONSOLIDATED_MARK):
+            content = f"{VERSION_MARK} {version}\n\n{content}".strip()
+        _append_block(RECORDS_DIR / base_name, content)
+        try:
+            path.unlink()
+            folded += 1
+        except OSError:
+            pass
+    if folded:
+        print(f"[CHATS] folded {folded} legacy version file(s) into single-file transcripts")
+    return folded
+
+
 def import_once() -> int:
     """One-time boot sync that builds the single store, chatRecord.jsonl.
 
+    - Migrates legacy per-version '<slug>-N.txt' transcripts into single
+      '<slug>.txt' files carrying '# VERSION N' sections.
     - Migrates the pre-chatRecord layout into chatRecord.jsonl:
         * data/discussions.json  (legacy message arrays) -> .txt transcripts,
         * data/chatlog/log-chats.json (old one-row-per-chat store),
@@ -680,12 +1000,15 @@ def import_once() -> int:
     """
     with _lock:
         _migrate_legacy_layout()
+        _migrate_legacy_version_files()
         migrated = 0
         added = 0
 
         # --- 1. Read the old stores BEFORE they are deleted ---
         old_rows = _load_json(_OLD_LOGCHATS_FILE, []) if _OLD_LOGCHATS_FILE.exists() else []
         old_records = chat_logger.ChatLogger(log_file=_OLD_JSONL_FILE).list_all()
+        for record in old_records:
+            record["fileName"] = _base_file_name(record.get("fileName", ""))
 
         # --- 2. Legacy discussion rows (no fileName, whole 'messages' arrays)
         #         become versioned .txt transcripts, exactly as before. ---
@@ -718,9 +1041,14 @@ def import_once() -> int:
                 ],
             }
             base = _slugify(session["title"])
-            target, version = _target_path(base)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(build_transcript(session), encoding="utf-8")
+            target = _chat_file(base)
+            block = f"{VERSION_MARK} 1\n\n{build_transcript(session)}".strip()
+            if not target.exists():
+                block = chat_logger.add_header_to_transcript(block, chat_logger.record_from_store_row(
+                    {"id": legacy_id, "title": session["title"], "version": "1"}
+                ))
+            _append_block(target, block)
+            version = "1"
             new_rows.append(
                 {
                     "id": legacy_id,
@@ -739,18 +1067,26 @@ def import_once() -> int:
             )
             migrated += 1
 
-        # --- 3. Merge chatRecord.jsonl + both old files by (id, fileName) ---
-        merged = {(rec.get("id"), rec.get("fileName")): rec
-                  for rec in _metadata_logger.list_all()}
+        # --- 3. Merge chatRecord.jsonl + both old files by (id, fileName).
+        #         File names are normalized onto the single-file model so old
+        #         '<base>-N.txt' record rows still point at the folded file.
+        #         chatRecord.jsonl is authoritative (kept as-is); old stores
+        #         fill gaps, the LAST old record per (id, fileName) winning. ---
+        merged = {}
+        for rec in _metadata_logger.list_all():
+            rec["fileName"] = _base_file_name(rec.get("fileName", ""))
+            merged[(rec.get("id"), rec["fileName"])] = rec
+
+        legacy = {}
         for record in old_records:
-            key = (record.get("id"), record.get("fileName"))
+            record["fileName"] = _base_file_name(record.get("fileName", ""))
+            legacy[(record.get("id"), record["fileName"])] = record
+        for row in new_rows:
+            row["fileName"] = _base_file_name(row.get("fileName", ""))
+            legacy[(row.get("id"), row["fileName"])] = chat_logger.record_from_store_row(row)
+        for key, record in legacy.items():
             if key not in merged:
                 merged[key] = record
-                migrated += 1
-        for row in new_rows:
-            key = (row.get("id"), row.get("fileName"))
-            if key not in merged:
-                merged[key] = chat_logger.record_from_store_row(row)
                 migrated += 1
 
         # --- 4. Import on-disk .txt transcripts not logged yet ---
@@ -771,11 +1107,14 @@ def import_once() -> int:
                     known_names.add(name)
                     added += 1
 
-        # --- 5. Drop records whose transcript disappeared, then write once ---
-        records = [merged[k] for k in merged if _transcript_exists(merged[k].get("fileName", ""))]
+        # --- 5. Collapse to ONE row per chat (single-file model), drop rows
+        #         whose transcript disappeared, and rewrite the index once. ---
+        records = list(merged.values())
+        for record in records:
+            record["fileName"] = _base_file_name(record.get("fileName", ""))
         write_ok = True
         try:
-            _metadata_logger.add_missing(records)
+            _metadata_logger.replace_all(records)
             _metadata_logger.prune(
                 lambda rec: not rec.get("fileName") or _transcript_exists(rec.get("fileName"))
             )
@@ -854,13 +1193,13 @@ def delete_chat(chat_id: str) -> dict:
         records_removed = _metadata_logger.remove(chat_id)
 
         was_active = False
-        active = _load_json(ACTIVE_SESSION_FILE, None)
-        if active and active.get("id") == chat_id:
-            was_active = True
-            try:
-                ACTIVE_SESSION_FILE.unlink()
-            except OSError:
-                pass
+        sessions = _load_active_sessions()
+        for key, sess in list(sessions.items()):
+            if sess.get("id") == chat_id:
+                sessions.pop(key, None)
+                was_active = True
+        if was_active:
+            _save_active_sessions(sessions)
 
         if records_removed or files_removed or was_active:
             print(
@@ -876,13 +1215,18 @@ def delete_chat(chat_id: str) -> dict:
 
 __all__ = [
     "current_session",
+    "active_sessions",
     "ensure_session",
     "append_turn",
     "finalize_session",
     "list_log",
     "get_chat",
+    "read_chat_file",
+    "write_consolidated",
+    "discard_session",
     "import_once",
     "set_chat_version",
+    "mark_consolidated",
     "save_discussion",
     "delete_discussion",
     "delete_chat",

@@ -786,6 +786,43 @@ body {
     font-size: 11px;
 }
 
+.sc-nextstep {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sc-nextstep-btn {
+    border: 1px solid var(--color-header-grad-a, #0b6bcb);
+    color: var(--color-header-grad-a, #0b6bcb);
+    background: transparent;
+    border-radius: var(--radius-small);
+    padding: 3px 9px;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    transition: .15s ease;
+}
+
+.sc-nextstep-btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.sc-nextstep-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--color-header-grad-a), var(--color-header-grad-b));
+    color: white;
+}
+
+.sc-nextstep-name {
+    color: var(--color-text-faint);
+    font-size: 11px;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* -------------------- BUTTONS -------------------- */
 
 .sc-btn {
@@ -1106,22 +1143,34 @@ body {
     transform: translateX(-50%) translateY(0);
 }
 
-/* Forward-to-agent picker overlay */
+/* Forward-to-agent picker: centered modal overlay, so the agent list can
+   never be clipped by the chat's scroll container. */
+.sc-forward-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(15, 23, 42, .45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
 .sc-forward-picker {
-    position: absolute;
-    bottom: calc(100% + 4px);
-    right: 0;
-    min-width: 180px;
+    width: min(320px, 100%);
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
     padding: 7px 0;
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-medium);
     background: var(--color-surface);
-    box-shadow: 0 6px 20px rgba(15,23,42,.14);
-    z-index: 50;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, .3);
 }
 
 .sc-forward-picker-title {
-    padding: 4px 12px 6px;
+    flex: 0 0 auto;
+    padding: 10px 14px 6px;
     color: var(--color-text-faint);
     font-size: 10px;
     font-weight: 700;
@@ -1130,11 +1179,24 @@ body {
     border-bottom: 1px solid var(--color-border);
 }
 
+.sc-forward-picker-hint {
+    flex: 0 0 auto;
+    padding: 7px 14px 2px;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.sc-forward-picker-list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
 .sc-forward-picker-item {
     display: block;
     width: 100%;
-    max-width: 260px;
-    padding: 7px 12px;
+    padding: 7px 14px;
     overflow: hidden;
     border: 0;
     background: transparent;
@@ -1150,6 +1212,25 @@ body {
 .sc-forward-picker-item:hover {
     background: var(--color-accent);
     color: var(--color-primary);
+}
+
+.sc-forward-picker-cancel {
+    flex: 0 0 auto;
+    margin: 6px 14px 4px;
+    padding: 7px 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-small);
+    background: transparent;
+    color: var(--color-text-soft);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.sc-forward-picker-cancel:hover {
+    background: var(--color-accent-soft);
+    border-color: var(--color-accent);
+    color: var(--color-accent-strong);
 }
 
 /* -------------------- RESPONSIVE -------------------- */
@@ -1316,6 +1397,15 @@ body {
         <button
             type="button"
             class="sc-header-btn"
+            id="sc-pipeline"
+            title="Run the whole pipeline (Planner -> Engineer -> Builder) on your idea and try to produce a saved module file">
+            <span>➤➤</span>
+            <span class="label">Run Pipeline</span>
+        </button>
+
+        <button
+            type="button"
+            class="sc-header-btn"
             id="sc-clear"
             title="Start a new chat">
             <span>＋</span>
@@ -1386,6 +1476,16 @@ body {
                 <div class="sc-composer-footer">
                     <span class="sc-input-hint">
                         Enter sends · Shift + Enter adds a new line
+                    </span>
+                    <span class="sc-nextstep" title="Manually forward this agent's last reply to the next pipeline step">
+                        <button
+                            type="button"
+                            class="sc-nextstep-btn"
+                            id="sc-next-step"
+                            disabled>
+                            → Send to next step
+                        </button>
+                        <span class="sc-nextstep-name" id="sc-next-step-name"></span>
                     </span>
                 </div>
 
@@ -2291,10 +2391,25 @@ let activeAgent = null;
 let activeSession = null;
 let settings = {};
 
+/* Pipeline feature state (config/pipeline.json via /api/pipeline): the ordered
+   step chain, and the most recent assistant reply the current agent produced
+   (needed to forward it to the next step). */
+let pipelineSteps = [];
+let lastAssistantReply = "";
+
 /* Id of the SAVED chat currently open in the composer (read-only view). When
    the user is chatting live (activeSession.sessionId set), that session id
    wins; openedChatId only matters after openChat() rendered an old chat. */
 let openedChatId = null;
+
+/* Bubbles of the SAVED chat being viewed (openChat() renders it read-only).
+   Used as the fallback source for the "Forward whole chat" transcript while
+   a live session's own messages win whenever they are present. */
+let openedChatMessages = [];
+
+/* Chat ids for which the user already declined AI consolidation, so a
+   read-only reopen does not nag about it again within this page session. */
+const consolidationDismissed = new Set();
 
 
 /* ============================================================
@@ -2391,6 +2506,21 @@ const DOM = {
     ragClearButton:
         document.getElementById(
             "sc-rag-clear"
+        ),
+
+    pipeline:
+        document.getElementById(
+            "sc-pipeline"
+        ),
+
+    nextStep:
+        document.getElementById(
+            "sc-next-step"
+        ),
+
+    nextStepName:
+        document.getElementById(
+            "sc-next-step-name"
         )
 };
 
@@ -2610,7 +2740,18 @@ function buildBubbleActions(rawContent, bodyEl) {
     });
     row.appendChild(fwdBtn);
 
-    /* 4. Bookmark (placeholder) */
+    /* 4. Forward the WHOLE chat's output to another agent */
+    const fwdChatBtn = el("button", "sc-bubble-btn", "📤");
+    fwdChatBtn.type = "button";
+    fwdChatBtn.title = "Forward whole chat to another agent";
+    fwdChatBtn.setAttribute("aria-label", "Forward whole chat");
+    fwdChatBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleForwardPicker(null, bodyEl, fwdChatBtn, { wholeChat: true });
+    });
+    row.appendChild(fwdChatBtn);
+
+    /* 5. Bookmark (placeholder) */
     const bookmarkBtn = el("button", "sc-bubble-btn", "★");
     bookmarkBtn.type = "button";
     bookmarkBtn.title = "Bookmark (coming soon)";
@@ -2676,30 +2817,105 @@ function toggleCodeView(rawContent, bodyEl, btn) {
 }
 
 
-/* Open/close an inline agent-picker popover for forwarding the message. */
-function toggleForwardPicker(rawContent, bodyEl, fwdBtn) {
+/* Make sure the agent catalog is populated (refetch once if boot missed it),
+   so the forward picker ALWAYS has agents to list. */
+async function ensureAgentsLoaded() {
 
-    /* Close any existing picker on the page. */
+    if (agentsById.size > 0) {
+        return;
+    }
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/agents"
+            );
+
+        if (response.ok) {
+
+            const data =
+                await response.json();
+
+            (data.agents || []).forEach(agent => {
+                agentsById.set(agent.id, agent);
+            });
+        }
+
+    } catch (_) {
+        /* The modal shows "No other agents loaded." when the fetch fails. */
+    }
+}
+
+
+/* Open/close the forward-to-agent dialog. Rendered as a CENTERED MODAL on
+   document.body so it can never be clipped by the chat's scroll container or
+   hidden behind a bubble - the agent list is always visible and clickable.
+   wholeChat: true forwards the WHOLE conversation transcript instead of the
+   single bubble's text. */
+async function toggleForwardPicker(rawContent, bodyEl, fwdBtn, { wholeChat = false } = {}) {
+
+    /* Close any existing picker overlay first. */
     const existing = document.querySelector(".sc-forward-picker");
     if (existing) {
         existing.remove();
-        if (existing._sourceBtn === fwdBtn) {
-            fwdBtn.classList.remove("active");
-            return;
-        }
+        existing.parentElement?.remove();
+        fwdBtn.classList.remove("active");
+        return;
     }
+
+    document.querySelectorAll(".sc-bubble-btn.active")
+        .forEach(btn => btn.classList.remove("active"));
+
+    await ensureAgentsLoaded();
 
     fwdBtn.classList.add("active");
 
+    const closePicker = () => {
+        backdrop.remove();
+        document.removeEventListener("keydown", onKey, true);
+        fwdBtn.classList.remove("active");
+    };
+
+    const onKey = (e) => {
+        if (e.key === "Escape") {
+            closePicker();
+        }
+    };
+
+    /* Backdrop: click anywhere outside closes the dialog. */
+    const backdrop = document.createElement("div");
+    backdrop.className = "sc-forward-backdrop";
+
     const picker = document.createElement("div");
     picker.className = "sc-forward-picker";
-    picker._sourceBtn = fwdBtn;
+    picker.setAttribute("role", "dialog");
+    picker.setAttribute("aria-modal", "true");
+    picker.setAttribute(
+        "aria-label",
+        wholeChat ? "Forward chat to" : "Forward to agent"
+    );
 
-    const title = el("div", "sc-forward-picker-title", "Forward to agent");
-    picker.appendChild(title);
+    picker.appendChild(
+        el(
+            "div",
+            "sc-forward-picker-title",
+            wholeChat ? "Forward chat to" : "Forward to agent"
+        )
+    );
+
+    if (wholeChat) {
+        picker.appendChild(
+            el(
+                "div",
+                "sc-forward-picker-hint",
+                "Sends the whole chat output into the other agent's input."
+            )
+        );
+    }
 
     /* Every agent EXCEPT the one currently being chatted with, so you cannot
-       forward a message back to its own conversation. */
+       forward back into its own conversation. */
     const agents = Array
         .from(agentsById.values())
         .filter(agent => agent.id !== activeAgent?.id)
@@ -2707,11 +2923,14 @@ function toggleForwardPicker(rawContent, bodyEl, fwdBtn) {
             String(a.name || "").localeCompare(String(b.name || ""))
         );
 
+    const list = document.createElement("div");
+    list.className = "sc-forward-picker-list";
+
     if (!agents.length) {
         const none = el("div", "sc-forward-picker-item", "No other agents loaded.");
         none.style.color = "var(--color-text-faint)";
         none.style.pointerEvents = "none";
-        picker.appendChild(none);
+        list.appendChild(none);
     } else {
         agents.forEach(agent => {
             const item = el(
@@ -2722,27 +2941,34 @@ function toggleForwardPicker(rawContent, bodyEl, fwdBtn) {
             item.type = "button";
             item.title = agent.description || agent.id;
             item.addEventListener("click", () => {
-                picker.remove();
-                fwdBtn.classList.remove("active");
-                forwardToAgent(rawContent, agent);
+                closePicker();
+                if (wholeChat) {
+                    forwardChat(agent);
+                } else {
+                    forwardToAgent(rawContent, agent);
+                }
             });
-            picker.appendChild(item);
+            list.appendChild(item);
         });
     }
 
-    /* Position relative to bodyEl */
-    bodyEl.style.position = "relative";
-    bodyEl.appendChild(picker);
+    picker.appendChild(list);
 
-    /* Close on outside click */
-    const onOutside = (e) => {
-        if (!picker.contains(e.target) && e.target !== fwdBtn) {
-            picker.remove();
-            fwdBtn.classList.remove("active");
-            document.removeEventListener("click", onOutside, { capture: true });
+    const cancel = el("button", "sc-forward-picker-cancel", "Cancel");
+    cancel.type = "button";
+    cancel.addEventListener("click", closePicker);
+    picker.appendChild(cancel);
+
+    backdrop.addEventListener("click", (e) => {
+        if (e.target === backdrop) {
+            closePicker();
         }
-    };
-    setTimeout(() => document.addEventListener("click", onOutside, { capture: true }), 0);
+    });
+
+    document.addEventListener("keydown", onKey, true);
+
+    backdrop.appendChild(picker);
+    document.body.appendChild(backdrop);
 }
 
 
@@ -2755,6 +2981,62 @@ async function forwardToAgent(rawContent, targetAgent) {
     window.open(url, `ai-chat-${targetAgent.id}`, "width=900,height=680,resizable=yes,scrollbars=yes");
 
     showToast(`Forwarding to ${targetAgent.name}…`);
+}
+
+
+/* Plain-text transcript of the CURRENT chat (live session when active, the
+   opened saved chat otherwise): title + author:content lines per bubble. */
+function buildChatTranscriptText() {
+
+    const messages = (
+        activeSession &&
+        Array.isArray(activeSession.messages) &&
+        activeSession.messages.length > 0
+    ) ? activeSession.messages : openedChatMessages;
+
+    if (!(messages || []).length) {
+        return "";
+    }
+
+    const lines = [
+        `# ${getChatTitle() || "Chat"}`,
+        `(forwarded from ${activeAgent?.name || "the AI chat"})`,
+        ""
+    ];
+
+    (messages || []).forEach(message => {
+        const author =
+            message.author ||
+            (message.role === "user"
+                ? "You"
+                : (activeAgent?.name || "Agent"));
+        lines.push(
+            `**${author}**: ${String(message.text ?? message.content ?? "").trim()}`
+        );
+        lines.push("");
+    });
+
+    return lines.join("\n").trim();
+}
+
+
+function forwardChat(targetAgent) {
+
+    if (!targetAgent) return;
+
+    const transcript = buildChatTranscriptText();
+
+    if (!transcript) {
+        showToast("Nothing to forward - the chat is empty.");
+        return;
+    }
+
+    /* Same delivery as per-message forwarding: open the target agent's chat
+       page with the whole transcript pre-filled, ready to send. */
+    const url = `/static/chat.html?agent=${encodeURIComponent(targetAgent.id)}&prefill=${encodeURIComponent(transcript)}`;
+    window.open(url, `ai-chat-${targetAgent.id}`, "width=900,height=680,resizable=yes,scrollbars=yes");
+
+    showToast(`Forwarding chat to ${targetAgent.name}…`);
 }
 
 
@@ -3045,6 +3327,8 @@ async function openChat(id) {
 
         openedChatId = id;
 
+        openedChatMessages = chat.messages || [];
+
         (chat.messages || []).forEach(message => {
 
             addBubble(
@@ -3079,6 +3363,15 @@ async function openChat(id) {
             `Opened: ${chat.title || chat.fileName} (read-only)`,
             "ok"
         );
+
+        /* A 3+ version chat opened read-only can also be consolidated (unless
+           the user already declined it during this page session). */
+        if (
+            Number(chat.version) >= 3 &&
+            chat.version !== "C"
+        ) {
+            await maybeOfferConsolidation(chat);
+        }
 
     } catch (_) {
         setSaveStatus(
@@ -3158,6 +3451,9 @@ async function sendTurn(text) {
             activeAgent.name
         );
 
+        lastAssistantReply = result.reply;
+        updateNextStepChip();
+
         setSaveStatus(
             "Chat tracked on the server.",
             "ok"
@@ -3211,6 +3507,195 @@ async function handleSend() {
         setWaiting(false);
         DOM.input.focus();
     }
+}
+
+
+/* ============================================================
+    13b. PIPELINE: TEST RUN + ONE-STEP-AHEAD FORWARDING
+   ============================================================
+   Two ways to use the Planner -> Engineer -> Builder chain:
+     - Run Pipeline (header button): the server runs every step on one idea
+       and returns each step's output + the final reply in a single request.
+     - Send to next step (composer footer chip): manually forwards this
+       agent's last reply into the chat of the NEXT step, so you can watch and
+       learn how each stage behaves step by step.
+   ============================================================ */
+
+function updateNextStepChip() {
+
+    if (!DOM.nextStep || !DOM.nextStepName) return;
+
+    const steps = pipelineSteps || [];
+
+    if (
+        !activeAgent ||
+        steps.length < 2
+    ) {
+        DOM.nextStep.disabled = true;
+        DOM.nextStepName.textContent = "";
+        return;
+    }
+
+    const idx = steps.indexOf(
+        activeAgent.id
+    );
+
+    if (
+        idx < 0 ||
+        idx + 1 >= steps.length
+    ) {
+        DOM.nextStep.disabled = true;
+        DOM.nextStepName.textContent = "";
+        return;
+    }
+
+    const nextAgent =
+        agentsById.get(
+            steps[idx + 1]
+        );
+
+    DOM.nextStep.disabled =
+        !nextAgent || !lastAssistantReply;
+
+    DOM.nextStepName.textContent =
+        nextAgent
+            ? `-> ${nextAgent.name}`
+            : "";
+}
+
+
+async function runPipelineTest() {
+
+    if (
+        !activeSession ||
+        testRunActive ||
+        activeSession.isWaiting
+    ) {
+        return;
+    }
+
+    const context =
+        DOM.input.value.trim();
+
+    const idea =
+        prompt(
+            "Idea to run through the whole pipeline (Planner -> Engineer -> Builder):",
+            context || "A Hello World box module"
+        );
+
+    if (
+        idea === null ||
+        !idea.trim()
+    ) {
+        return;
+    }
+
+    DOM.input.value = "";
+    autogrow();
+
+    setWaiting(true);
+
+    addBubble(
+        "system",
+        `Pipeline test on: ${idea.trim()}`
+    );
+
+    try {
+
+        const result =
+            await sendChat({
+                message: idea.trim(),
+                agentId: activeAgent.id,
+                model: activeAgent.model,
+                sessionId: "",
+                title: getChatTitle(),
+                runPipeline: true
+            });
+
+        const outputs =
+            (result.pipeline &&
+                result.pipeline.outputs) || [];
+
+        outputs.forEach((step, index) => {
+
+            addBubble(
+                "system",
+                `Step ${index + 1} · ${step.agent_name}\n\n${step.output}`,
+                `Pipeline Step ${index + 1}`
+            );
+        });
+
+        addBubble(
+            "agent",
+            result.reply ||
+                "(pipeline produced no final reply)",
+            "Pipeline Result"
+        );
+
+        setSaveStatus(
+            `Pipeline finished - ${outputs.length} step(s)`,
+            "ok"
+        );
+
+    } catch (error) {
+
+        addBubble(
+            "system",
+            `Pipeline test failed: ${error.message}`
+        );
+
+        setSaveStatus(
+            `Pipeline failed: ${error.message}`,
+            "error"
+        );
+
+    } finally {
+
+        setWaiting(false);
+        DOM.input.focus();
+    }
+}
+
+
+async function forwardToNextStep() {
+
+    if (
+        !activeSession ||
+        activeSession.isWaiting ||
+        !lastAssistantReply
+    ) {
+        return;
+    }
+
+    const steps = pipelineSteps || [];
+
+    if (steps.length < 2) return;
+
+    const idx = steps.indexOf(
+        activeAgent.id
+    );
+
+    if (
+        idx < 0 ||
+        idx + 1 >= steps.length
+    ) {
+        return;
+    }
+
+    const nextAgent =
+        agentsById.get(
+            steps[idx + 1]
+        );
+
+    if (!nextAgent) return;
+
+    const text =
+        `[Previous step output from ${activeAgent.name}]\n\n` +
+        lastAssistantReply;
+
+    switchToAgent(nextAgent);
+
+    await sendTurn(text);
 }
 
 
@@ -3340,13 +3825,140 @@ function setChatTitle(value) {
 }
 
 
+/* Resurrect the server-side active chat after a page reload: the in-progress
+   conversation lives on the server, so a refresh no longer finalizes it.
+   Paints the restored bubbles, re-links the session id, and (when it is time)
+   re-offers consolidation for a chat that already reached 3 versions. */
+async function tryResumeActiveChat() {
+
+    if (!activeSession) {
+        return;
+    }
+
+    let chat = null;
+
+    try {
+
+        const query =
+            activeAgent && activeAgent.id
+                ? `?agent_id=${encodeURIComponent(activeAgent.id)}`
+                : "";
+
+        const response =
+            await fetch(
+                `/api/chats/active${query}`
+            );
+
+        if (!response.ok) {
+            return;
+        }
+
+        chat = await response.json();
+
+    } catch (_) {
+        return;
+    }
+
+    if (
+        !chat ||
+        !chat.messages ||
+        chat.messages.length === 0
+    ) {
+        return;
+    }
+
+    clearMessages();
+
+    openedChatId = null;
+
+    activeSession.sessionId =
+        chat.active === true
+            ? (chat.id || activeSession.sessionId)
+            : null;
+
+    activeSession.title =
+        chat.title || "New chat";
+
+    activeSession.startedAt =
+        chat.startedAt ||
+        new Date().toISOString();
+
+    activeSession.messages =
+        chat.messages || [];
+
+    (chat.messages || []).forEach(message => {
+
+        addBubble(
+            message.role === "user"
+                ? "user"
+                : "agent",
+            message.text || message.content || "",
+            message.author || (
+                message.role === "user"
+                    ? "You"
+                    : activeAgent?.name
+            )
+        );
+    });
+
+    setChatTitle(chat.title || "");
+
+    setSaveStatus(
+        "Resumed the previous chat.",
+        "ok"
+    );
+
+    /* A resumed open chat may already sit at 3+ versions - offer consolidation
+       once (respecting any earlier decline within this page session). */
+    if (
+        Number(chat.version) >= 3 &&
+        chat.version !== "C"
+    ) {
+        await maybeOfferConsolidation(chat);
+    }
+}
+
+
 /* Start the current agent completely fresh: finalize the active chat on the
    server, wipe the session data + rendered bubbles, and prepare the input for
    the next message. This is the single source of truth used by the header
-   "New Chat" button and the side panel "Clear Chat" action. */
+   "New Chat" button and the side panel "Clear Chat" action.
+
+   Reset asks FIRST: "save this chat as a new version?" - OK saves (the reset
+   then becomes the NEXT version, exactly like an explicit Save), Cancel
+   discards the in-progress chat without writing a transcript. Abort keeps the
+   current chat untouched. */
 async function startNewChat() {
 
-    await finalizeActiveChat({ quiet: true });
+    if (
+        activeSession &&
+        activeSession.sessionId &&
+        (activeSession.messages || []).length > 0
+    ) {
+
+        const proceed =
+            window.confirm(
+                "Start a new chat? This ends the current chat.\n\n" +
+                "OK = continue, Cancel = stay in the current chat."
+            );
+
+        if (!proceed) {
+            return;
+        }
+
+        const save = window.confirm(
+            "Save the current chat as a new version before starting fresh?\n\n" +
+            "OK = save it, Cancel = discard it (no transcript is written)."
+        );
+
+        if (save) {
+            await finalizeActiveChat({ quiet: true });
+        } else {
+            await discardActiveChat();
+        }
+    } else {
+        await finalizeActiveChat({ quiet: true });
+    }
 
     if (activeSession) {
         activeSession.newChat();
@@ -3392,9 +4004,11 @@ async function refreshChatsDropdown() {
         const tag =
             chat.status === "active"
                 ? " (active)"
-                : chat.version
-                    ? ` (v${chat.version})`
-                    : "";
+                : String(chat.version || "").toUpperCase() === "C"
+                    ? " (consolidated)"
+                    : chat.version
+                        ? ` (v${chat.version})`
+                        : "";
 
         option.textContent =
             `${chat.title || chat.fileName}${tag}`;
@@ -3498,7 +4112,9 @@ async function finalizeActiveChat({ quiet = false } = {}) {
 
                     body: JSON.stringify({
                         title,
-                        rag: DOM.ragToggle.checked
+                        rag: DOM.ragToggle.checked,
+                        agentId:
+                            activeSession.agentId || ""
                     })
                 }
             );
@@ -3524,6 +4140,10 @@ async function finalizeActiveChat({ quiet = false } = {}) {
             );
         }
 
+        if (!quiet && result.consolidation_offered) {
+            await maybeOfferConsolidation(result);
+        }
+
         return result;
 
     } catch (error) {
@@ -3537,6 +4157,159 @@ async function finalizeActiveChat({ quiet = false } = {}) {
 
         return null;
     }
+}
+
+
+/* Discard the active chat WITHOUT writing a transcript: the server drops the
+   in-progress session entirely (no '# VERSION' section is appended). Used by
+   the reset flow when the user chooses not to save. */
+async function discardActiveChat() {
+
+    if (
+        !activeSession ||
+        !activeSession.sessionId
+    ) {
+        return null;
+    }
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/chats/end",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        discard: true,
+                        agentId:
+                            activeSession.agentId || ""
+                    })
+                }
+            );
+
+        const result =
+            await response.json();
+
+        if (
+            !response.ok ||
+            !result.discarded
+        ) {
+
+            throw new Error(
+                result.error ||
+                "Discard failed."
+            );
+        }
+
+        setSaveStatus(
+            "Previous chat discarded (no transcript written).",
+            "ok"
+        );
+
+        return result;
+
+    } catch (error) {
+
+        setSaveStatus(
+            `Discard failed: ${error.message}`,
+            "error"
+        );
+
+        return null;
+    }
+}
+
+
+/* Offer AI consolidation for the chat that was just saved: once a transcript
+   holds 3+ '# VERSION' sections the slot is worth turning into a summary +
+   full-text archive (version "C"). Purely opt-in - Declining does nothing. */
+async function maybeOfferConsolidation(chat) {
+
+    const chatId =
+        chat && (chat.id || chatIdFromResult(chat));
+
+    if (!chatId || consolidationDismissed.has(chatId)) {
+        return;
+    }
+
+    const consolidate =
+        window.confirm(
+            "This chat now has 3 versions saved. Consolidate them into a " +
+            "single summary + full-conversation archive?\n\n" +
+            "OK = run AI consolidation, Cancel = keep the versions as-is."
+        );
+
+    if (!consolidate) {
+        consolidationDismissed.add(chatId);
+        return;
+    }
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/chats/consolidate",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        chatId,
+                        model:
+                            activeSession?.model || ""
+                    })
+                }
+            );
+
+        const result =
+            await response.json();
+
+        if (!response.ok || !result.ok) {
+
+            throw new Error(
+                String(result.detail || result.error || "") ||
+                "Consolidation failed."
+            );
+        }
+
+        setSaveStatus(
+            `Consolidated: ${result.summary_preview || ""}`.trim(),
+            "ok"
+        );
+
+        await refreshChatsDropdown();
+
+    } catch (error) {
+
+        setSaveStatus(
+            `Consolidation failed: ${error.message}`,
+            "error"
+        );
+    }
+}
+
+
+/* The /api/chats/end response carries id when the chat is saved; the legacy
+   path only returned file/version, so recover the id from the file stem. */
+function chatIdFromResult(chat) {
+
+    if (!chat || !chat.file || chat.id) {
+        return chat && chat.id;
+    }
+
+    return chat.file
+        .replace(/\.txt$/i, "")
+        .replace(/-C$/, "");
 }
 
 
@@ -3735,6 +4508,7 @@ function switchToAgent(agent) {
                 agentId: agent.id,
                 agentName: agent.name,
                 model:
+                    agent.model ||
                     settings.defaultModel ||
                     ""
             })
@@ -3766,6 +4540,8 @@ function switchToAgent(agent) {
     openedChatId = null;
 
     buildPanel(agent);
+
+    updateNextStepChip();
 }
 
 
@@ -3960,6 +4736,19 @@ async function boot() {
                 ).agents || [];
         }
 
+        const pipelineResponse =
+            await fetch(
+                "/api/pipeline"
+            );
+
+        if (pipelineResponse.ok) {
+
+            pipelineSteps =
+                (
+                    await pipelineResponse.json()
+                ).steps || [];
+        }
+
     } catch (_) {
         /* Error handled below. */
     }
@@ -4002,6 +4791,15 @@ async function boot() {
 
 
     switchToAgent(target);
+
+    updateNextStepChip();
+
+    /* Reload resume: the server keeps the active chat (its messages survive a
+       page refresh). Restore it so the conversation picks up where it was.
+       Saved-test-run mode (?runTests=1) starts clean instead. */
+    if (params.get("runTests") !== "1") {
+        await tryResumeActiveChat();
+    }
 
     /* Smaller screens default to the side panel collapsed so the chat gets the
        full column width; the header toggle still opens it. Large screens open
@@ -4433,6 +5231,18 @@ DOM.deleteButton.addEventListener(
 DOM.ragClearButton.addEventListener(
     "click",
     handleClearRagMemory
+);
+
+
+DOM.pipeline.addEventListener(
+    "click",
+    runPipelineTest
+);
+
+
+DOM.nextStep.addEventListener(
+    "click",
+    forwardToNextStep
 );
 
 

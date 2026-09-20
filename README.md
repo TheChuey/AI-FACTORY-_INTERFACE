@@ -218,7 +218,8 @@ terminator1/
 │   ├── update_manager.py     # Discover/import interface/updates/<domain>/*.py
 │   │                         # get_active_module() + move_module_to_external_archive()
 │   ├── interface_dispatcher.py  # trace_and_execute(): logs caller file+line
-│   ├── restore_manager.py    # Baseline compare/restore + snapshot_baseline()
+│   ├── restore_manager.py    # ONE master copy (current-known-good-copy/):
+│   │                         # snapshot() publish / status() drift / restore()
 │   ├── custom_module_manager.py  # Drop-in .py loader for data/custom_modules/
 │   │                         # (default Custom Modules Path)
 │   ├── wiring/               # The connection layer: registers custom-module
@@ -233,7 +234,7 @@ terminator1/
 │
 ├── about/                    # Site identity
 │   ├── about.json            # title + subtitle served by GET /api/about
-│   └── set_title.py          # Edits about.json + 'apply'/'snapshot'/'restore' triggers
+│   └── set_title.py          # Edits about.json + 'create-module' generator
 │
 ├── config/
 │   └── models.json           # AUTO-GENERATED at startup from installed Ollama models
@@ -245,8 +246,9 @@ terminator1/
 │   ├── phase-1-2-3-update/   # Drop-in custom modules install kit (was applied)
 │   ├── APP_STRUCTURE.md      # AUTO-GENERATED folder-tree snapshot
 │   └── APP_CODE_SNAPSHOT.md  # AUTO-GENERATED per-file source snapshot
-├── current-known-good-copy/  # GENERATED restore baseline: complete copy of the
-│                             # last good source (python about/set_title.py snapshot)
+├── current-known-good-copy/  # GENERATED master copy: complete copy of the last
+│                             # good source ("Save current state as master" in
+│                             # Settings -> Updates/Interface, or snapshot())
 ├── data/                     # RUNTIME data (gitignored): chatlog, RAG store,
 │                             # interface_archive/, snapshots/pre_restore_backup/,
 │                             # custom_modules/ (drop-in .py modules)
@@ -334,10 +336,10 @@ Agent modes:
 | `GET /api/agents/{id}/config` | One agent's consolidated config (meta + `agent.md` + tests + shared tests) |
 | `PUT /api/agents/{id}/config` | Partial update of one agent's config (`meta` / `markdown` / `tests`) |
 | `GET /api/about` | Site identity (title + tagline from `about/about.json`) |
-| `GET /api/interface/status` | Interface status: module catalog, custom modules (folder + `ui_manifests`), archive, trace-log tail, baseline + drift |
+| `GET /api/interface/status` | Interface status: module catalog, custom modules (folder + `ui_manifests`), archive, trace-log tail, master copy + drift |
 | `POST /api/interface/apply` | Reload update modules from disk + regenerate the docs snapshots |
-| `POST /api/interface/snapshot` | Publish the current tree as the new known-good baseline |
-| `POST /api/interface/restore` | `{baseline?, apply?, dryRun?}` — roll back (dry-run by default) |
+| `POST /api/interface/snapshot` | Publish the current tree as the known-good master copy |
+| `POST /api/interface/restore` | Roll every app file back to the master copy (backup first, then regen docs) |
 | `POST /api/interface/run` | Execute an update-module function (`{domain, module, function, args?, kwargs?}`) |
 | `POST /api/interface/toggle-run` | `{enabled}` — arm/disarm module execution for the process |
 | `GET /api/logs/console` | Tail of the captured console output (feeds the chat console drawer + `logs.html`) |
@@ -418,16 +420,15 @@ see **`docs/CHANGELOG.md`** for the project history and architecture (the older
 2. Add one line to `TOOL_REGISTRY` in `tools/registry.py`.
 3. Reference the ID in any agent's `agent.json`.
 
-## Modular interface: add / apply / snapshot / restore
+## Modular interface: add / apply / master-copy recovery
 
 New or experimental logic can live outside the core modules under
 `interface/updates/<domain>/` (domains: `engine`, `tools`, `server`). Nothing
 in the core app is edited.
 
 - **Add a feature**: drop a `.py` file in `interface/updates/<domain>/`, then
-  `python about/set_title.py apply` — it is discovered, imported, and the
-  docs snapshots are regenerated. `apply --snapshot` also refreshes the
-  baseline.
+  press **Apply** on the Settings → Updates/Interface card (or restart) — it is
+  discovered, imported, and the docs snapshots are regenerated.
 - **Use it natively (Option B)**:
   ```python
   from interface.update_manager import UpdateManager
@@ -446,15 +447,16 @@ in the core app is edited.
   exposed on `app.state.update_manager` / `app.state.interface_dispatcher`.
 - **Retire a module**: `UpdateManager().move_module_to_external_archive("engine", "hello_update")`
   moves the file out of the repo into `data/interface_archive/engine/`.
-- **Re-baseline**: `python about/set_title.py snapshot` publishes a complete
-  working copy of the current source into `current-known-good-copy/`.
-- **Roll back**: `python about/set_title.py restore --dry-run` previews, then
-  `python about/set_title.py restore` overwrites any file whose SHA-256
-  differs from the baseline (files only in the baseline or only in the live
-  tree are reported, never copied/deleted). Overwritten files are first
-  copied to `data/snapshots/pre_restore_backup/`. User data (`data/`,
-  `venv/`, `.git/`, `dashboard/config/app_settings.json`, `about/about.json`)
-  is never touched, and the docs snapshots are regenerated afterwards.
+- **Set the master copy**: "Save current state as master" on the
+  Updates/Interface card publishes a complete working copy of the current
+  source into `current-known-good-copy/`.
+- **Recover / roll back**: "Restore to master copy" (warning dialog first)
+  overwrites every tracked file whose SHA-256 differs from the master copy.
+  Files only in the live tree or only in the master are added, never deleted.
+  Overwritten files are first copied to `agent_monitoring/data/snapshots/
+  pre_restore_backup/`. User data (`agent_monitoring/data/`, `venv/`, `.git/`,
+  `dashboard/config/app_settings.json`, `about/about.json`) is never touched,
+  and the docs snapshots are regenerated afterwards.
 
 ### Drop-in custom modules (the flat `data/custom_modules/` loader)
 
@@ -479,9 +481,8 @@ A custom module is just a `.py` file declaring a `UI_MANIFEST` and a
   "＋ Analytics Builder" header button (`UI_MANIFEST`) and a
   `POST /api/analytics_builder/execute` endpoint (`register_routes(app)`).
 - **Activate:** restart the server (`python server.py`) — simplest — or, for a
-  brand-new module only, `python about/set_title.py apply` (also reachable via
-  Settings → Updates/Interface → Apply). Already-loaded modules pick up edits
-  on a restart.
+  brand-new module only, press **Apply** on the Settings → Updates/Interface
+  card. Already-loaded modules pick up edits on a restart.
 - **See it:** reload the dashboard. Each active module's `UI_MANIFEST` button
   appears in the header automatically (via `renderDynamicHeaderButtons` in
   `dashboard/js/ui/header-nav.js`) — no `index.html`, `header-nav.js` or
@@ -527,16 +528,17 @@ InterfaceDispatcher().execute_action("custom", "analytics_builder",
 ```
 
 So a feature is exposed to BOTH the browser (header button → route) and the
-Python core (traced function call) from one file. `apply`/restart re-asserts
+Python core (traced function call) from one file. Apply/restart re-asserts
 the bridge after every reload.
 
 ### In the browser
 
 The Settings page (`Dashboard -> Settings`) has an **Updates / Interface**
-card below Models: live module catalog, archive, baseline freshness + drift,
-the trace-log tail, and Apply / Snapshot / Restore buttons (restore is dry-run
-first). A small **"N updates" pill** also sits in the page header (amber dot
-when the baseline has drifted) and links back to that card.
+card below Models: live module catalog, archive, master-copy freshness +
+drift, the trace-log tail, and Apply / Save current state as master /
+Restore to master copy buttons (restore asks for confirmation in a warning
+dialog first). A small **"N updates" pill** also sits in the page header
+(amber dot when the master copy has drifted) and links back to that card.
 
 Module execution from the UI is **disabled by default**: the card's
 "Enable module execution" toggle arms `/api/interface/run` (backed server-side
@@ -569,7 +571,7 @@ card). Older entries cover the Agent Monitor removal, and the recovery of
 
 Recovery artifacts to be aware of:
 
-- `current-known-good-copy/` — the generated restore baseline (see the Modular
+- `current-known-good-copy/` — the generated master copy (see the Modular
   Interface section above). Not part of the running app.
 - `server/server.py.infected.bak` and `engine/core/agent.py.infected.bak` —
   copies of the pre-rollback monitor-era files, kept in case you need to

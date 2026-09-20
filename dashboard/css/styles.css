@@ -2365,3 +2365,150 @@ body.logs-page {
     color: #ffffff;
     background: #0d1117;
 }
+
+/* ---------------------------------------------------------------------
+   logs.html "Tool Usage" inspector feed
+   --------------------------------------------------------------------- */
+
+.logs-page-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 8px 16px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    flex: 0 0 auto;
+}
+
+#logs-filter {
+    flex: 1 1 auto;
+    max-width: 440px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #e6edf3;
+    padding: 5px 10px;
+    font: inherit;
+    font-size: 12px;
+}
+
+#logs-filter:focus {
+    outline: none;
+    border-color: #4c9aff;
+}
+
+#logs-filter::placeholder {
+    color: #6e7681;
+}
+
+.logs-failures {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #9fadbd;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.tools-feed {
+    height: 100%;
+    padding: 12px 16px;
+    overflow: auto;
+    box-sizing: border-box;
+    scrollbar-width: thin;
+}
+
+.tf-row {
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border: 1px solid #30363d;
+    border-left: 3px solid #30363d;
+    border-radius: 8px;
+    background: #161b22;
+}
+
+.tf-row[data-problem="1"] {
+    border-color: #3d2323;
+    border-left-color: #f85149;
+}
+
+.tf-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.tf-time {
+    color: #768390;
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+}
+
+.tf-agent {
+    font-weight: 600;
+    color: #e6edf3;
+}
+
+.tf-tool {
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    color: #4c9aff;
+}
+
+.tf-model {
+    color: #768390;
+    font-size: 11px;
+    font-family: "Cascadia Code", "Consolas", monospace;
+}
+
+.tf-chip {
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.tf-chip-ok { color: #3fb950; background: rgba(63, 185, 80, 0.12); }
+.tf-chip-op-fail { color: #f85149; background: rgba(248, 81, 73, 0.14); }
+.tf-chip-err { color: #f85149; background: rgba(248, 81, 73, 0.14); }
+.tf-chip-miss { color: #d29922; background: rgba(210, 153, 34, 0.14); }
+.tf-chip-fab { color: #f0883e; background: rgba(240, 136, 62, 0.14); }
+
+.tf-meta {
+    color: #768390;
+    font-size: 11px;
+    margin-top: 2px;
+}
+
+.tf-args {
+    margin-top: 4px;
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    color: #c9d1d9;
+    word-break: break-word;
+}
+
+.tf-arg { color: #79c0ff; }
+.tf-val { color: #e6edf3; }
+.tf-deemph { color: #6e7681; }
+.tf-path {
+    color: #3fb950;
+    background: rgba(63, 185, 80, 0.08);
+    border-radius: 3px;
+    padding: 0 2px;
+}
+.tf-path-bad {
+    color: #f85149;
+    background: rgba(248, 81, 73, 0.12);
+}
+
+.tf-result {
+    margin-top: 5px;
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    color: #9fadbd;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

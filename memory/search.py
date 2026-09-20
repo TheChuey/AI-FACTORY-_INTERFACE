@@ -167,7 +167,7 @@ class FallbackVectorDB:
 
 class RAGStorage:
     """Manages indexing and querying of parsed chunked data."""
-    def __init__(self, persist_dir="./data/rag_db", in_memory=False):
+    def __init__(self, persist_dir="./agent_monitoring/data/rag_db", in_memory=False):
         self.persist_dir = Path(persist_dir)
         self.persist_dir.mkdir(parents=True, exist_ok=True)
         self.in_memory = in_memory

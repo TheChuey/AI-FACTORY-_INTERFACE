@@ -263,6 +263,33 @@ class Agent:
         return coerced
 
     MAX_TOOL_ROUNDS = 6
+    REPEAT_LIMIT = 3
+    _REPEAT_WARNING = (
+        "System guard: you have already sent this exact tool call with the "
+        "same arguments earlier in this conversation, and it already ran. "
+        "Calling it again will not change its result. STOP issuing tool calls "
+        "now and answer in plain text, using the tool results you already have."
+    )
+    _REPEAT_FEEDBACK = (
+        "(The agent kept repeating the same tool call and stopped answering "
+        "in text. Please rephrase your request or ask again.)"
+    )
+
+    @staticmethod
+    def _round_signature(tool_calls) -> tuple:
+        """Order-independent, hashable fingerprint of one tool round so two
+        rounds with the same calls and same arguments compare as identical."""
+        normalized = []
+        for tool_call in tool_calls:
+            fn = tool_call.get("function", {})
+            name = str(fn.get("name", ""))
+            args = fn.get("arguments", {})
+            if isinstance(args, dict):
+                items = tuple(sorted((str(k), repr(v)) for k, v in args.items()))
+            else:
+                items = (repr(args),)
+            normalized.append((name, items))
+        return tuple(sorted(normalized))
 
     def think(self, user_input: str) -> str:
         """Add user input to history, send the conversation to the LLM, and return its reply."""
@@ -283,9 +310,32 @@ class Agent:
         # Keep looping while the model keeps issuing tool calls, so a chain of
         # tool calls always ends in a real text reply (never a silent "").
         tool_calls = message.get("tool_calls") or self._extract_text_tool_calls(message.get("content", ""))
+        last_signature = None
+        repeat_count = 0
         for _ in range(self.MAX_TOOL_ROUNDS):
             if not tool_calls:
                 break
+
+            signature = self._round_signature(tool_calls)
+            if signature == last_signature:
+                repeat_count += 1
+            else:
+                repeat_count = 1
+                last_signature = signature
+
+            if repeat_count >= self.REPEAT_LIMIT:
+                print(f"[Agent.think] identical tool round {signature} repeated x{repeat_count}; suppressing.")
+                self.messages.append({"role": "user", "content": self._REPEAT_WARNING})
+                message = ask_llm(messages=self.messages, model=self.model, tools=tool_callables)
+                self.messages.append(message)
+                content = (message.get("content", "") or "").strip()
+                tool_calls = message.get("tool_calls") or self._extract_text_tool_calls(content)
+                if content and not tool_calls:
+                    print("[Agent.think] loop suppressed; model answered in text.")
+                    return content
+                print("[Agent.think] model ignored the loop warning; returning feedback reply.")
+                return self._REPEAT_FEEDBACK
+
             origin = "native tool_calls" if message.get("tool_calls") else "TEXT reply"
             print(f"[Agent.think] Executing {len(tool_calls)} tool call(s) from {origin}.")
             for tool_call in tool_calls:
@@ -331,6 +381,34 @@ class Agent:
                 return
         self.messages.append({"role": self._SESSION_CONTEXT_ROLE, "content": context})
 
+    @staticmethod
+    def _op_succeeded(result) -> tuple[bool, str]:
+        """Classify a tool's result as (ok, error_msg).
+
+        Tools report failed OPERATIONS as dicts with success=False or an
+        "error" key even when the call itself executed (e.g. read_file on a
+        path that does not exist). Execution-level 'success' and operation
+        success are different things; the op_ok field records the difference
+        so the live feed can flag hallucinated paths instead of showing
+        [OK] everywhere.
+
+        The result may arrive as a real dict or as a string representation
+        (str(dict) uses single quotes, which is NOT valid JSON - so this
+        inspects the object directly and only JSON-parses real JSON strings).
+        """
+        payload = result
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (json.JSONDecodeError, TypeError):
+                return True, ""
+        if isinstance(payload, dict):
+            if payload.get("success") is False:
+                return False, str(payload.get("error") or "operation failed")
+            if payload.get("error"):
+                return False, str(payload["error"])
+        return True, ""
+
     def act(self, tool_call: dict, origin: str = "") -> str:
         """Run one tool that the LLM asked for, using the name and args it chose."""
         name = tool_call.get("function", {}).get("name")
@@ -338,21 +416,23 @@ class Agent:
         timestamp = datetime.now().strftime("%H:%M:%S")
         if name in self.tools:
             try:
-                result = str(self.tools[name](**args))
+                raw_result = self.tools[name](**args)
+                result = str(raw_result)
                 print(f"[Agent.act] Executed {name} -> {result[:100]}...")
-                self.tool_events.append({
+                op_ok, op_error = self._op_succeeded(raw_result)
+                run_event = {
                     "time": timestamp,
                     "tool": name,
                     "args": args,
                     "result_preview": result[:200],
                     "status": "success",
-                })
+                    "op_ok": op_ok,
+                }
+                if op_error:
+                    run_event["op_error"] = op_error
+                self.tool_events.append(run_event)
                 self._log_tool_event({
-                    "time": timestamp,
-                    "tool": name,
-                    "args": args,
-                    "result_preview": result[:200],
-                    "status": "success",
+                    **run_event,
                     "origin": origin,
                 })
                 return result

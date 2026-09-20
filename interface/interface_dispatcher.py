@@ -14,7 +14,8 @@ memory:
                                          "secondary_engine_action", 5)
 
 Trace lines are logged through the `app_change_tracker` logger (a FileHandler
-writes them to `data/interface_trace.log`) and also printed to stdout.
+writes them to `agent_monitoring/data/interface_trace.log`) and also printed
+to stdout.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-TRACE_LOG_FILE = BASE_DIR / "data" / "interface_trace.log"
+TRACE_LOG_FILE = BASE_DIR / "agent_monitoring" / "data" / "interface_trace.log"
 
 logger = logging.getLogger("app_change_tracker")
 if not logger.handlers:

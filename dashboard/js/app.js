@@ -551,6 +551,7 @@ async function handleSaveAction(session, chat) {
         const result = await api.endChat({
             title,
             rag: Boolean(widget.getPanelValues().ragCommit),
+            agentId: activeAgentId || "",
         });
         chat.setSaveStatus(
             result.saved
@@ -558,6 +559,28 @@ async function handleSaveAction(session, chat) {
                 : `Save failed: ${result.error || "no active chat"}`,
             result.saved ? "ok" : "error"
         );
+
+        /* 3 versions saved -> offer AI consolidation (summary + full text).
+           Purely opt-in; declining just keeps the version sections. */
+        if (result.saved && result.consolidation_offered) {
+            const chatId = result.id || result.file?.replace(/\.txt$/i, "");
+            if (chatId && window.confirm(
+                "This chat now has 3 versions saved. Consolidate them into a " +
+                "single summary + full-conversation archive? (OK = yes, Cancel = keep as-is)"
+            )) {
+                try {
+                    const merged = await api.consolidateChat(chatId, { model: session.model || "" });
+                    chat.setSaveStatus(
+                        merged.ok
+                            ? `Consolidated: ${merged.summary_preview || "done"}`
+                            : `Consolidation failed: ${merged.error || merged.detail || "unknown error"}`,
+                        merged.ok ? "ok" : "error"
+                    );
+                } catch (error) {
+                    chat.setSaveStatus(`Consolidation failed: ${error.message}`, "error");
+                }
+            }
+        }
     } catch (error) {
         chat.setSaveStatus(`Save failed: ${error.message}`, "error");
     }

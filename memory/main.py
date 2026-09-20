@@ -164,8 +164,8 @@ def main():
         default_chat_logs = str(app_paths.CHAT_RECORDS_DIR)
         default_persist = str(app_paths.RAG_DB_DIR)
     except Exception:
-        default_chat_logs = "./data/chatlog/agent-text-records"
-        default_persist = "./data/rag_db"
+        default_chat_logs = "./agent_monitoring/data/chatlog/agent-text-records"
+        default_persist = "./agent_monitoring/data/rag_db"
 
     print("This system searches your local chat records to answer queries.")
 

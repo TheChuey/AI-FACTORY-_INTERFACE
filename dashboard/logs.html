@@ -48,9 +48,16 @@
         </div>
     </header>
 
+    <div id="logs-toolbar" class="logs-page-toolbar" hidden>
+        <input id="logs-filter" type="text" placeholder="Filter tool calls: agent, tool, path&hellip;" autocomplete="off">
+        <label class="logs-failures" title="Only show calls that errored, failed the operation, or used a suspicious path">
+            <input id="logs-failures" type="checkbox"> failures &amp; suspicious only
+        </label>
+    </div>
+
     <main class="logs-page-main">
         <pre id="logs-body" class="logs-page-body" aria-live="polite"></pre>
-        <pre id="tools-body" class="logs-page-body" aria-live="polite" hidden></pre>
+        <div id="tools-body" class="tools-feed" aria-live="polite" hidden></div>
     </main>
 
     <script type="module" src="/static/js/logs-page.js"></script>

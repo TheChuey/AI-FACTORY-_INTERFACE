@@ -40,7 +40,7 @@ except Exception:  # pragma: no cover - app.paths is always present in this repo
 DEFAULT_LOG_FILE = (
     _app_paths.LOG_FILE
     if _app_paths is not None
-    else (Path(__file__).resolve().parents[2] / "data" / "chatlog" / "chatRecord.jsonl")
+    else (Path(__file__).resolve().parents[2] / "agent_monitoring" / "data" / "chatlog" / "chatRecord.jsonl")
 )
 
 # Key order used when writing every record, so the JSONL always looks alike.
@@ -145,6 +145,17 @@ class ChatLogger:
                 records.append(self._ordered(dict(data)))
             self._write_all(records)
         return data
+
+    def replace_all(self, records):
+        """Rewrite the whole file with the given records (each ordered).
+
+        Used at migration so the single-file model can write ONE normalized
+        record per chat. Returns the records written.
+        """
+        with self._lock:
+            ordered = [self._ordered(dict(record)) for record in records]
+            self._write_all(ordered)
+        return ordered
 
     def add_missing(self, records):
         """Append records whose (id, fileName) pair is not logged yet.

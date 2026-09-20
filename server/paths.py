@@ -8,7 +8,9 @@ page (config.html), stored in dashboard/config/app_settings.json via
 /api/settings:
 
     app_settings.json keys:
-        dataDir            base data folder (default "data").
+        dataDir            base data folder (default
+                           "agent_monitoring/data" - the runtime data home
+                           lives inside the agent_monitoring/ subsystem).
                            Relative -> project root; absolute -> used as-is.
         chatSavePath       where saved chat transcripts (.txt) are written.
                            Empty -> <dataDir>/chatlog/agent-text-records
@@ -186,8 +188,11 @@ _cfg = _load_app_settings()
 _PATH_KEYS = ("dataDir", "chatSavePath", "ragDbPath", "customModulesPath")
 _path_keys_at_import = {key: _os_value(_cfg, key) for key in _PATH_KEYS}
 
-# Base data folder (dataDir / dataDirLinux / ... overrides the default "data").
-DATA_DIR = resolve_path(_os_value(_cfg, "dataDir"), "data")
+# Base data folder. dataDir / dataDirLinux / ... (or GENESSIS_DATA_DIR)
+# override the default "agent_monitoring/data" - the runtime data home now
+# lives inside the agent_monitoring/ subsystem so the whole telemetry +
+# transcript stack is self-contained under one package.
+DATA_DIR = resolve_path(_os_value(_cfg, "dataDir"), "agent_monitoring", "data")
 
 # Chat log folder + transcripts (chatSavePath overrides the sub-folder).
 CHATS_DIR = DATA_DIR / "chatlog"

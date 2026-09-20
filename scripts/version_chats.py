@@ -4,15 +4,18 @@ scripts/version_chats.py
 
 Small CLI for managing the saved chat transcripts + their versions.
 
-The versioning toggle (disableVersioning in static/config/app_settings.json)
-controls whether a re-saved chat gets a NEW versioned .txt file (<title>-2.txt,
-<title>-3.txt, ...) or simply overwrites <title>.txt. This script can:
+Every chat is ONE transcript file (<title>.txt) whose saved versions live
+INSIDE it as "# VERSION N" sections. The versioning toggle (disableVersioning
+in static/config/app_settings.json) controls whether re-saving a chat APPENDS
+a new "# VERSION 2" section (versioning on) or overwrites the file (off).
+This script can:
 
     list                          print the chat log (title, file, version, msgs)
     import                        run the one-time import of existing .txt files
     versioning on|off             turn automatic version bumping on or off
-    bump <id-or-title> [version]  make a new versioned copy of a chat's file and
-                                  point the log at it (e.g. bump my-chat 1.1)
+    bump <id-or-title> [version]  append the chat's own transcript as a new
+                                  "# VERSION <version>" section (e.g. bump
+                                  my-chat 1.1) and point the log at it
 
 Examples:
     python scripts/version_chats.py list
@@ -93,7 +96,7 @@ def cmd_bump(argv):
     if not updated:
         print(f"could not version chat '{target}' - file '{row.get('fileName')}' is missing")
         return 1
-    print(f"bumped '{row['title']}' -> {updated['fileName']} (v{next_version})")
+    print(f"bumped '{row['title']}' -> append '# VERSION {next_version}' to {updated['fileName']}")
     return 0
 
 
@@ -104,7 +107,7 @@ def cmd_versioning(argv):
     settings = _load_app_settings()
     settings["disableVersioning"] = argv[0] == "off"
     _save_app_settings(settings)
-    state = "on (re-saving overwrites <title>.txt)" if argv[0] == "off" else "off (saves get versioned copies)"
+    state = "on (re-saving appends a '# VERSION 1' overwrite)" if argv[0] == "off" else "off (saves append '# VERSION N' sections)"
     print(f"version bumping: {state}")
     return 0
 

@@ -1,24 +1,25 @@
 """interface/restore_manager.py
 ==============================
 
-Isolated baseline comparison, backup and rollback manager.
+Master-copy backup and restore manager.
 
-RestoreManager compares the live codebase against a known-good baseline using
-SHA-256 hashes, copies every file it is about to overwrite into
-`data/snapshots/pre_restore_backup/`, and only then restores the baseline
-version. Runtime data and user settings are always excluded:
+`RestoreManager` keeps ONE known-good master copy of the live source tree at
+`current-known-good-copy/` (runtime data and user settings excluded) and can
+roll the whole app back to it:
 
-    data/  venv/  .git/  __pycache__/  current-known-good-copy/  test/
+    RestoreManager().snapshot()   # publish current tree as the master copy
+    RestoreManager().status()     # master info + how many files drift
+    RestoreManager().restore()    # overlay every master file back onto live
+
+Restore semantics (overlay): every file in the master copy is written over the
+live tree. A live file that differs is backed up first into
+`agent_monitoring/data/snapshots/pre_restore_backup/`, then overwritten; master
+files missing from the live tree are added; live-only files are left untouched.
+Runtime data and user settings are always excluded:
+
+    data/  agent_monitoring/data/  venv/  .git/  __pycache__/
+    current-known-good-copy/  test/  BASELINE_MANIFEST.json
     dashboard/config/app_settings.json  about/about.json  *.bak  *.pyc  *.pyo
-
-Restore semantics: only files present in BOTH trees whose checksum differs are
-overwritten. Files that exist only in the baseline or only in the live tree
-are reported but left untouched.
-
-Workflow:
-    RestoreManager().snapshot_baseline()   # publish current tree as baseline
-    RestoreManager().restore(dry_run=True) # preview what would change
-    RestoreManager().restore()             # back up + roll back, then sync docs
 """
 
 from __future__ import annotations
@@ -34,15 +35,14 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_BASELINE = BASE_DIR / "current-known-good-copy"
-LEGACY_BASELINE = BASE_DIR / "test"
-BACKUP_ROOT = BASE_DIR / "data" / "snapshots" / "pre_restore_backup"
+BACKUP_ROOT = BASE_DIR / "agent_monitoring" / "data" / "snapshots" / "pre_restore_backup"
 DOCS_SCRIPT = BASE_DIR / "scripts" / "update_docs.py"
 MANIFEST_NAME = "BASELINE_MANIFEST.json"
 
-# Top-level entries never compared, copied, backed up or restored.
-EXCLUDED_TOP = {"data", "venv", ".git", "__pycache__", "current-known-good-copy", "test"}
+# Paths never compared, copied, backed up or restored.
+EXCLUDED_TOP = {"data", "agent_monitoring/data", "venv", ".git", "__pycache__", "current-known-good-copy", "test"}
 # User/runtime files never touched even when their relative path matches.
-EXCLUDED_FILES = {"dashboard/config/app_settings.json", "about/about.json"}
+EXCLUDED_FILES = {"dashboard/config/app_settings.json", "about/about.json", MANIFEST_NAME}
 EXCLUDED_SUFFIXES = (".bak", ".pyc", ".pyo")
 
 _TOP = EXCLUDED_TOP
@@ -90,14 +90,24 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _read_manifest(baseline: Path) -> dict:
+    manifest = baseline / MANIFEST_NAME
+    if not manifest.is_file():
+        return {}
+    try:
+        return json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
 class RestoreManager:
-    """SHA-256 baseline compare, safety backup and rollback."""
+    """Master-copy publishing, drift status and overlay restore."""
 
-    # ------------------------------------------------------------ snapshots
+    # ------------------------------------------------------------- snapshot
 
-    def snapshot_baseline(self, dest: str | Path | None = None) -> int:
+    def snapshot(self, dest: str | Path | None = None) -> int:
         """Publish a complete working copy of the current tree into the
-        baseline folder (default: current-known-good-copy/). Returns the
+        master folder (default: current-known-good-copy/). Returns the
         number of files copied."""
         target = Path(dest or DEFAULT_BASELINE).resolve()
         live = file_map(BASE_DIR)
@@ -121,146 +131,117 @@ class RestoreManager:
                 "suffixes": list(_SUFFIXES),
             },
         }
-        (target / MANIFEST_NAME).write_text(
+        manifest_file = target / MANIFEST_NAME
+        manifest_file.write_text(
             json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-        self._report_manifest(target)
+        print(
+            f"Master copy published: {manifest.get('baseline')} "
+            f"({manifest.get('files')} files, created {manifest.get('created')})"
+        )
         return len(live)
 
-    @staticmethod
-    def _report_manifest(baseline: Path) -> None:
-        manifest = baseline / MANIFEST_NAME
-        if not manifest.is_file():
-            return
-        try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return
-        print(
-            f"Baseline: {data.get('baseline', baseline)} "
-            f"({data.get('files', '?')} files, created {data.get('created', '?')})"
+    # -------------------------------------------------------------- status
+
+    def status(self) -> dict:
+        """Master copy info plus how many live files drift from it."""
+        folder = str(DEFAULT_BASELINE)
+        if not DEFAULT_BASELINE.is_dir():
+            return {
+                "exists": False,
+                "folder": folder,
+                "files": 0,
+                "created": None,
+                "modified": 0,
+                "modified_files": [],
+                "error": "No master copy yet - save the current state as master first.",
+            }
+        manifest = _read_manifest(DEFAULT_BASELINE)
+        base_map = file_map(DEFAULT_BASELINE)
+        live_map = file_map(BASE_DIR)
+        modified = sorted(
+            rel for rel in base_map
+            if rel not in live_map or _sha256(live_map[rel]) != _sha256(base_map[rel])
         )
+        return {
+            "exists": True,
+            "folder": folder,
+            "files": manifest.get("files", len(base_map)),
+            "created": manifest.get("created"),
+            "modified": len(modified),
+            "modified_files": modified[:50],
+            "error": None,
+        }
 
     # ------------------------------------------------------------- restore
 
-    def _resolve_baseline(self, given: str | Path | None) -> Path:
-        if given:
-            path = Path(given).resolve()
-            if not path.is_dir():
-                raise NotADirectoryError(f"baseline folder not found: {path}")
-            return path
-        if DEFAULT_BASELINE.is_dir():
-            return DEFAULT_BASELINE
-        if LEGACY_BASELINE.is_dir():
-            print(
-                f"WARNING: '{DEFAULT_BASELINE.name}' not found - falling back to "
-                f"'{LEGACY_BASELINE.name}' (pre-infection snapshot, may be outdated). "
-                f"Run `python about/set_title.py snapshot` to publish the current tree."
-            )
-            return LEGACY_BASELINE
-        raise NotADirectoryError(
-            "no baseline found - run `python about/set_title.py snapshot` first"
-        )
-
     @staticmethod
-    def _run_docs_regeneration() -> None:
+    def _run_docs_regeneration() -> bool:
+        """Regenerate docs/APP_STRUCTURE.md + docs/APP_CODE_SNAPSHOT.md."""
         if not DOCS_SCRIPT.is_file():
             print("SKIP: scripts/update_docs.py not found")
-            return
+            return False
         result = subprocess.run(
             [sys.executable, str(DOCS_SCRIPT)], cwd=str(BASE_DIR)
         )
         if result.returncode == 0:
             print("Docs snapshots regenerated (docs/APP_STRUCTURE.md, docs/APP_CODE_SNAPSHOT.md).")
-        else:
-            print(f"WARNING: docs regeneration exited with code {result.returncode}")
+            return True
+        print(f"WARNING: docs regeneration exited with code {result.returncode}")
+        return False
 
-    def diff(self, baseline: str | Path | None = None) -> dict:
-        """Silent SHA-256 comparison against the baseline (no printing).
+    def restore(self) -> dict:
+        """Overlay every master file back onto the live tree.
 
-        Returns { baseline, shared, modified, skipped, untracked } where
-        `modified` lists relative paths present in both trees whose checksum
-        differs (ready to restore/back-up) and skipped/untracked hold the
-        baseline-only / live-only reports."""
-        base = self._resolve_baseline(baseline)
-        base = base.resolve()
-
+        Differing live files are backed up first into
+        agent_monitoring/data/snapshots/pre_restore_backup/<stamp>/; master files
+        missing from live are added; live-only files are never deleted. Docs are
+        regenerated afterwards."""
+        if not DEFAULT_BASELINE.is_dir():
+            raise NotADirectoryError(
+                "No master copy found - save the current state as master first."
+            )
+        base_map = file_map(DEFAULT_BASELINE)
         live_map = file_map(BASE_DIR)
-        base_map = file_map(base)
-        shared = sorted(set(live_map) & set(base_map))
-        modified = [rel for rel in shared if _sha256(live_map[rel]) != _sha256(base_map[rel])]
-        skipped = sorted(set(base_map) - set(live_map))
-        untracked = sorted(set(live_map) - set(base_map))
-
-        return {
-            "baseline": str(base),
-            "shared": len(shared),
-            "modified": modified,
-            "skipped": skipped,
-            "untracked": untracked,
-        }
-
-    def restore(self, baseline: str | Path | None = None, dry_run: bool = False) -> dict:
-        """Compare the live tree against the baseline, back up and overwrite
-        modified files (or just report when `dry_run`). Re-runs the docs
-        regeneration after a real restore."""
-        base = self._resolve_baseline(baseline)
-        base = base.resolve()
-        self._report_manifest(base)
-
-        diff = self.diff(base)
-        modified = list(diff["modified"])
-        skipped = list(diff["skipped"])
-        untracked = list(diff["untracked"])
-
-        print(f"Comparing against baseline: {base}")
-        print(f"  shared files: {diff['shared']}")
-        print(f"  modified:     {len(modified)}")
-        print(f"  baseline-only: {len(skipped)} (report only, not copied)")
-        print(f"  live-only:    {len(untracked)} (report only, not touched)")
-
-        for rel in skipped:
-            print(f"    skip:  {rel}")
-        for rel in untracked:
-            print(f"    keep:  {rel}")
-
-        result = {
-            "baseline": str(base),
-            "modified": len(modified),
-            "skipped": len(skipped),
-            "untracked": len(untracked),
-            "backup_dir": None,
-        }
-
-        if not modified:
-            print("Nothing to restore - live tree matches the baseline.")
-            return result
-
-        if dry_run:
-            print("DRY RUN - no changes made. Would restore these files:")
-            for rel in modified:
-                print(f"    restore: {rel}")
-            return result
-
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_dir = BACKUP_ROOT / stamp
-        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_root = BACKUP_ROOT / stamp
 
-        live_map = file_map(BASE_DIR)
-        base_map = file_map(base)
+        to_write = sorted(
+            rel for rel in base_map
+            if rel not in live_map or _sha256(live_map[rel]) != _sha256(base_map[rel])
+        )
+        if to_write:
+            backup_root.mkdir(parents=True, exist_ok=True)
 
-        for rel in modified:
-            target = live_map[rel]
-            backup_file = backup_dir / rel
-            backup_file.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(target, backup_file)
+        restored = added = 0
+        for rel in to_write:
+            target = BASE_DIR / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            previous = live_map.get(rel)
+            if previous is not None:
+                backup_file = backup_root / rel
+                backup_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(previous, backup_file)
+                restored += 1
+            else:
+                added += 1
             shutil.copy2(base_map[rel], target)
 
-        result["backup_dir"] = str(backup_dir)
-        print(f"Backed up {len(modified)} file(s) -> {backup_dir}")
-        print(f"Restored  {len(modified)} file(s) from {base}")
-        self._run_docs_regeneration()
-        return result
+        docs_regenerated = self._run_docs_regeneration()
+        backup_dir = str(backup_root) if to_write else None
+        if to_write:
+            print(
+                f"Restored {restored} overwritten file(s) + {added} new file(s) "
+                f"from {DEFAULT_BASELINE} (backup -> {backup_root})"
+            )
+        else:
+            print("Nothing to restore - live tree matches the master copy.")
+        return {
+            "restored": restored,
+            "added": added,
+            "backup_dir": backup_dir,
+            "docs_regenerated": docs_regenerated,
+        }
 
 
 _manager: RestoreManager | None = None

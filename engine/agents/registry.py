@@ -19,7 +19,7 @@ from engine.agents.loader import AGENT_LIBRARY_DIR
 def list_agents() -> list[dict]:
     """Scan agent_library/ and return one summary per discovered agent:
 
-        [{"id", "name", "description", "mode"}, ...]
+        [{"id", "name", "description", "mode", "model"}, ...]
 
     Folders without a readable agent.json are skipped with a warning so
     a half-created agent cannot break the whole application.
@@ -51,6 +51,7 @@ def list_agents() -> list[dict]:
             "name": meta.get("name") or agent_dir.name,
             "description": meta.get("description", ""),
             "mode": meta.get("mode", "chat"),
+            "model": meta.get("model", "") or "",
         })
 
     return agents

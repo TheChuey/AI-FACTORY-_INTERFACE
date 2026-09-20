@@ -21,7 +21,7 @@ tool loop entirely - same Agent class, behavior driven by configuration.
 
 from typing import Callable
 
-from engine.agents.loader import load_definition, AgentNotFoundError
+from engine.agents.loader import load_definition, agent_dir, AgentNotFoundError
 from engine.core.agent import Agent
 from engine.core.prompt import PromptManager
 from tools.registry import resolve_tools, get_session
@@ -121,6 +121,39 @@ def _record_result(result, session) -> None:
         session.mark_for_deletion(data["pending_files"])
 
 
+def _append_grounding(agent_id: str, profile) -> None:
+    """Append a compact grounding block to a tool-armed agent's system prompt.
+
+    Small local models routinely call path tools with invented paths, bare
+    filenames, or literally '/path/to/...' placeholders copied from a prompt.
+    Pinning a real WORKSPACE ROOT plus the agent's own folder and skills dir
+    gives the model deterministic places to start with map_files, and an
+    explicit instruction to stop guessing once a lookup fails.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    workspace_root = str(root.resolve())
+    skill_dir = root / "skills"
+    skills = ", ".join(sorted(p.name for p in skill_dir.glob("*.md"))) if skill_dir.is_dir() else ""
+
+    block = [
+        "GROUNDING (read this before you call any file tool)",
+        f"- WORKSPACE ROOT: {workspace_root}",
+        f"- THIS AGENT FOLDER: {str(agent_dir(agent_id).resolve())}",
+    ]
+    if skills:
+        block.append(f"- SKILLS DIRECTORY: {str(skill_dir.resolve())} (files: {skills})")
+    block += [
+        "- Use ABSOLUTE paths inside WORKSPACE ROOT only. Start by calling map_files on a",
+        "  real directory here, then read_file only on a path map_files returned.",
+        "- Never call readonly tools on a bare filename, a '/path/to/...' placeholder, or any",
+        "  path you invented. If a tool reports 'not found', DO NOT guess another filename:",
+        "  run map_files on WORKSPACE ROOT / THIS AGENT FOLDER first and read what exists.",
+    ]
+    profile.system_prompt = profile.system_prompt + "\n\n" + "\n".join(block)
+
+
 def build_agent(agent_id: str, model: str | None = None) -> Agent:
     """Build a ready-to-use Agent for the given agent_id.
 
@@ -140,6 +173,8 @@ def build_agent(agent_id: str, model: str | None = None) -> Agent:
     tools: list[Callable] = resolve_tools(tool_ids)
 
     profile = PromptManager.build(definition, tools)
+    if tools:
+        _append_grounding(agent_id, profile)
 
     resolved_model = model or meta.get("model") or None
     session = get_session()

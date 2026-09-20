@@ -117,13 +117,9 @@ Pick whichever is easier in the moment:
   ```bash
   python server.py
   ```
-- **Or, without restarting** — reload modules and register any brand-new
-  ones live:
-  ```bash
-  python about/set_title.py apply
-  ```
-  This also works from the browser: whatever button in **Settings → Updates
-  / Interface** calls `POST /api/interface/apply` does the same thing.
+- **Or, without restarting** — press **Apply** in **Settings → Updates /
+  Interface** (it calls `POST /api/interface/apply`): it reloads modules and
+  registers any brand-new ones live.
 
   > One caveat: `apply` only wires up routes for modules it has **never
   > seen before**. If you edit a module that was already loaded (change
@@ -202,8 +198,8 @@ the other path fields, this needs a server restart after you save it.
 | Add a new feature/button | `python about/set_title.py create-module <name>` |
 | Make the button do something real | Edit `execute_module_action` in the generated file |
 | Change the button's text/prompt | Edit `UI_MANIFEST` in the generated file |
-| Pick up a brand-new module without restarting | `python about/set_title.py apply` |
+| Pick up a brand-new module without restarting | Settings → Updates / Interface → **Apply** |
 | Pick up an edit to an existing module | Restart the server |
-| Turn a module off | Rename it to start with `_` (or delete it), then restart/apply |
+| Turn a module off | Rename it to start with `_` (or delete it), then restart/Apply |
 | See what's currently loaded | `GET /api/interface/status` |
 | Move where modules are stored | Settings → Custom Modules Path (restart after) |

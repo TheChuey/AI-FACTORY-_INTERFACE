@@ -6,6 +6,8 @@ __pycache__/
 
 # Runtime data
 data/
+# Runtime data relocated under the agent_monitoring subsystem
+agent_monitoring/data/
 
 # Generated restore baseline (complete copy of the tracked source)
 current-known-good-copy/

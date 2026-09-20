@@ -75,18 +75,15 @@ export async function applyInterface() {
     return request("/api/interface/apply", { method: "POST" });
 }
 
-/** Publish the current live tree as the new baseline (rebaseline). */
+/** Publish the current live tree as the master copy (rebaseline). */
 export async function snapshotInterface() {
     return request("/api/interface/snapshot", { method: "POST" });
 }
 
-/** Compare live vs baseline and report (or apply) the rollback.
- * DRY-RUN by default; send apply:true to actually restore. */
-export async function restoreInterface({ baseline = "", apply = false, dryRun = true } = {}) {
-    return request("/api/interface/restore", {
-        method: "POST",
-        body: JSON.stringify({ baseline, apply, dryRun }),
-    });
+/** Roll every file back to the master copy (real restore; the server backs
+ * up overwritten files first, then regenerates the docs). */
+export async function restoreInterface() {
+    return request("/api/interface/restore", { method: "POST" });
 }
 
 /** Execute one update-module function by string names. May return 403 when
@@ -133,7 +130,7 @@ export async function saveAgentConfig(agentId, partialConfig) {
  * Pass newChat=true (or leave session_id empty) to start a fresh chat, which
  * finalizes whatever chat was active before.
  */
-export async function sendChat({ message, agentId = "", model = "", history = [], sessionId = "", title = "", newChat = false, rag = false }) {
+export async function sendChat({ message, agentId = "", model = "", history = [], sessionId = "", title = "", newChat = false, rag = false, runPipeline = false }) {
     const data = await request("/api/chat", {
         method: "POST",
         body: JSON.stringify({
@@ -145,9 +142,23 @@ export async function sendChat({ message, agentId = "", model = "", history = []
             title,
             new_chat: newChat,
             rag,
+            run_pipeline: runPipeline,
         }),
     });
-    return { reply: data.reply, session_id: data.session_id, title: data.title, events: data.events || [], tool_events: data.tool_events || [] };
+    return {
+        reply: data.reply,
+        session_id: data.session_id,
+        title: data.title,
+        events: data.events || [],
+        tool_events: data.tool_events || [],
+        pipeline: data.pipeline || null,
+    };
+}
+
+/** The configured agent chain (GET /api/pipeline): { steps: [...], configured }. */
+export async function getPipeline() {
+    const data = await request("/api/pipeline");
+    return { steps: data.steps || [], configured: Boolean(data.configured) };
 }
 
 /** Tail of the captured server console (boot prints + uvicorn output). */
@@ -167,19 +178,41 @@ export async function getChat(chatId) {
     return request(`/api/chats/${encodeURIComponent(chatId)}`);
 }
 
+/** That agent's currently open chat (record + latest section + messages), for
+ *  resuming the conversation on reload. Each agent keeps its own live session.
+ *  Throws (404) when that agent has nothing active. */
+export async function getActiveChat(agentId = "") {
+    const query = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+    return request(`/api/chats/active${query}`);
+}
+
 /**
- * Finalize the active chat: writes its .txt (next version on a name collision)
- * and logs it. Safe to call even when nothing is active.
+ * Finalize THAT agent's active chat: appends the next '# VERSION N' section to
+ * the chat's single .txt and updates the log. Safe to call even when nothing is
+ * active. Returns { finalized, saved, version, consolidation_offered }.
+ * discard: True abandons the active chat WITHOUT writing a transcript.
  * rag: optional bool override - commit this chat to the RAG memory store.
  */
-export async function endChat({ title = "", rag = undefined } = {}) {
-    const body = { title };
+export async function endChat({ title = "", rag = undefined, discard = false, agentId = "" } = {}) {
+    const body = { title, discard, agentId };
     if (typeof rag === "boolean") {
         body.rag = rag;
     }
     return request("/api/chats/end", {
         method: "POST",
         body: JSON.stringify(body),
+    });
+}
+
+/**
+ * AI-consolidate a saved chat: append a '# CONSOLIDATED' section (summary +
+ * full conversation) to its transcript and mark the record as version 'C'.
+ * Requires 2+ saved versions; resolves to the { ok, summary_preview, file }.
+ */
+export async function consolidateChat(chatId, { model = "" } = {}) {
+    return request("/api/chats/consolidate", {
+        method: "POST",
+        body: JSON.stringify({ chatId, model }),
     });
 }
 
