@@ -1,10 +1,10 @@
 """scripts/update_docs.py
 =======================
 
-Regenerate the documentation snapshots:
+Regenerate the GenV1 documentation snapshots:
 
-    docs/APP_STRUCTURE.md      folder-tree snapshot of the codebase
-    docs/APP_CODE_SNAPSHOT.md  one section per code file, with contents
+    docs/generated/APP_STRUCTURE.md      folder-tree snapshot of the codebase
+    docs/generated/APP_CODE_SNAPSHOT.md  one section per code file, with contents
 
 Runtime data and user settings are excluded (data/, agent_monitoring/data/,
 venv/, .git/, __pycache__, the restore baseline folder, app_settings.json,
@@ -25,9 +25,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from interface.restore_manager import file_map, is_excluded  # noqa: E402
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-DOCS_DIR = BASE_DIR / "docs"
-STRUCTURE_FILE = DOCS_DIR / "APP_STRUCTURE.md"
-SNAPSHOT_FILE = DOCS_DIR / "APP_CODE_SNAPSHOT.md"
+GENERATED_DIR = BASE_DIR / "docs" / "generated"
+STRUCTURE_FILE = GENERATED_DIR / "APP_STRUCTURE.md"
+SNAPSHOT_FILE = GENERATED_DIR / "APP_CODE_SNAPSHOT.md"
 
 CODE_EXTS = {".py", ".md", ".json", ".html", ".js", ".css", ".txt"}
 _FENCE_LANGUAGE = {
@@ -71,7 +71,7 @@ def build_structure_markdown() -> str:
             node = node.setdefault(part, {})
         node[parts[-1]] = None
 
-    markdown = [_header("Terminator1 — App Structure")]
+    markdown = [_header("GenV1 — App Structure")]
     markdown.append(f"\n```\n{Path(BASE_DIR).name}/\n")
     markdown.extend(_render_tree(root))
     markdown.append("```")
@@ -83,7 +83,7 @@ def build_structure_markdown() -> str:
 
 def build_snapshot_markdown() -> str:
     files = file_map(BASE_DIR)
-    snapshot: list[str] = [_header("Terminator1 — App Code Snapshot")]
+    snapshot: list[str] = [_header("GenV1 — App Code Snapshot")]
     count = 0
     for rel in sorted(files):
         path = files[rel]
@@ -106,13 +106,22 @@ def build_snapshot_markdown() -> str:
 
 # -------------------------------------------------------------------- main
 
+def generate(verbose: bool = True) -> None:
+    """Build both generated documents. Used by the orchestrator and the CLI."""
+    GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    STRUCTURE_FILE.write_text(build_structure_markdown(), encoding="utf-8")
+    SNAPSHOT_FILE.write_text(build_snapshot_markdown(), encoding="utf-8")
+    if verbose:
+        print(f"Wrote {STRUCTURE_FILE.relative_to(BASE_DIR)}")
+        print(f"Wrote {SNAPSHOT_FILE.relative_to(BASE_DIR)}")
+
+
 def main() -> int:
     only = sys.argv[1].lower() if len(sys.argv) > 1 else ""
     if only not in ("structure", "snapshot", ""):
         print(__doc__)
         return 1
-
-    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     if only in ("", "structure"):
         STRUCTURE_FILE.write_text(build_structure_markdown(), encoding="utf-8")
         print(f"Wrote {STRUCTURE_FILE.relative_to(BASE_DIR)}")

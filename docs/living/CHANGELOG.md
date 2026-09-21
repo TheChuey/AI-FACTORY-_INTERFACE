@@ -1,7 +1,118 @@
-# Changelog
+# GenV1 — Changelog
 
-All notable changes to this project. Format based on Keep a Changelog
-(https://keepachangelog.com/), grouped by date.
+> **Location:** `docs/living/CHANGELOG.md`
+>
+> The living historical + current change record for GenV1. All notable changes,
+> grouped by date. Format based on Keep a Changelog
+> (https://keepachangelog.com/). Older entries retain their original wording;
+> the original file lived at `docs/CHANGELOG.md`.
+
+## 2026-09-20 — GenV1 documentation system
+
+The project's documentation was rebuilt as a first-class, living documentation
+system under the identity **GenV1**, replacing the flat `docs/` folder.
+
+### Summary
+
+A layered docs tree (`docs/INDEX.md` + blueprint, architecture, reference,
+development, living and generated document sets), three generator scripts
+(`scripts/update_docs.py`, `scripts/update_blueprint.py`,
+`scripts/update_documentation.py`), a path-annotated navigation index, and a
+change-tracking discipline (see `docs/development/DOCUMENTATION_RULES.md`).
+
+### Why
+
+The application had grown to many subsystems (engine, interface, monitoring,
+drop-in modules, pipeline, multi-agent library) served by a single changelog and
+two generated snapshots. Both human developers and AI agents needed a way to
+map a subsystem → document → file → source without reading the whole tree, to
+answer "what is GenV1 right now" independently of the changelog, and to keep
+history, state, issues, decisions and planned work separate.
+
+### Added
+
+- `docs/INDEX.md` — AI navigation map (every title listed with its real path).
+- `docs/BLUEPRINT_SPEC.md`, `docs/GLOSSARY.md`, `docs/DEPENDENCIES.md`.
+- `docs/architecture/` — SYSTEM, BACKEND, FRONTEND, AGENTS, TOOLS, INTERFACE,
+  MEMORY, DATA, CONFIGURATION, LOGGING (18-field blueprint-spec skeleton).
+- `docs/reference/` — FILES, API (all 35 endpoints), AGENT_REFERENCE (4
+  agents), MODULE_REFERENCE, TOOL_REFERENCE (7 tools), WORKFLOWS.
+- `docs/development/` — CUSTOM_MODULES (consolidated), ADDING_AGENTS,
+  ADDING_TOOLS, TESTING, DOCUMENTATION_RULES.
+- `docs/living/` — CHANGELOG (moved), CURRENT_STATE, KNOWN_ISSUES, TODO,
+  DECISIONS.
+- `docs/generated/` — home for APP_STRUCTURE.md and APP_CODE_SNAPSHOT.md.
+- `scripts/update_blueprint.py` — assembles `docs/BLUEPRINT.md` from the
+  maintained architecture documents.
+- `scripts/update_documentation.py` — preferred docs entry point: regenerates
+  snapshots, validates references, assembles the blueprint, reports status.
+  Never touches `docs/living/*`.
+
+### Changed
+
+- `docs/CHANGELOG.md` → `docs/living/CHANGELOG.md` (history preserved
+  verbatim; application name updated to GenV1 where applicable).
+- `scripts/update_docs.py` — outputs moved to `docs/generated/APP_STRUCTURE.md`
+  + `docs/generated/APP_CODE_SNAPSHOT.md`; headers renamed to "GenV1".
+- `docs/APP_STRUCTURE.md` + `docs/APP_CODE_SNAPSHOT.md` → regenerated under
+  `docs/generated/`.
+- `README.md` — title updated to GenV1; folder tree and docs pointers updated;
+  regeneration command now `scripts/update_documentation.py`.
+
+### Removed
+
+- `docs/phase-1-2-3-update/` — the historical install kit (already applied;
+  its content is preserved in the Phase 1/2/3 changelog entries).
+- `docs/HOW_TO_USE.md` + `docs/CUSTOM_MODULE_DEV_GUIDE.md` — consolidated into
+  `docs/development/CUSTOM_MODULES.md`.
+- Stub debris from an experiment: `server/dialog_box.py`, the
+  `server/dialog_box.py/` directory, and `server/data/custom_modules/`
+  (`dialog_box.py`, `get_ui.py`, `register_routes.py`, `submit_data.py`).
+- `exports/ai_agent_setup.json` — runtime output debris from the same
+  generated-module experiment.
+- Old application names in documentation only (Terminator1/Terminator 2/
+  Genessis/Genesisis → GenV1). Code identifiers, `GENESSIS_*` env vars and
+  user-visible UI strings were left untouched.
+
+### Architecture Impact
+
+- No runtime behavior changed; subsystem sources are unchanged. The Docs
+  subsystem joined the other subsystems and is documented in
+  `docs/architecture/` — the documentation system itself is now part of GenV1.
+
+### API Impact
+
+- None. All endpoint surfaces are unchanged (`docs/reference/API.md` lists
+  them).
+
+### Documentation Impact
+
+- Complete documentation re-orientation; `docs/INDEX.md` is the entry point.
+
+### Testing
+
+- `venv\Scripts\python -m py_compile` passes on `scripts/update_docs.py`,
+  `scripts/update_blueprint.py`, `scripts/update_documentation.py`.
+- `scripts/update_docs.py structure|snapshot` regenerated
+  `docs/generated/APP_STRUCTURE.md` + `docs/generated/APP_CODE_SNAPSHOT.md`.
+- `scripts/update_blueprint.py` assembled `docs/BLUEPRINT.md`.
+- `scripts/update_documentation.py` ran its reference validation and reported
+  no drift for files/endpoints/agents/tools/modules.
+- Not yet run: a full server boot + TestClient pass after these changes.
+
+### Known Issues
+
+- `docs/reference/FILES.md` documents paths exactly as they exist; any future
+  layout change must be reflected there (see DOCUMENTATION_RULES).
+- See `docs/living/KNOWN_ISSUES.md` for the pre-existing tool-usage HTTP
+  round-trip test gap.
+
+### Recovery / Migration
+
+- Old `docs/CHANGELOG.md` → new location; any external link to
+  `docs/APP_STRUCTURE.md`/`docs/APP_CODE_SNAPSHOT.md` should point at
+  `docs/generated/` now. The generated files are re-creatable with
+  `python scripts/update_docs.py`.
 
 ## 2026-09-18 — Master-copy recovery
 

@@ -1,4 +1,4 @@
-# Terminator1 (Genessis)
+# GenV1 (formerly Terminator1 (Genessis))
 
 A local lab for building and testing AI agents: **FastAPI** backend + vanilla JS
 frontend + **Ollama** local LLMs.
@@ -155,7 +155,8 @@ terminator1/
 │       │                     # chatRecord.jsonl (create/read/delete).
 │       └── logger.py         # Small helpers the store uses to log rows.
 │
-├── agent_monitoring/         # Top-level telemetry subsystem (HTTP-boundary only)
+├── agent_monitoring/         # Top-level telemetry subsystem (HTTP-boundary only);
+│                             # its data/ folder is the default runtime data home
 │   ├── __init__.py           # Package boundary: re-exports the public facade
 │   ├── store.py              # MonitoringStore: fail-safe JSONL persistence
 │   ├── collector.py          # MetricsCollector: in-memory session + turn metrics
@@ -175,9 +176,9 @@ terminator1/
 │   │   ├── registry.py       # Scans engine/agent_library/ -> available agents.
 │   │   └── factory.py        # build_agent(agent_id, model) -> ready-to-use Agent.
 │   └── agent_library/        # THE AGENTS - filesystem is the source of truth
-│       ├── basic_chat/       # agent.md + agent.json  (mode: chat, no tools)
-│       ├── dev_assistant/    # agent.md + agent.json  (mode: agent, tools)
-│       ├── problem_discovery_agent/  # agent.md + agent.json (mode: agent)
+│       ├── Builder/          # module_builder_agent (id) - agent.md + agent.json
+│       ├── Planner/          # feature_planner_agent (id) - agent.md + agent.json
+│       ├── Enginner/         # execute_engineer_agent (id) - agent.md + agent.json
 │       └── rag_assistant/    # agent.md + agent.json  (mode: agent, chat-memory search)
 │
 ├── tools/                    # Capabilities available to agents (per-agent IDs)
@@ -212,7 +213,12 @@ terminator1/
 ├── scripts/                  # CLI utilities
 │   ├── rebuild_rag.py        # python scripts/rebuild_rag.py [build|purge|status]
 │   ├── version_chats.py      # list | import | bump | versioning on|off
-│   └── update_docs.py        # Regenerates APP_STRUCTURE.md + APP_CODE_SNAPSHOT.md
+│   ├── update_docs.py        # Regenerates docs/generated/APP_STRUCTURE.md +
+│   │                         # docs/generated/APP_CODE_SNAPSHOT.md
+│   ├── update_blueprint.py   # Assembles docs/BLUEPRINT.md from docs/architecture/*
+│   └── update_documentation.py  # Preferred docs entry point: regenerate +
+│                               # validate (paths/API/agents/tools), never
+│                               # touches docs/living/*
 │
 ├── interface/                # Modular update & restore layer (no core edits needed)
 │   ├── update_manager.py     # Discover/import interface/updates/<domain>/*.py
@@ -238,27 +244,42 @@ terminator1/
 │
 ├── config/
 │   └── models.json           # AUTO-GENERATED at startup from installed Ollama models
-├── docs/
-│   ├── CHANGELOG.md          # Every recent change
-│   ├── HOW_TO_USE.md         # Day-to-day custom modules guide
-│   ├── CUSTOM_MODULE_DEV_GUIDE.md  # Full dev guide: HTML <-> server.py <-> modules,
-│   │                         # all UI action types + wiring bridge (real code)
-│   ├── phase-1-2-3-update/   # Drop-in custom modules install kit (was applied)
-│   ├── APP_STRUCTURE.md      # AUTO-GENERATED folder-tree snapshot
-│   └── APP_CODE_SNAPSHOT.md  # AUTO-GENERATED per-file source snapshot
+├── docs/                     # The GenV1 documentation system
+│   ├── INDEX.md              # Entry point: path-annotated map + reading order
+│   ├── BLUEPRINT.md          # Master architectural blueprint (assembled by
+│   │                         # scripts/update_blueprint.py from architecture/*)
+│   ├── BLUEPRINT_SPEC.md     # Contract the blueprint must satisfy
+│   ├── GLOSSARY.md           # Terminology
+│   ├── DEPENDENCIES.md       # Runtime dependencies
+│   ├── architecture/         # 10 subsystem docs (SYSTEM, BACKEND, FRONTEND,
+│   │                         # AGENTS, TOOLS, INTERFACE, MEMORY, DATA,
+│   │                         # CONFIGURATION, LOGGING)
+│   ├── reference/            # FILES, API, AGENT_REFERENCE, MODULE_REFERENCE,
+│   │                         # TOOL_REFERENCE, WORKFLOWS
+│   ├── development/          # CUSTOM_MODULES, ADDING_AGENTS, ADDING_TOOLS,
+│   │                         # TESTING, DOCUMENTATION_RULES
+│   ├── living/               # Hand-maintained: CHANGELOG, CURRENT_STATE,
+│   │                         # KNOWN_ISSUES, TODO, DECISIONS (never auto-
+│   │                         # overwritten)
+│   └── generated/            # AUTO-GENERATED: APP_STRUCTURE.md +
+│                             # APP_CODE_SNAPSHOT.md (by scripts/update_docs.py)
 ├── current-known-good-copy/  # GENERATED master copy: complete copy of the last
 │                             # good source ("Save current state as master" in
 │                             # Settings -> Updates/Interface, or snapshot())
-├── data/                     # RUNTIME data (gitignored): chatlog, RAG store,
+├── agent_monitoring/data/    # RUNTIME data (gitignored): chatlog, RAG store,
 │                             # interface_archive/, snapshots/pre_restore_backup/,
 │                             # custom_modules/ (drop-in .py modules)
 ├── requirements.txt
 └── README.md
 ```
 
-> **Keep the docs fresh:** `docs/APP_STRUCTURE.md` and `docs/APP_CODE_SNAPSHOT.md`
-> are generated, not hand-maintained. After code changes run
-> `venv/bin/python scripts/update_docs.py` and commit the regenerated files.
+> **Keep the docs fresh:** `docs/generated/APP_STRUCTURE.md` and
+> `docs/generated/APP_CODE_SNAPSHOT.md` are generated, not hand-maintained.
+> After code changes run `venv\Scripts\python scripts\update_documentation.py`
+> (regenerates generated docs + `docs/BLUEPRINT.md` and validates references)
+> or `venv\Scripts\python scripts\update_docs.py` (generated snapshots only),
+> then commit the regenerated files. `docs/living/*` is hand-maintained and
+> never overwritten by these tools.
 
 ## How an answer is produced
 
